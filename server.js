@@ -201,6 +201,7 @@ app.get("/api/account/:userId", (req, res) => {
 });
 
 app.get(["/login", "/sign-in", "/signin"], (_q, res) => res.sendFile(path.join(__dirname, "public", "login.html")));
+app.get(["/profile", "/account"], (_q, res) => res.sendFile(path.join(__dirname, "public", "profile.html")));
 
 app.use("/videos", express.static(VIDEO_DIR, { maxAge: "1h" })); // supports range requests
 app.use(express.static(path.join(__dirname, "public")));
