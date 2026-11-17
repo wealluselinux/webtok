@@ -20,6 +20,7 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
 .av{width:96px;height:96px;border-radius:38% 62% 55% 45%;background:var(--surface) center/cover;display:grid;place-items:center;margin:0 auto 6px;cursor:pointer;font-size:32px}
 .rules{list-style:none;padding:0;font-size:13px;margin:8px 4px}.rules li::before{content:"○ "}.rules li.y{color:var(--ok)}.rules li.y::before{content:"● "}
 .link{background:none;border:0;color:var(--primary);font:inherit;cursor:pointer;text-decoration:underline;padding:4px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);margin:10px 4px;cursor:pointer}.chk input{width:auto}
 .dots{display:flex;gap:6px;margin-bottom:16px}.dots i{flex:1;height:5px;border-radius:9px;background:var(--surface)}.dots i.on{background:var(--primary)}
 </style></head><body>
 <main class="card">
@@ -30,6 +31,7 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
 <section class="step" id="s-in">
  <label>Email</label><input id="li-email" type="email" autocomplete="email">
  <label>Password</label><input id="li-pass" type="password" autocomplete="current-password">
+ <label class="chk"><input type="checkbox" class="showpw" data-t="li-pass"> Show password</label>
  <div class="hint" id="h-in"></div>
  <div class="row"><button class="btn" id="to-up">Create account</button><button class="btn p" id="do-in">Sign in</button></div>
 </section>
@@ -57,14 +59,15 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
 <section class="step" id="s-pass">
  <label>Password</label><input id="pw" type="password" autocomplete="new-password">
  <label>Confirm password</label><input id="pw2" type="password" autocomplete="new-password">
+ <label class="chk"><input type="checkbox" class="showpw" data-t="pw,pw2"> Show password</label>
  <ul class="rules" id="rules"></ul><div class="hint" id="h-pw"></div>
  <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-pw" disabled>Create account</button></div>
 </section>
 
 <section class="step" id="s-code">
- <label>Verification code</label><input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10">
- <div class="hint" id="h-code"></div>
- <div class="row"><button class="btn" id="resend">Send new code</button><button class="btn p" id="verify">Verify</button></div>
+ <p id="sent" style="margin:6px 4px"></p>
+ <div class="hint" id="h-code">Check your spam folder if you don't see it.</div>
+ <div class="row"><button class="btn p" id="resend">Resend email</button></div>
 </section>
 </main>
 
@@ -74,7 +77,7 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
 const $=id=>document.getElementById(id), C=window.WT_CONFIG||{};
 if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){document.querySelector(".card").innerHTML="<h3>Setup problem</h3><p style=\"margin-top:8px\">The server did not send its Supabase settings. Make sure you opened this site through the Render URL (not a local file) and that /config.js loads.</p>";throw new Error("Missing Supabase config");}
 const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
-const FLOW=["email","username","profile","pass","code"], SUBS={in:"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password",code:"Enter the code we emailed you"};
+const FLOW=["email","username","profile","pass","code"], SUBS={in:"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password",code:"Check your email"};
 let d={}, avatar=null, cur="in", tick=null;
 
 function go(s){
@@ -91,7 +94,7 @@ $("do-in").onclick=async()=>{
   say("h-in","Signing in…");
   const {error}=await sb.auth.signInWithPassword({email:$("li-email").value.trim(),password:$("li-pass").value});
   if(!error) return location.href="/#feed";
-  if(/confirm/i.test(error.message)){d.email=$("li-email").value.trim();go("code");return resend();}
+  if(/confirm/i.test(error.message)){d.email=$("li-email").value.trim();go("code");sent();return resendMail();}
   say("h-in",error.message,"bad");
 };
 
@@ -125,7 +128,7 @@ $("file").onchange=e=>{
   const img=new Image(); img.onload=()=>{
     const c=document.createElement("canvas"); c.width=c.height=256; const s=Math.min(img.width,img.height);
     c.getContext("2d").drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,256,256);
-    c.toBlob(b=>{avatar=b;$("av").style.backgroundImage=`url(${URL.createObjectURL(b)})`;$("av").textContent=""},"image/jpeg",.85);
+    avatar=c.toDataURL("image/jpeg",.85);$("av").style.backgroundImage=`url(${avatar})`;$("av").textContent="";
   }; img.src=URL.createObjectURL(f);
 };
 $("n-prof").onclick=()=>{d.display_name=$("dname").value.trim();d.bio=$("bio").value.trim();go("pass")};
@@ -143,37 +146,41 @@ function checkPw(){
 $("pw").oninput=$("pw2").oninput=checkPw; $("pw").onfocus=checkPw;
 $("n-pw").onclick=async()=>{
   $("n-pw").disabled=true; say("h-pw","Creating account…");
-  const {error}=await sb.auth.signUp({email:d.email,password:$("pw").value,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
+  const {error}=await sb.auth.signUp({email:d.email,password:$("pw").value,options:{emailRedirectTo:location.origin+"/login",data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
   if(error){$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
-  go("code"); startTimer();
+  try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){} go("code"); sent();
 };
 
-/* 5 code (10 minute expiry is enforced by Supabase; the timer is a display) */
-function startTimer(){
-  clearInterval(tick); let end=Date.now()+600000, lock=Date.now()+60000;
-  tick=setInterval(()=>{
-    const left=Math.max(0,end-Date.now()), s=Math.ceil(left/1000);
-    say("h-code",left?`Code expires in ${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`:"Code expired. Send a new one.",left?"":"bad");
-    const w=Math.ceil((lock-Date.now())/1000); $("resend").disabled=w>0; $("resend").textContent=w>0?`Send new code (${w}s)`:"Send new code";
-  },500);
+/* 5 email link verification (Supabase Auth sends the link; it returns to /login) */
+let lock=0;
+function sent(){$("sent").textContent="We sent a verification link to "+d.email+". Open it to finish creating your account.";lockResend()}
+function lockResend(){lock=Date.now()+60000;clearInterval(tick);tick=setInterval(()=>{const w=Math.ceil((lock-Date.now())/1000);$("resend").disabled=w>0;$("resend").textContent=w>0?`Resend email (${w}s)`:"Resend email";if(w<=0)clearInterval(tick)},500)}
+async function resendMail(){
+  $("resend").disabled=true;
+  const {error}=await sb.auth.resend({type:"signup",email:d.email,options:{emailRedirectTo:location.origin+"/login"}});
+  if(error) return say("h-code",error.message,"bad");
+  say("h-code","Sent. Check your inbox and spam folder.","ok"); lockResend();
 }
-async function resend(){
-  $("resend").disabled=true; const {error}=await sb.auth.resend({type:"signup",email:d.email});
-  if(error) return say("h-code",error.message,"bad"); startTimer();
-}
-$("resend").onclick=resend;
-$("verify").onclick=async()=>{
-  const token=$("code").value.trim(); if(token.length<6) return say("h-code","Enter the code from the email.","bad");
-  const {data,error}=await sb.auth.verifyOtp({email:d.email,token,type:"signup"});
-  if(error) return say("h-code",/expired|invalid/i.test(error.message)?"That code is wrong or expired. Send a new one.":error.message,"bad");
-  if(avatar&&data.user){
-    try{const path=data.user.id+"/avatar.jpg";
-      await sb.storage.from("avatars").upload(path,avatar,{upsert:true,contentType:"image/jpeg"});
+$("resend").onclick=resendMail;
+document.querySelectorAll(".showpw").forEach(c=>c.onchange=()=>c.dataset.t.split(",").forEach(id=>$(id).type=c.checked?"text":"password"));
+
+const fromLink=/access_token|[?&]code=|type=signup/.test(location.hash+location.search);
+let done=false;
+async function finish(user){
+  if(done) return; done=true; $("sub").textContent="Email verified. Finishing up…";
+  try{
+    const a=avatar||localStorage.getItem("wt_avatar");
+    if(a&&user){
+      const blob=await (await fetch(a)).blob(), path=user.id+"/avatar.jpg";
+      await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
       const url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
-      await sb.from("profiles").update({avatar_url:url}).eq("id",data.user.id);}catch(e){console.warn(e)}
-  }
+      await sb.from("profiles").update({avatar_url:url}).eq("id",user.id);
+    }
+    localStorage.removeItem("wt_avatar");
+  }catch(e){console.warn(e)}
   location.href="/#feed";
-};
+}
+sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&(cur!=="in"||fromLink)) setTimeout(()=>finish(sess.user),0); });
 
-go(location.hash==="#signup"?"email":"in");
+go(location.hash==="#signup"?"email":"in"); if(fromLink) $("sub").textContent="Verifying your email…";
 </script></body></html>
