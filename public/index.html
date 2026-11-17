@@ -139,7 +139,7 @@ const $ = id => document.getElementById(id);
 let sb = null, user = null, profile = null;
 try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (e) { console.warn(e); }
 
-/* ---------- Apply saved Material You theme ---------- */
+/* ---------- Material You Theme ---------- */
 function hexToHsl(hex) {
   let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -154,9 +154,8 @@ function hexToHsl(hex) {
   }
   return [Math.round(h*360), Math.round(s*100)];
 }
-function applyTheme() {
-  let t = {};
-  try { t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch {}
+function applyTheme(t) {
+  if (!t) { try { t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { t = {}; } }
   if (!t.color && !t.mode && !t.wallpaper) return;
   const root = document.documentElement;
   const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -186,6 +185,9 @@ function applyTheme() {
   if (t.wallpaper) {
     document.body.classList.add("has-wp");
     wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url(${t.wallpaper})`;
+  } else {
+    document.body.classList.remove("has-wp");
+    wp.style.backgroundImage = "";
   }
 }
 applyTheme();
@@ -205,6 +207,10 @@ async function loadProfile() {
     display_name: row?.display_name || meta.display_name || meta.username || "Web Tok User",
     avatar_url: row?.avatar_url || null
   };
+  if (row?.theme && Object.keys(row.theme).length) {
+    try { localStorage.setItem("wt_theme", JSON.stringify(row.theme)); } catch {}
+    applyTheme(row.theme);
+  }
 }
 function paintAuth() {
   const acctBtn = $("acct"), upBtn = $("openUpload"), signinBtn = $("signin");
@@ -240,14 +246,47 @@ $("acct").onclick = () => { location.href = user ? "/profile" : "/login"; };
 $("signin").onclick = () => { location.href = user ? "/profile" : "/login"; };
 function requireLogin(fn) { if (user) fn(); else openAuth(); }
 
-/* ---------- Feed ---------- */
+/* ---------- Feed (Supabase) ---------- */
 let obs, muted = true;
 async function listVideos() {
-  const q = user ? `?userId=${encodeURIComponent(user.id)}` : "";
-  const r = await fetch("/api/videos" + q);
-  if (!r.ok) throw new Error("Server " + r.status);
-  return r.json();
+  if (!sb) return [];
+  const { data: vids, error } = await sb
+    .from("videos")
+    .select("id, user_id, title, video_url, created_at")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  if (!vids || !vids.length) return [];
+
+  const userIds = [...new Set(vids.map(v => v.user_id))];
+  const vidIds = vids.map(v => v.id);
+
+  const [profRes, likeRes, cmtRes] = await Promise.all([
+    sb.from("profiles").select("id, username, display_name").in("id", userIds),
+    sb.from("likes").select("video_id, user_id").in("video_id", vidIds),
+    sb.from("comments").select("video_id").in("video_id", vidIds)
+  ]);
+
+  const profMap = Object.fromEntries((profRes.data || []).map(p => [p.id, p]));
+  const likeCounts = {}, likedSet = new Set(), cmtCounts = {};
+  (likeRes.data || []).forEach(l => {
+    likeCounts[l.video_id] = (likeCounts[l.video_id] || 0) + 1;
+    if (user && l.user_id === user.id) likedSet.add(l.video_id);
+  });
+  (cmtRes.data || []).forEach(c => {
+    cmtCounts[c.video_id] = (cmtCounts[c.video_id] || 0) + 1;
+  });
+
+  return vids.map(v => ({
+    id: v.id,
+    name: v.title,
+    src: v.video_url,
+    username: profMap[v.user_id]?.username || null,
+    likesCount: likeCounts[v.id] || 0,
+    commentsCount: cmtCounts[v.id] || 0,
+    likedByMe: likedSet.has(v.id)
+  }));
 }
+
 function slide(v) {
   const s = document.createElement("section");
   s.className = "slide";
@@ -266,15 +305,18 @@ function slide(v) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.a === "like") requireLogin(async () => {
-      const r = await fetch(`/api/videos/${encodeURIComponent(v.id)}/like`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id })
-      });
-      if (!r.ok) return;
-      const res = await r.json();
-      b.classList.toggle("on", res.liked);
-      b.querySelector("span").textContent = res.liked ? "♥" : "♡";
-      b.querySelector("small").textContent = res.likesCount;
+      if (v.likedByMe) {
+        const { error } = await sb.from("likes").delete().eq("video_id", v.id).eq("user_id", user.id);
+        if (error) return;
+        v.likedByMe = false; v.likesCount = Math.max(0, v.likesCount - 1);
+      } else {
+        const { error } = await sb.from("likes").insert({ video_id: v.id, user_id: user.id });
+        if (error) return;
+        v.likedByMe = true; v.likesCount += 1;
+      }
+      b.classList.toggle("on", v.likedByMe);
+      b.querySelector("span").textContent = v.likedByMe ? "♥" : "♡";
+      b.querySelector("small").textContent = v.likesCount;
     });
     if (b.dataset.a === "comment") openComments(v, b);
     if (b.dataset.a === "sound") {
@@ -288,6 +330,7 @@ function slide(v) {
   };
   return s;
 }
+
 async function loadFeed() {
   const feed = $("feed");
   feed.innerHTML = '<div class="empty">Loading…</div>';
@@ -309,34 +352,43 @@ async function loadFeed() {
   }
 }
 
-/* ---------- Comments ---------- */
-let activeCommentVideoId = null, activeCommentBtn = null;
+/* ---------- Comments (Supabase) ---------- */
+let activeVideo = null, activeCommentBtn = null;
 async function openComments(v, btn) {
-  activeCommentVideoId = v.id;
+  activeVideo = v;
   activeCommentBtn = btn;
   $("cmtHint").textContent = "";
   $("cmtInput").value = "";
   $("cmtList").innerHTML = '<div style="color:var(--muted);padding:12px">Loading comments…</div>';
   $("commentsDlg").showModal();
-  try {
-    const r = await fetch(`/api/videos/${encodeURIComponent(v.id)}/comments`);
-    renderComments(await r.json());
-  } catch {
-    $("cmtList").innerHTML = '<div style="color:var(--bad);padding:12px">Could not load comments.</div>';
-  }
+  await fetchAndRenderComments();
 }
-function renderComments(list) {
+async function fetchAndRenderComments() {
+  const { data: list, error } = await sb
+    .from("comments")
+    .select("id, user_id, text, created_at")
+    .eq("video_id", activeVideo.id)
+    .order("created_at", { ascending: true });
+  if (error) { $("cmtList").innerHTML = '<div style="color:var(--bad);padding:12px">Could not load comments.</div>'; return; }
+  if (!list.length) { $("cmtList").innerHTML = '<div style="color:var(--muted);padding:12px">No comments yet. Be the first!</div>'; return; }
+
+  const uids = [...new Set(list.map(c => c.user_id))];
+  const { data: profs } = await sb.from("profiles").select("id, username, display_name, avatar_url").in("id", uids);
+  const pmap = Object.fromEntries((profs || []).map(p => [p.id, p]));
+
   const box = $("cmtList");
-  if (!list.length) { box.innerHTML = '<div style="color:var(--muted);padding:12px">No comments yet. Be the first!</div>'; return; }
   box.innerHTML = "";
   list.forEach(c => {
+    const p = pmap[c.user_id] || {};
+    const uname = p.username || "user";
+    const dname = p.display_name || uname;
+    const init = dname[0].toUpperCase();
+    const av = p.avatar_url ? `style="background-image:url(${p.avatar_url})"` : "";
     const item = document.createElement("div");
     item.className = "cmt-item";
-    const init = (c.displayName || c.username || "U")[0].toUpperCase();
-    const av = c.avatarUrl ? `style="background-image:url(${c.avatarUrl})"` : "";
-    item.innerHTML = `<div class="mini-av" ${av}>${c.avatarUrl ? "" : init}</div>
+    item.innerHTML = `<div class="mini-av" ${av}>${p.avatar_url ? "" : init}</div>
       <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700">${escapeHtml(c.displayName || c.username)} <span style="color:var(--muted);font-weight:400">@${escapeHtml(c.username)}</span></div>
+        <div style="font-size:13px;font-weight:700">${escapeHtml(dname)} <span style="color:var(--muted);font-weight:400">@${escapeHtml(uname)}</span></div>
         <div style="font-size:14px;margin-top:2px;word-break:break-word">${escapeHtml(c.text)}</div>
       </div>`;
     box.appendChild(item);
@@ -348,24 +400,19 @@ $("cmtForm").onsubmit = e => {
     const text = $("cmtInput").value.trim();
     if (!text) return;
     $("cmtHint").textContent = "Posting…";
-    const r = await fetch(`/api/videos/${encodeURIComponent(activeCommentVideoId)}/comments`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: user.id, username: profile?.username,
-        displayName: profile?.display_name, avatarUrl: profile?.avatar_url, text
-      })
+    const { error } = await sb.from("comments").insert({
+      video_id: activeVideo.id, user_id: user.id, text
     });
-    if (!r.ok) { $("cmtHint").textContent = "Failed to post comment."; return; }
-    const res = await r.json();
+    if (error) { $("cmtHint").textContent = error.message; return; }
     $("cmtInput").value = "";
     $("cmtHint").textContent = "";
-    if (activeCommentBtn) activeCommentBtn.querySelector("small").textContent = res.commentsCount;
-    const listR = await fetch(`/api/videos/${encodeURIComponent(activeCommentVideoId)}/comments`);
-    renderComments(await listR.json());
+    activeVideo.commentsCount += 1;
+    if (activeCommentBtn) activeCommentBtn.querySelector("small").textContent = activeVideo.commentsCount;
+    await fetchAndRenderComments();
   });
 };
 
-/* ---------- Upload ---------- */
+/* ---------- Upload (Supabase Storage + DB) ---------- */
 $("openUpload").onclick = () => requireLogin(() => {
   $("upFile").value = ""; $("upTitle").value = ""; $("upHint").textContent = "";
   $("upHint").className = "hint"; $("upSubmit").disabled = false;
@@ -376,21 +423,17 @@ $("upSubmit").onclick = async () => {
   if (!file) { $("upHint").textContent = "Pick a video file first."; $("upHint").className = "hint bad"; return; }
   $("upSubmit").disabled = true; $("upHint").textContent = "Uploading…"; $("upHint").className = "hint";
   try {
-    const r = await fetch("/api/videos/upload", {
-      method: "POST",
-      headers: {
-        "Content-Type": file.type || "video/mp4",
-        "x-filename": encodeURIComponent(file.name),
-        "x-title": encodeURIComponent($("upTitle").value.trim()),
-        "x-user-id": user.id,
-        "x-username": encodeURIComponent(profile?.username || ""),
-        "x-display-name": encodeURIComponent(profile?.display_name || ""),
-        "x-avatar-url": encodeURIComponent(profile?.avatar_url || "")
-      },
-      body: file
+    const ext = (file.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
+    const safe = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
+    const storagePath = `${user.id}/${Date.now()}-${safe}${ext}`;
+    const { error: upErr } = await sb.storage.from("videos").upload(storagePath, file, { contentType: file.type || "video/mp4" });
+    if (upErr) throw upErr;
+    const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
+    const title = $("upTitle").value.trim() || safe.replace(/[-_]+/g, " ");
+    const { error: dbErr } = await sb.from("videos").insert({
+      user_id: user.id, title, video_url: videoUrl, storage_path: storagePath
     });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error || "Upload failed");
+    if (dbErr) throw dbErr;
     $("uploadDlg").close();
     await loadFeed();
   } catch (e) {
