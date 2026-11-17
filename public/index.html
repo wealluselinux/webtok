@@ -78,17 +78,7 @@ input:focus{outline:0;border-color:var(--primary)}
 </div>
 <main id="feed" class="hidden"></main>
 
-<dialog id="auth">
-  <h2 id="atitle">Sign in</h2>
-  <p id="areason" style="color:var(--muted);margin-bottom:12px"></p>
-  <input id="email" type="email" placeholder="Email" autocomplete="email">
-  <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
-  <div id="msg"></div>
-  <div class="row" style="justify-content:space-between">
-    <button class="btn" id="toggle">Create account</button>
-    <button class="btn primary" id="go">Sign in</button>
-  </div>
-</dialog>
+
 
 <dialog id="comments">
   <h2>Comments</h2>
@@ -117,31 +107,7 @@ async function initAuth(){
     sb.auth.onAuthStateChange((_e, s) => { user = s?.user || null; paintAuth(); });
   }catch(e){ console.warn(e); }
 }
-function openAuth(reason){
-  $("areason").textContent = reason || "";
-  $("msg").textContent = "";
-  $("auth").showModal();
-}
-function setMode(s){
-  signup = s;
-  $("atitle").textContent = s ? "Create account" : "Sign in";
-  $("go").textContent = s ? "Sign up" : "Sign in";
-  $("toggle").textContent = s ? "I have an account" : "Create account";
-  $("pass").autocomplete = s ? "new-password" : "current-password";
-}
-$("toggle").onclick = () => setMode(!signup);
-$("go").onclick = async () => {
-  if(!sb) return $("msg").textContent = "Supabase isn't configured yet.";
-  const email = $("email").value.trim(), password = $("pass").value;
-  if(!email || !password) return $("msg").textContent = "Enter email and password.";
-  $("msg").textContent = "Working…";
-  try{
-    const res = signup ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
-    if(res.error) return $("msg").textContent = res.error.message;
-    if(signup && !res.data.session){ return $("msg").textContent = "Check your email to confirm, then sign in."; }
-    $("auth").close();
-  }catch(e){ $("msg").textContent = "Something went wrong."; }
-};
+function openAuth(){ location.href="/login"; }
 $("acct").onclick = async () => {
   if(user){ try{ await sb.auth.signOut(); }catch(e){} } else openAuth();
 };
@@ -210,6 +176,7 @@ $("home").onclick = () => {
   $("landing").classList.remove("hidden");
 };
 initAuth();
+if(location.hash==="#feed") showFeed();
 </script>
 </body>
 </html>
