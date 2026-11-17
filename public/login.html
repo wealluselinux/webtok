@@ -67,7 +67,7 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
 <section class="step" id="s-code">
  <p id="sent" style="margin:6px 4px"></p>
  <div class="hint" id="h-code">Check your spam folder if you don't see it.</div>
- <div class="row"><button class="btn p" id="resend">Resend email</button></div>
+ <div class="row"><button class="btn" id="to-in2">Already verified? Sign in</button><button class="btn p" id="resend">Resend email</button></div>
 </section>
 </main>
 
@@ -87,7 +87,7 @@ function go(s){
 }
 function say(id,msg,cls){const e=$(id);e.textContent=msg;e.className="hint "+(cls||"")}
 document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>go(FLOW[FLOW.indexOf(cur)-1]));
-$("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in");
+$("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in"); $("to-in2").onclick=()=>{clearInterval(tick);$("li-email").value=d.email||"";go("in")};
 
 /* sign in */
 $("do-in").onclick=async()=>{
@@ -146,8 +146,9 @@ function checkPw(){
 $("pw").oninput=$("pw2").oninput=checkPw; $("pw").onfocus=checkPw;
 $("n-pw").onclick=async()=>{
   $("n-pw").disabled=true; say("h-pw","Creating account…");
-  const {error}=await sb.auth.signUp({email:d.email,password:$("pw").value,options:{emailRedirectTo:location.origin+"/login",data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
+  const {data:su,error}=await sb.auth.signUp({email:d.email,password:$("pw").value,options:{emailRedirectTo:location.origin+"/login",data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
   if(error){$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
+  if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){$("n-pw").disabled=false;return say("h-pw","That email already has an account, so no new email was sent. Sign in instead, or use a different email.","bad")}
   try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){} go("code"); sent();
 };
 
