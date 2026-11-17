@@ -63,12 +63,6 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
  <ul class="rules" id="rules"></ul><div class="hint" id="h-pw"></div>
  <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-pw" disabled>Create account</button></div>
 </section>
-
-<section class="step" id="s-code">
- <p id="sent" style="margin:6px 4px"></p>
- <div class="hint" id="h-code">Check your spam folder if you don't see it.</div>
- <div class="row"><button class="btn" id="to-in2">Already verified? Sign in</button><button class="btn p" id="resend">Resend email</button></div>
-</section>
 </main>
 
 <script src="/config.js"></script>
@@ -77,8 +71,8 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
 const $=id=>document.getElementById(id), C=window.WT_CONFIG||{};
 if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){document.querySelector(".card").innerHTML="<h3>Setup problem</h3><p style=\"margin-top:8px\">The server did not send its Supabase settings. Make sure you opened this site through the Render URL (not a local file) and that /config.js loads.</p>";throw new Error("Missing Supabase config");}
 const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
-const FLOW=["email","username","profile","pass","code"], SUBS={in:"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password",code:"Check your email"};
-let d={}, avatar=null, cur="in", tick=null;
+const FLOW=["email","username","profile","pass"], SUBS={in:"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password"};
+let d={}, avatar=null, cur="in";
 
 function go(s){
   cur=s; document.querySelectorAll(".step").forEach(e=>e.classList.toggle("on",e.id==="s-"+s));
@@ -87,14 +81,13 @@ function go(s){
 }
 function say(id,msg,cls){const e=$(id);e.textContent=msg;e.className="hint "+(cls||"")}
 document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>go(FLOW[FLOW.indexOf(cur)-1]));
-$("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in"); $("to-in2").onclick=()=>{clearInterval(tick);$("li-email").value=d.email||"";go("in")};
+$("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in");
 
 /* sign in */
 $("do-in").onclick=async()=>{
   say("h-in","Signing in…");
   const {error}=await sb.auth.signInWithPassword({email:$("li-email").value.trim(),password:$("li-pass").value});
   if(!error) return location.href="/#feed";
-  if(/confirm/i.test(error.message)){d.email=$("li-email").value.trim();go("code");sent();return resendMail();}
   say("h-in",error.message,"bad");
 };
 
@@ -146,29 +139,22 @@ function checkPw(){
 $("pw").oninput=$("pw2").oninput=checkPw; $("pw").onfocus=checkPw;
 $("n-pw").onclick=async()=>{
   $("n-pw").disabled=true; say("h-pw","Creating account…");
-  const {data:su,error}=await sb.auth.signUp({email:d.email,password:$("pw").value,options:{emailRedirectTo:location.origin+"/login",data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
+  const pw=$("pw").value;
+  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
   if(error){$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
-  if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){$("n-pw").disabled=false;return say("h-pw","That email already has an account, so no new email was sent. Sign in instead, or use a different email.","bad")}
-  try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){} go("code"); sent();
+  if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){$("n-pw").disabled=false;return say("h-pw","That email already has an account. Sign in instead, or use a different email.","bad")}
+  try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){}
+  if(su&&su.session&&su.user) return finish(su.user);
+  const {data:si,error:siErr}=await sb.auth.signInWithPassword({email:d.email,password:pw});
+  if(siErr){$("n-pw").disabled=false;return say("h-pw",siErr.message,"bad")}
+  if(si&&si.user) return finish(si.user);
 };
 
-/* 5 email link verification (Supabase Auth sends the link; it returns to /login) */
-let lock=0;
-function sent(){$("sent").textContent="We sent a verification link to "+d.email+". Open it to finish creating your account.";lockResend()}
-function lockResend(){lock=Date.now()+60000;clearInterval(tick);tick=setInterval(()=>{const w=Math.ceil((lock-Date.now())/1000);$("resend").disabled=w>0;$("resend").textContent=w>0?`Resend email (${w}s)`:"Resend email";if(w<=0)clearInterval(tick)},500)}
-async function resendMail(){
-  $("resend").disabled=true;
-  const {error}=await sb.auth.resend({type:"signup",email:d.email,options:{emailRedirectTo:location.origin+"/login"}});
-  if(error) return say("h-code",error.message,"bad");
-  say("h-code","Sent. Check your inbox and spam folder.","ok"); lockResend();
-}
-$("resend").onclick=resendMail;
 document.querySelectorAll(".showpw").forEach(c=>c.onchange=()=>c.dataset.t.split(",").forEach(id=>$(id).type=c.checked?"text":"password"));
 
-const fromLink=/access_token|[?&]code=|type=signup/.test(location.hash+location.search);
 let done=false;
 async function finish(user){
-  if(done) return; done=true; $("sub").textContent="Email verified. Finishing up…";
+  if(done) return; done=true; $("sub").textContent="Account created. Finishing up…";
   try{
     const a=avatar||localStorage.getItem("wt_avatar");
     if(a&&user){
@@ -181,7 +167,7 @@ async function finish(user){
   }catch(e){console.warn(e)}
   location.href="/#feed";
 }
-sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&(cur!=="in"||fromLink)) setTimeout(()=>finish(sess.user),0); });
+sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur!=="in") setTimeout(()=>finish(sess.user),0); });
 
-go(location.hash==="#signup"?"email":"in"); if(fromLink) $("sub").textContent="Verifying your email…";
+go(location.hash==="#signup"?"email":"in");
 </script></body></html>
