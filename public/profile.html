@@ -237,10 +237,11 @@ function hexToHsl(hex) {
   return [Math.round(h*360), Math.round(s*100)];
 }
 function getTheme() { try { return JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { return {}; } }
-function saveTheme(patch) {
+async function saveTheme(patch) {
   const next = { ...getTheme(), ...patch };
   try { localStorage.setItem("wt_theme", JSON.stringify(next)); } catch {}
   applyTheme(next);
+  if (sb && user) { try { await sb.from("profiles").update({ theme: next }).eq("id", user.id); } catch {} }
   return next;
 }
 function applyTheme(t = getTheme()) {
@@ -280,7 +281,7 @@ function applyTheme(t = getTheme()) {
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
 
-/* ---------- Load Profile & Account Data ---------- */
+/* ---------- Load Profile & Account Data (Supabase) ---------- */
 async function loadProfile() {
   const meta = user.user_metadata || {};
   let row = null;
@@ -295,6 +296,10 @@ async function loadProfile() {
     bio: row?.bio ?? meta.bio ?? "",
     avatar_url: row?.avatar_url || null
   };
+  if (row?.theme && Object.keys(row.theme).length) {
+    try { localStorage.setItem("wt_theme", JSON.stringify(row.theme)); } catch {}
+    applyTheme(row.theme);
+  }
 }
 function paintProfileHeader() {
   const pfp = $("p-pfp");
@@ -307,15 +312,51 @@ function paintProfileHeader() {
 async function loadAccountData() {
   $("acct-content").innerHTML = '<div class="empty-box">Loading…</div>';
   try {
-    const r = await fetch(`/api/account/${encodeURIComponent(user.id)}`);
-    acctData = await r.json();
-    $("st-following").textContent = acctData.stats.following;
-    $("st-followers").textContent = acctData.stats.followers;
-    $("st-likes").textContent = acctData.stats.likesReceived;
-    $("st-comments").textContent = acctData.stats.commentsCount;
+    const [postedRes, myLikesRes, myCmtsRes, followingRes, followersRes] = await Promise.all([
+      sb.from("videos").select("id, title, video_url, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
+      sb.from("likes").select("video_id").eq("user_id", user.id),
+      sb.from("comments").select("id, video_id, text, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
+      sb.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", user.id),
+      sb.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", user.id)
+    ]);
+
+    const postedRows = postedRes.data || [];
+    const likedIds = (myLikesRes.data || []).map(l => l.video_id);
+    const myCmts = myCmtsRes.data || [];
+
+    const allRelevantIds = [...new Set([...postedRows.map(v => v.id), ...likedIds, ...myCmts.map(c => c.video_id)])];
+    const [allLikesRes, allCmtsRes, likedVidsRes] = await Promise.all([
+      allRelevantIds.length ? sb.from("likes").select("video_id").in("video_id", allRelevantIds) : { data: [] },
+      allRelevantIds.length ? sb.from("comments").select("video_id").in("video_id", allRelevantIds) : { data: [] },
+      allRelevantIds.length ? sb.from("videos").select("id, title, video_url, created_at").in("id", allRelevantIds) : { data: [] }
+    ]);
+
+    const lCounts = {}, cCounts = {};
+    (allLikesRes.data || []).forEach(l => lCounts[l.video_id] = (lCounts[l.video_id] || 0) + 1);
+    (allCmtsRes.data || []).forEach(c => cCounts[c.video_id] = (cCounts[c.video_id] || 0) + 1);
+    const vidMap = Object.fromEntries((likedVidsRes.data || []).map(v => [v.id, v]));
+
+    const posted = postedRows.map(v => ({
+      id: v.id, name: v.title, src: v.video_url,
+      likesCount: lCounts[v.id] || 0, commentsCount: cCounts[v.id] || 0
+    }));
+    const liked = likedIds.map(id => vidMap[id]).filter(Boolean).map(v => ({
+      id: v.id, name: v.title, src: v.video_url,
+      likesCount: lCounts[v.id] || 0, commentsCount: cCounts[v.id] || 0
+    }));
+    const comments = myCmts.map(c => ({
+      ...c, videoName: vidMap[c.video_id]?.title || "Video", createdAt: c.created_at
+    }));
+    const likesReceived = posted.reduce((sum, v) => sum + v.likesCount, 0);
+
+    acctData = { posted, liked, comments };
+    $("st-following").textContent = followingRes.count || 0;
+    $("st-followers").textContent = followersRes.count || 0;
+    $("st-likes").textContent = likesReceived;
+    $("st-comments").textContent = comments.length;
     renderAccountTab();
-  } catch {
-    $("acct-content").innerHTML = '<div class="empty-box">Could not load account data.</div>';
+  } catch (e) {
+    $("acct-content").innerHTML = `<div class="empty-box">Could not load account data.<br>${escapeHtml(e.message)}</div>`;
   }
 }
 function renderAccountTab() {
@@ -359,7 +400,7 @@ document.querySelectorAll(".tab").forEach(btn => {
   };
 });
 
-/* ---------- Upload ---------- */
+/* ---------- Upload (Supabase Storage + DB) ---------- */
 function openUpload() {
   $("upFile").value = ""; $("upTitle").value = ""; $("upHint").textContent = "";
   $("upHint").className = "hint"; $("upSubmit").disabled = false;
@@ -372,21 +413,17 @@ $("upSubmit").onclick = async () => {
   if (!file) { $("upHint").textContent = "Pick a video file first."; $("upHint").className = "hint bad"; return; }
   $("upSubmit").disabled = true; $("upHint").textContent = "Uploading…"; $("upHint").className = "hint";
   try {
-    const r = await fetch("/api/videos/upload", {
-      method: "POST",
-      headers: {
-        "Content-Type": file.type || "video/mp4",
-        "x-filename": encodeURIComponent(file.name),
-        "x-title": encodeURIComponent($("upTitle").value.trim()),
-        "x-user-id": user.id,
-        "x-username": encodeURIComponent(profile?.username || ""),
-        "x-display-name": encodeURIComponent(profile?.display_name || ""),
-        "x-avatar-url": encodeURIComponent(profile?.avatar_url || "")
-      },
-      body: file
+    const ext = (file.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
+    const safe = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
+    const storagePath = `${user.id}/${Date.now()}-${safe}${ext}`;
+    const { error: upErr } = await sb.storage.from("videos").upload(storagePath, file, { contentType: file.type || "video/mp4" });
+    if (upErr) throw upErr;
+    const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
+    const title = $("upTitle").value.trim() || safe.replace(/[-_]+/g, " ");
+    const { error: dbErr } = await sb.from("videos").insert({
+      user_id: user.id, title, video_url: videoUrl, storage_path: storagePath
     });
-    const res = await r.json();
-    if (!r.ok) throw new Error(res.error || "Upload failed");
+    if (dbErr) throw dbErr;
     $("uploadDlg").close();
     await loadAccountData();
   } catch (e) {
@@ -480,7 +517,12 @@ $("st-wp-file").onchange = e => {
   };
   img.src = URL.createObjectURL(f);
 };
-$("st-reset").onclick = () => { localStorage.removeItem("wt_theme"); applyTheme({}); renderSettings(); };
+$("st-reset").onclick = async () => {
+  localStorage.removeItem("wt_theme");
+  applyTheme({});
+  if (sb && user) { try { await sb.from("profiles").update({ theme: {} }).eq("id", user.id); } catch {} }
+  renderSettings();
+};
 $("btn-signout").onclick = async () => { try { await sb.auth.signOut(); } catch {} location.href = "/#feed"; };
 
 function escapeHtml(s) {
