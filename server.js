@@ -21,12 +21,16 @@ app.get(["/profile", "/account"], (_q, res) => res.sendFile(path.join(__dirname,
 app.get(["/scroll", "/feed"], (_q, res) => res.sendFile(path.join(__dirname, "public", "scroll.html")));
 app.get("/messages", (_q, res) => res.sendFile(path.join(__dirname, "public", "messages.html")));
 
-// Lists every sticker image in public/stickers (add files there to add stickers)
+// Lists every sticker image or Lottie JSON in public/stickers (add files there to add stickers)
 app.get("/api/stickers", (_q, res) => {
   fs.readdir(path.join(__dirname, "public", "stickers"), (err, files) => {
-    res.set("Cache-Control", "no-store").json(err ? [] : files.filter(f => /\.(png|gif|webp|jpe?g|svg)$/i.test(f)).sort());
+    res.set("Cache-Control", "no-store").json(err ? [] : files.filter(f => /\.(png|gif|webp|jpe?g|svg|json)$/i.test(f)).sort());
   });
 });
+
+app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
+
+app.listen(PORT, () => console.log("Web Tok running on port " + PORT));
 
 app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
 
