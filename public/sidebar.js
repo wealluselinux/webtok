@@ -20,7 +20,7 @@ body.has-sb #bar{display:none!important}
  #sb{top:auto;width:100%;height:var(--sbh);flex-direction:row;justify-content:space-around;align-items:center;padding:0 6px;border-right:0;border-top:1px solid var(--surface);overflow:visible}
  #sb .brand,#sb .srch,#sb .lbl{display:none}#sb .it{width:auto;padding:12px}#sb .menu{bottom:70px;left:auto;right:8px;width:220px}}`;
 document.head.insertAdjacentHTML("beforeend","<style>"+css+"</style>");
-const items=[["explore","explore","Explore","/#feed"],["following","person_check","Following","/#following"],["friends","group","Friends","/#friends"],["upload","add_box","Upload",null],["messages","chat_bubble","Messages","/messages"],["profile","account_circle","Profile","/profile"]];
+const items=[["explore","explore","Explore","/scroll"],["following","person_check","Following","/scroll#following"],["friends","group","Friends","/scroll#friends"],["upload","add_box","Upload",null],["messages","chat_bubble","Messages","/messages"],["profile","account_circle","Profile","/profile"]];
 const page=document.body.dataset.page||"home";
 const nav=document.createElement("nav");nav.id="sb";
 nav.innerHTML=`<a class="brand" href="/"><img src="/logo.png" alt=""><span>Web Tok</span></a>
@@ -29,11 +29,11 @@ items.map(([id,ic,l,h])=>h?`<a class="it" data-id="${id}" href="${h}"><span clas
 `<button class="it" id="sbmore"><span class="ms">more_horiz</span><span class="lbl">More</span></button>
 <div class="menu" id="sbmenu"><a class="it" href="/profile"><span class="ms">palette</span>Theme &amp; settings</a><button class="it" id="sbout"><span class="ms">logout</span>Sign out</button></div>`;
 document.body.appendChild(nav);document.body.classList.add("has-sb");
-function mark(){const h=location.hash;let id=page==="home"?(h==="#following"?"following":h==="#friends"?"friends":"explore"):page;
+function mark(){const h=location.hash;let id=(page==="home"||page==="scroll")?(h==="#following"?"following":h==="#friends"?"friends":"explore"):page;
  nav.querySelectorAll(".it[data-id]").forEach(e=>e.classList.toggle("act",e.dataset.id===id))}
 mark();addEventListener("hashchange",mark);
-nav.querySelector("#sbq").onsubmit=e=>{e.preventDefault();const q=e.target.querySelector("input").value.trim();if(q)location.href="/#search="+encodeURIComponent(q)};
-nav.querySelector('[data-id="upload"]').onclick=()=>{const b=document.getElementById("openUpload");if(b&&!b.classList.contains("hidden"))b.click();else location.href="/login"};
+nav.querySelector("#sbq").onsubmit=e=>{e.preventDefault();const q=e.target.querySelector("input").value.trim();if(q)location.href="/scroll#search="+encodeURIComponent(q)};
+nav.querySelector('[data-id="upload"]').onclick=()=>{const b=document.getElementById("openUpload");if(b&&!b.classList.contains("hidden"))b.click();else location.href="/scroll"};
 nav.querySelector("#sbmore").onclick=()=>nav.querySelector("#sbmenu").classList.toggle("open");
 nav.querySelector("#sbout").onclick=async()=>{try{await supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY).auth.signOut()}catch(e){}location.href="/"};
 })();
