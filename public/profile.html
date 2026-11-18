@@ -33,6 +33,7 @@ button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .btn:active{transform:scale(.97)}
 .btn.primary{background:var(--primary);color:var(--on-primary)}
 .btn.tonal{background:var(--card);color:var(--text)}
+.btn.danger{background:var(--bad);color:#fff}
 .btn.sm{padding:10px 18px;font-size:14px}
 .btn.icon{width:42px;height:42px;padding:0;display:grid;place-items:center;border-radius:16px;background:var(--surface)}
 .btn:disabled{opacity:.45;cursor:default}
@@ -62,6 +63,8 @@ button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .vid-tile .v-ov{position:absolute;inset:auto 0 0 0;padding:28px 12px 10px;background:linear-gradient(transparent,#000a);color:#fff;font-size:13px}
 .vid-tile .v-ov b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .vid-tile .v-ov span{font-size:12px;opacity:.9}
+.vid-del{position:absolute;top:8px;right:8px;width:34px;height:34px;border-radius:12px;background:#0008;color:#fff;display:grid;place-items:center;font-size:14px;z-index:2}
+.vid-del:hover{background:var(--bad)}
 
 .cmt-feed{display:flex;flex-direction:column;gap:10px}
 .cmt-card{background:var(--card);border-radius:var(--r-lg);padding:14px 18px;cursor:pointer}
@@ -81,6 +84,24 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .hint.bad{color:var(--bad)}
 .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}
 
+/* full-screen upload dialog */
+#uploadDlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);overflow:hidden}
+#uploadDlg[open]{display:flex;flex-direction:column}
+.up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg)}
+.up-top h2{font-size:22px;font-weight:700}
+.up-body{flex:1;overflow-y:auto;padding:24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer}
+.up-drop b{display:block;font-size:17px;margin-bottom:4px}
+.up-drop span{font-size:13px;color:var(--muted)}
+.up-list{display:flex;flex-direction:column;gap:12px}
+.up-card{display:flex;gap:16px;background:var(--surface);padding:14px;border-radius:var(--r-xl);align-items:center;flex-wrap:wrap}
+.up-prev{width:76px;height:104px;border-radius:16px;background:#000;object-fit:contain;flex-shrink:0}
+.up-fields{flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px}
+.up-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);gap:8px}
+.up-orients{display:flex;gap:6px;flex-wrap:wrap}
+.up-or{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);color:var(--text)}
+.up-or.on{background:var(--primary);color:var(--on-primary)}
+
 /* followers list modal */
 .u-list{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .u-row{display:flex;align-items:center;gap:12px;background:var(--surface);padding:10px 14px;border-radius:var(--r-lg)}
@@ -88,13 +109,6 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .u-meta{flex:1;min-width:0;text-decoration:none;color:inherit}
 .u-meta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-meta small{display:block;font-size:12px;color:var(--muted)}
-
-/* batch upload queue */
-.up-queue{display:flex;flex-direction:column;gap:8px;max-height:42vh;overflow-y:auto;margin-top:10px}
-.up-item{background:var(--surface);padding:10px 12px;border-radius:18px;display:flex;flex-direction:column;gap:6px}
-.up-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-.up-item-row{display:flex;gap:6px;align-items:center}
-.up-item-row input{padding:10px 12px;background:var(--bg)}
 
 /* settings swatches & wallpapers */
 .swatches{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
@@ -162,19 +176,25 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
   <div class="u-list" id="fl-list"></div>
 </dialog>
 
-<!-- Batch Upload Videos Modal -->
+<!-- Full-Screen Batch Upload Videos Modal -->
 <dialog id="uploadDlg">
-  <div class="dlg-head">
-    <h2>Upload videos</h2>
-    <button class="btn icon" onclick="document.getElementById('uploadDlg').close()">✕</button>
+  <div class="up-top">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button type="button" class="btn icon" onclick="document.getElementById('uploadDlg').close()">✕</button>
+      <h2>Upload videos</h2>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="hint" id="upHint" style="margin:0"></span>
+      <button type="button" class="btn primary" id="upSubmit">Upload all</button>
+    </div>
   </div>
-  <label class="fld">Select one or more videos (MP4, WebM, MOV)</label>
-  <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple style="padding:10px;background:var(--surface);border-radius:var(--r-lg);width:100%">
-  <div class="up-queue" id="upQueue"></div>
-  <div class="hint" id="upHint"></div>
-  <div class="row">
-    <button class="btn sm" onclick="document.getElementById('uploadDlg').close()">Cancel</button>
-    <button class="btn primary sm" id="upSubmit">Upload all</button>
+  <div class="up-body">
+    <label class="up-drop" for="upFile">
+      <b>Choose videos to upload</b>
+      <span>MP4, WebM, or MOV · Up to 100 MB each · Select multiple at once</span>
+    </label>
+    <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
+    <div class="up-list" id="upQueue"></div>
   </div>
 </dialog>
 
@@ -199,7 +219,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
   </div>
 </dialog>
 
-<!-- Settings (Material You Theme & Wallpaper) Modal -->
+<!-- Settings (Material You Theme, Wallpaper & Delete Account) Modal -->
 <dialog id="settingsDlg">
   <div class="dlg-head">
     <h2>Material You Settings</h2>
@@ -226,12 +246,17 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
     <button class="btn sm" id="st-reset">Reset default</button>
   </div>
   <input type="file" id="st-wp-file" accept="image/*" hidden>
+
+  <hr style="border:0;border-top:1px solid var(--surface);margin:18px 0 12px">
+  <button class="btn danger sm" id="btn-del-acct" style="width:100%">Delete account</button>
+  <div class="hint" id="st-del-hint"></div>
 </dialog>
 
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.WT_CONFIG || {};
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 const $ = id => document.getElementById(id);
 let sb = null, user = null, profile = null, targetId = null, isMe = false, acctData = null, acctTab = "posted";
 let myFollowing = new Set(), myFollowers = new Set();
@@ -409,7 +434,7 @@ async function loadAccountData() {
   $("acct-content").innerHTML = '<div class="empty-box">Loading…</div>';
   try {
     const [postedRes, myLikesRes, myCmtsRes, followingRes, followersRes] = await Promise.all([
-      sb.from("videos").select("id, title, video_url, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
+      sb.from("videos").select("id, title, video_url, storage_path, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
       sb.from("likes").select("video_id").eq("user_id", targetId),
       sb.from("comments").select("id, video_id, text, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
       sb.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", targetId),
@@ -433,7 +458,7 @@ async function loadAccountData() {
     const vidMap = Object.fromEntries((likedVidsRes.data || []).map(v => [v.id, v]));
 
     const posted = postedRows.map(v => ({
-      id: v.id, name: v.title, src: v.video_url,
+      id: v.id, name: v.title, src: v.video_url, storage_path: v.storage_path,
       likesCount: lCounts[v.id] || 0, commentsCount: cCounts[v.id] || 0
     }));
     const liked = likedIds.map(id => vidMap[id]).filter(Boolean).map(v => ({
@@ -483,8 +508,17 @@ function renderAccountTab() {
   vids.forEach(v => {
     const tile = document.createElement("div");
     tile.className = "vid-tile";
-    tile.innerHTML = `<video src="${v.src}" muted playsinline preload="metadata"></video>
+    const delBtn = (isMe && acctTab === "posted") ? `<button type="button" class="vid-del" title="Delete video">🗑</button>` : "";
+    tile.innerHTML = `${delBtn}<video src="${v.src}" muted playsinline preload="metadata"></video>
       <div class="v-ov"><b>${escapeHtml(v.name)}</b><span>♥ ${v.likesCount} · 💬 ${v.commentsCount}</span></div>`;
+    const db = tile.querySelector(".vid-del");
+    if (db) db.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm(`Delete "${v.name}"?`)) return;
+      if (v.storage_path) await sb.storage.from("videos").remove([v.storage_path]);
+      await sb.from("videos").delete().eq("id", v.id).eq("user_id", user.id);
+      await loadAccountData();
+    };
     tile.onclick = () => location.href = `/scroll#v=${encodeURIComponent(v.id)}`;
     grid.appendChild(tile);
   });
@@ -548,7 +582,7 @@ async function openFollowModal(mode) {
 $("btn-followers-list").onclick = () => openFollowModal("followers");
 $("btn-following-list").onclick = () => openFollowModal("following");
 
-/* ---------- Batch Upload ---------- */
+/* ---------- Full-Screen Batch Upload (100 MB + Orientation) ---------- */
 let upQueue = [];
 function uploadToBucket(storagePath, file, token, onProgress) {
   return new Promise((resolve, reject) => {
@@ -558,14 +592,14 @@ function uploadToBucket(storagePath, file, token, onProgress) {
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.setRequestHeader("x-upsert", "true");
-    xhr.timeout = 120000;
+    xhr.timeout = 240000;
     xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else { let msg = `Upload failed (${xhr.status})`; try { msg = JSON.parse(xhr.responseText).message || msg; } catch {} reject(new Error(msg)); }
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
-    xhr.ontimeout = () => reject(new Error("Upload timed out. Try a smaller video."));
+    xhr.ontimeout = () => reject(new Error("Upload timed out."));
     xhr.send(file);
   });
 }
@@ -573,21 +607,31 @@ function renderUpQueue() {
   const q = $("upQueue");
   q.innerHTML = "";
   upQueue.forEach((item, idx) => {
-    const row = document.createElement("div");
-    row.className = "up-item";
+    const card = document.createElement("div");
+    card.className = "up-card";
     const mb = (item.file.size / (1024 * 1024)).toFixed(1);
-    const over = item.file.size > 50 * 1024 * 1024;
-    row.innerHTML = `<div class="up-item-top">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
-        <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 50 MB" : escapeHtml(item.status || "Ready")}</span>
+    const over = item.file.size > MAX_VIDEO_BYTES;
+    card.innerHTML = `
+      <video class="up-prev" src="${item.url}" muted playsinline></video>
+      <div class="up-fields">
+        <div class="up-meta">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
+          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
+        </div>
+        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
+        <div class="up-orients">
+          <button type="button" class="up-or ${item.orientation === "portrait" ? "on" : ""}" data-o="portrait">Portrait (9:16)</button>
+          <button type="button" class="up-or ${item.orientation === "landscape" ? "on" : ""}" data-o="landscape">Landscape (16:9)</button>
+          <button type="button" class="up-or ${item.orientation === "square" ? "on" : ""}" data-o="square">Square (1:1)</button>
+        </div>
       </div>
-      <div class="up-item-row">
-        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100">
-        <button type="button" class="btn icon" style="width:36px;height:36px;flex-shrink:0" title="Remove">✕</button>
-      </div>`;
-    row.querySelector("input").oninput = e => { item.title = e.target.value; };
-    row.querySelector("button").onclick = () => { upQueue.splice(idx, 1); renderUpQueue(); };
-    q.appendChild(row);
+      <button type="button" class="btn icon" title="Remove">✕</button>`;
+    card.querySelector("input").oninput = e => { item.title = e.target.value; };
+    card.querySelectorAll(".up-or").forEach(b => {
+      b.onclick = () => { item.orientation = b.dataset.o; renderUpQueue(); };
+    });
+    card.querySelector(".btn.icon").onclick = () => { upQueue.splice(idx, 1); renderUpQueue(); };
+    q.appendChild(card);
   });
 }
 function openUpload() {
@@ -602,14 +646,23 @@ $("btn-upload-acct").onclick = openUpload;
 $("upFile").onchange = e => {
   [...(e.target.files || [])].forEach(file => {
     const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-    upQueue.push({ file, title: defTitle, status: "Ready" });
+    const item = { file, title: defTitle, orientation: "portrait", status: "Ready", url: URL.createObjectURL(file) };
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.src = item.url;
+    probe.onloadedmetadata = () => {
+      if (probe.videoWidth > probe.videoHeight * 1.15) item.orientation = "landscape";
+      else if (Math.abs(probe.videoWidth - probe.videoHeight) <= probe.videoWidth * 0.15) item.orientation = "square";
+      renderUpQueue();
+    };
+    upQueue.push(item);
   });
   renderUpQueue();
 };
 $("upSubmit").onclick = async () => {
-  const valid = upQueue.filter(it => it.file.size <= 50 * 1024 * 1024);
+  const valid = upQueue.filter(it => it.file.size <= MAX_VIDEO_BYTES);
   if (!valid.length) {
-    $("upHint").textContent = upQueue.length ? "All selected videos exceed the 50 MB limit." : "Pick one or more video files first.";
+    $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
     $("upHint").className = "hint bad";
     return;
   }
@@ -620,7 +673,7 @@ $("upSubmit").onclick = async () => {
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
-      if (item.file.size > 50 * 1024 * 1024) { item.status = "Skipped (>50 MB)"; continue; }
+      if (item.file.size > MAX_VIDEO_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
       const stEl = document.querySelector(`[data-st="${i}"]`);
       const setSt = txt => { item.status = txt; if (stEl) stEl.textContent = txt; };
       try {
@@ -634,7 +687,12 @@ $("upSubmit").onclick = async () => {
         setSt("Saving…");
         const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
         const title = item.title.trim() || safe.replace(/[-_]+/g, " ");
-        const { error: dbErr } = await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath });
+        let { error: dbErr } = await sb.from("videos").insert({
+          user_id: user.id, title, video_url: videoUrl, storage_path: storagePath, orientation: item.orientation
+        });
+        if (dbErr && /orientation/i.test(dbErr.message)) {
+          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath })).error;
+        }
         if (dbErr) throw dbErr;
         setSt("Done");
         okCount++;
@@ -702,11 +760,12 @@ $("ep-save").onclick = async () => {
   } finally { $("ep-save").disabled = false; }
 };
 
-/* ---------- Settings ---------- */
+/* ---------- Settings & Delete Account ---------- */
 function renderSettings() {
   const t = getTheme();
   $("st-mode").value = t.mode || "auto";
   $("st-custom-color").value = t.color || "#7b3f8c";
+  $("st-del-hint").textContent = "";
   const sw = $("st-swatches"); sw.innerHTML = "";
   PRESETS.forEach(p => {
     const b = document.createElement("button");
@@ -747,6 +806,20 @@ $("st-reset").onclick = async () => {
   applyTheme({});
   if (sb && user) { try { await sb.from("profiles").update({ theme: {} }).eq("id", user.id); } catch {} }
   renderSettings();
+};
+$("btn-del-acct").onclick = async () => {
+  if (!confirm("Permanently delete your account and all your videos, likes, and comments? This cannot be undone.")) return;
+  $("btn-del-acct").disabled = true;
+  $("st-del-hint").textContent = "Deleting account…";
+  const { error } = await sb.rpc("delete_my_account");
+  if (error) {
+    $("btn-del-acct").disabled = false;
+    $("st-del-hint").textContent = error.message;
+    $("st-del-hint").className = "hint bad";
+    return;
+  }
+  try { await sb.auth.signOut(); localStorage.clear(); } catch {}
+  location.href = "/";
 };
 $("btn-signout").onclick = async () => { try { await sb.auth.signOut(); } catch {} location.href = "/scroll"; };
 
