@@ -5,9 +5,16 @@ async function listVideos() {
   if (!sb) return [];
   let { data: vids, error } = await sb
     .from("videos")
-    .select("id, user_id, title, video_url, created_at")
+    .select("id, user_id, title, video_url, orientation, created_at")
     .order("created_at", { ascending: false });
-  if (error) throw error;
+  if (error) {
+    const res = await sb
+      .from("videos")
+      .select("id, user_id, title, video_url, created_at")
+      .order("created_at", { ascending: false });
+    if (res.error) throw res.error;
+    vids = res.data;
+  }
   if (!vids || !vids.length) return [];
 
   const userIds = [...new Set(vids.map(v => v.user_id))];
@@ -34,9 +41,10 @@ async function listVideos() {
     user_id: v.user_id,
     name: v.title,
     src: v.video_url,
+    orientation: v.orientation || null,
     username: profMap[v.user_id]?.username || null,
     likesCount: likeCounts[v.id] || 0,
-    commentsCount: cmtCounts[v.id] || 0,
+    commentsCount: cCounts[v.id] || 0,
     likedByMe: likedSet.has(v.id)
   })));
 }
@@ -46,15 +54,23 @@ function slide(v) {
   s.className = "slide";
   s.dataset.vid = v.id;
   const by = v.username ? `<small><a href="/profile?u=${encodeURIComponent(v.username)}">@${escapeHtml(v.username)}</a></small>` : "";
-  s.innerHTML = `<div class="player"><video loop playsinline muted preload="metadata"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
+  const orientClass = v.orientation === "landscape" || v.orientation === "square" ? " " + v.orientation : "";
+  s.innerHTML = `<div class="player${orientClass}"><video loop playsinline muted preload="metadata"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
     <div class="rail">
       ${followBtn(v)}
       <button class="fab ${v.likedByMe ? "on" : ""}" data-a="like" aria-label="Like"><span class="ms">favorite</span><small>${v.likesCount || 0}</small></button>
       <button class="fab" data-a="comment" aria-label="Comment"><span class="ms">chat_bubble</span><small>${v.commentsCount || 0}</small></button>
       <button class="fab" data-a="sound" aria-label="Sound"><span class="ms">${muted ? "volume_off" : "volume_up"}</span><small>${muted ? "Muted" : "Sound"}</small></button>
     </div>`;
+  const player = s.querySelector(".player");
   const vid = s.querySelector("video");
   vid.src = v.src;
+  if (!v.orientation) {
+    vid.onloadedmetadata = () => {
+      if (vid.videoWidth > vid.videoHeight * 1.15) player.classList.add("landscape");
+      else if (Math.abs(vid.videoWidth - vid.videoHeight) <= vid.videoWidth * 0.15) player.classList.add("square");
+    };
+  }
   s.querySelector(".cap-t").textContent = v.name;
   vid.onclick = () => vid.paused ? vid.play() : vid.pause();
   s.querySelector(".rail").onclick = e => {
