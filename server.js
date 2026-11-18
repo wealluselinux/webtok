@@ -18,6 +18,7 @@ app.get("/config.js", (_req, res) => {
 app.get(["/login", "/sign-in", "/signin"], (_q, res) => res.sendFile(path.join(__dirname, "public", "login.html")));
 app.get(["/profile", "/account"], (_q, res) => res.sendFile(path.join(__dirname, "public", "profile.html")));
 
+app.get(["/scroll", "/feed"], (_q, res) => res.sendFile(path.join(__dirname, "public", "scroll.html")));
 app.get("/messages", (_q, res) => res.sendFile(path.join(__dirname, "public", "messages.html")));
 
 // Lists every sticker image in public/stickers (add files there to add stickers)
