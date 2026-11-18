@@ -21,6 +21,7 @@ body{font-family:"Google Sans","Roboto",system-ui,sans-serif;background:var(--bg
 body.has-wp #wp-layer{opacity:1}
 body.has-wp #wp-scrim{opacity:.76}
 button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
+.hidden{display:none!important}
 
 /* top bar */
 #bar{position:fixed;top:12px;left:12px;right:12px;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:8px;pointer-events:none}
@@ -45,8 +46,9 @@ button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .p-names h1{font-size:24px;font-weight:700}
 .p-names span{color:var(--muted);font-size:15px}
 .p-stats{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 14px;font-size:14px}
+.p-stats button,.p-stats span{color:var(--muted);padding:0;font-size:14px}
+.p-stats button:hover{text-decoration:underline;color:var(--text)}
 .p-stats b{font-weight:700;color:var(--text)}
-.p-stats span{color:var(--muted)}
 .p-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .p-bio{font-size:14px;line-height:1.45;color:var(--text);white-space:pre-wrap}
 
@@ -62,7 +64,7 @@ button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .vid-tile .v-ov span{font-size:12px;opacity:.9}
 
 .cmt-feed{display:flex;flex-direction:column;gap:10px}
-.cmt-card{background:var(--card);border-radius:var(--r-lg);padding:14px 18px}
+.cmt-card{background:var(--card);border-radius:var(--r-lg);padding:14px 18px;cursor:pointer}
 .cmt-card .meta{font-size:12px;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between;gap:8px}
 .empty-box{background:var(--surface);border-radius:var(--r-xl);padding:36px 20px;text-align:center;color:var(--muted)}
 
@@ -78,6 +80,14 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .hint{min-height:18px;margin:8px 4px;color:var(--muted);font-size:13px}
 .hint.bad{color:var(--bad)}
 .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:12px}
+
+/* followers list modal */
+.u-list{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.u-row{display:flex;align-items:center;gap:12px;background:var(--surface);padding:10px 14px;border-radius:var(--r-lg)}
+.u-av{width:40px;height:40px;border-radius:38% 62% 55% 45%;background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex-shrink:0}
+.u-meta{flex:1;min-width:0;text-decoration:none;color:inherit}
+.u-meta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.u-meta small{display:block;font-size:12px;color:var(--muted)}
 
 /* settings swatches & wallpapers */
 .swatches{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
@@ -96,7 +106,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 
 <div id="bar">
   <a class="chip" href="/scroll">← Feed</a>
-  <button class="chip p" id="openUpload">+ Upload</button>
+  <button class="chip p hidden" id="openUpload">+ Upload</button>
 </div>
 
 <main class="acct-wrap">
@@ -108,16 +118,20 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
         <span id="p-user"></span>
       </div>
       <div class="p-stats">
-        <span><b id="st-following">0</b> Following</span>
-        <span><b id="st-followers">0</b> Followers</span>
+        <button id="btn-following-list"><b id="st-following">0</b> Following</button>
+        <button id="btn-followers-list"><b id="st-followers">0</b> Followers</button>
         <span><b id="st-likes">0</b> Likes</span>
         <span><b id="st-comments">0</b> Comments</span>
       </div>
-      <div class="p-actions">
+      <div class="p-actions" id="p-actions-me">
         <button class="btn primary sm" id="btn-edit-prof">Edit profile</button>
         <button class="btn tonal sm" id="btn-upload-acct">+ Upload video</button>
         <button class="btn icon" id="btn-settings" title="Theme & Settings">⚙</button>
         <button class="btn sm" id="btn-signout">Sign out</button>
+      </div>
+      <div class="p-actions hidden" id="p-actions-other">
+        <button class="btn primary sm" id="btn-follow-user">Follow</button>
+        <a class="btn tonal sm" href="/messages">Message</a>
       </div>
       <p class="p-bio" id="p-bio"></p>
     </div>
@@ -131,6 +145,15 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 
   <div id="acct-content"><div class="empty-box">Loading…</div></div>
 </main>
+
+<!-- Followers / Following Modal -->
+<dialog id="followListDlg">
+  <div class="dlg-head">
+    <h2 id="fl-title">Followers</h2>
+    <button class="btn icon" onclick="document.getElementById('followListDlg').close()">✕</button>
+  </div>
+  <div class="u-list" id="fl-list"></div>
+</dialog>
 
 <!-- Upload Video Modal -->
 <dialog id="uploadDlg">
@@ -204,7 +227,8 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 <script>
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.WT_CONFIG || {};
 const $ = id => document.getElementById(id);
-let sb = null, user = null, profile = null, acctData = null, acctTab = "posted";
+let sb = null, user = null, profile = null, targetId = null, isMe = false, acctData = null, acctTab = "posted";
+let myFollowing = new Set(), myFollowers = new Set();
 try { sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (e) { console.warn(e); }
 
 /* ---------- Material You Theme Engine ---------- */
@@ -241,7 +265,7 @@ async function saveTheme(patch) {
   const next = { ...getTheme(), ...patch };
   try { localStorage.setItem("wt_theme", JSON.stringify(next)); } catch {}
   applyTheme(next);
-  if (sb && user) { try { await sb.from("profiles").update({ theme: next }).eq("id", user.id); } catch {} }
+  if (sb && user && isMe) { try { await sb.from("profiles").update({ theme: next }).eq("id", user.id); } catch {} }
   return next;
 }
 function applyTheme(t = getTheme()) {
@@ -281,26 +305,91 @@ function applyTheme(t = getTheme()) {
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
 
-/* ---------- Load Profile & Account Data (Supabase) ---------- */
-async function loadProfile() {
-  const meta = user.user_metadata || {};
+/* ---------- Load Profile & Account Data ---------- */
+async function loadMyFollows() {
+  myFollowing = new Set(); myFollowers = new Set();
+  if (!user) return;
+  const [a, b] = await Promise.all([
+    sb.from("follows").select("following_id").eq("follower_id", user.id),
+    sb.from("follows").select("follower_id").eq("following_id", user.id)
+  ]);
+  (a.data || []).forEach(r => myFollowing.add(r.following_id));
+  (b.data || []).forEach(r => myFollowers.add(r.follower_id));
+}
+
+async function resolveTargetAndLoad() {
+  const qs = new URLSearchParams(location.search);
+  const qUser = qs.get("u"), qId = qs.get("id");
   let row = null;
-  try {
-    const { data } = await sb.from("profiles").select("*").eq("id", user.id).single();
+  if (qUser) {
+    const { data } = await sb.from("profiles").select("*").eq("username", qUser).maybeSingle();
     row = data;
-  } catch {}
+  } else if (qId) {
+    const { data } = await sb.from("profiles").select("*").eq("id", qId).maybeSingle();
+    row = data;
+  } else if (user) {
+    const { data } = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
+    row = data;
+  } else {
+    location.href = "/login";
+    return;
+  }
+
+  if (!row && (qUser || qId)) {
+    $("p-display").textContent = "User not found";
+    $("p-user").textContent = qUser ? "@" + qUser : "";
+    $("p-actions-me").classList.add("hidden");
+    $("acct-content").innerHTML = '<div class="empty-box">This profile doesn\'t exist.</div>';
+    return;
+  }
+
+  targetId = row?.id || user.id;
+  isMe = !!(user && targetId === user.id);
+  const meta = isMe ? (user.user_metadata || {}) : {};
   profile = {
-    id: user.id,
-    username: row?.username || meta.username || (user.email || "user").split("@")[0],
-    display_name: row?.display_name || meta.display_name || meta.username || "Web Tok User",
+    id: targetId,
+    username: row?.username || meta.username || (isMe ? (user.email || "user").split("@")[0] : "user"),
+    display_name: row?.display_name || meta.display_name || row?.username || "Web Tok User",
     bio: row?.bio ?? meta.bio ?? "",
     avatar_url: row?.avatar_url || null
   };
-  if (row?.theme && Object.keys(row.theme).length) {
+
+  if (isMe && row?.theme && Object.keys(row.theme).length) {
     try { localStorage.setItem("wt_theme", JSON.stringify(row.theme)); } catch {}
     applyTheme(row.theme);
   }
+
+  $("openUpload").classList.toggle("hidden", !isMe);
+  $("p-actions-me").classList.toggle("hidden", !isMe);
+  $("p-actions-other").classList.toggle("hidden", isMe);
+  if (!isMe) paintOtherFollowBtn();
+
+  paintProfileHeader();
+  await loadAccountData();
 }
+
+function paintOtherFollowBtn() {
+  const btn = $("btn-follow-user");
+  const isF = myFollowing.has(targetId);
+  const isBack = myFollowers.has(targetId);
+  btn.textContent = isF ? (isBack ? "Friends" : "Following") : (isBack ? "Follow back" : "Follow");
+  btn.className = "btn sm " + (isF ? "tonal" : "primary");
+}
+
+$("btn-follow-user").onclick = async () => {
+  if (!user) return location.href = "/login";
+  const was = myFollowing.has(targetId);
+  if (was) {
+    await sb.from("follows").delete().eq("follower_id", user.id).eq("following_id", targetId);
+    myFollowing.delete(targetId);
+  } else {
+    await sb.from("follows").insert({ follower_id: user.id, following_id: targetId });
+    myFollowing.add(targetId);
+  }
+  paintOtherFollowBtn();
+  await loadAccountData();
+};
+
 function paintProfileHeader() {
   const pfp = $("p-pfp");
   if (profile.avatar_url) { pfp.style.backgroundImage = `url(${profile.avatar_url})`; pfp.textContent = ""; }
@@ -309,15 +398,16 @@ function paintProfileHeader() {
   $("p-user").textContent = "@" + profile.username;
   $("p-bio").textContent = profile.bio || "No bio yet.";
 }
+
 async function loadAccountData() {
   $("acct-content").innerHTML = '<div class="empty-box">Loading…</div>';
   try {
     const [postedRes, myLikesRes, myCmtsRes, followingRes, followersRes] = await Promise.all([
-      sb.from("videos").select("id, title, video_url, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
-      sb.from("likes").select("video_id").eq("user_id", user.id),
-      sb.from("comments").select("id, video_id, text, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
-      sb.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", user.id),
-      sb.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", user.id)
+      sb.from("videos").select("id, title, video_url, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
+      sb.from("likes").select("video_id").eq("user_id", targetId),
+      sb.from("comments").select("id, video_id, text, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
+      sb.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", targetId),
+      sb.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", targetId)
     ]);
 
     const postedRows = postedRes.data || [];
@@ -359,17 +449,19 @@ async function loadAccountData() {
     $("acct-content").innerHTML = `<div class="empty-box">Could not load account data.<br>${escapeHtml(e.message)}</div>`;
   }
 }
+
 function renderAccountTab() {
   const box = $("acct-content");
   if (!acctData) return;
   if (acctTab === "comments") {
-    if (!acctData.comments.length) { box.innerHTML = '<div class="empty-box">You haven\'t commented on any videos yet.</div>'; return; }
+    if (!acctData.comments.length) { box.innerHTML = '<div class="empty-box">No comments yet.</div>'; return; }
     const list = document.createElement("div");
     list.className = "cmt-feed";
     acctData.comments.forEach(c => {
       const card = document.createElement("div");
       card.className = "cmt-card";
       card.innerHTML = `<div class="meta"><b>On: ${escapeHtml(c.videoName)}</b><span>${new Date(c.createdAt).toLocaleDateString()}</span></div><div>${escapeHtml(c.text)}</div>`;
+      card.onclick = () => location.href = `/scroll#v=${encodeURIComponent(c.video_id)}`;
       list.appendChild(card);
     });
     box.innerHTML = ""; box.appendChild(list);
@@ -377,7 +469,7 @@ function renderAccountTab() {
   }
   const vids = acctTab === "liked" ? acctData.liked : acctData.posted;
   if (!vids.length) {
-    box.innerHTML = `<div class="empty-box">${acctTab === "liked" ? "No liked videos yet." : "No posted videos yet. Click <b>+ Upload video</b> to share one!"}</div>`;
+    box.innerHTML = `<div class="empty-box">${acctTab === "liked" ? "No liked videos yet." : "No posted videos yet."}</div>`;
     return;
   }
   const grid = document.createElement("div");
@@ -387,11 +479,12 @@ function renderAccountTab() {
     tile.className = "vid-tile";
     tile.innerHTML = `<video src="${v.src}" muted playsinline preload="metadata"></video>
       <div class="v-ov"><b>${escapeHtml(v.name)}</b><span>♥ ${v.likesCount} · 💬 ${v.commentsCount}</span></div>`;
-    tile.onclick = () => location.href = "/scroll";
+    tile.onclick = () => location.href = `/scroll#v=${encodeURIComponent(v.id)}`;
     grid.appendChild(tile);
   });
   box.innerHTML = ""; box.appendChild(grid);
 }
+
 document.querySelectorAll(".tab").forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b === btn));
@@ -400,7 +493,56 @@ document.querySelectorAll(".tab").forEach(btn => {
   };
 });
 
-/* ---------- Upload with live progress & error handling ---------- */
+/* ---------- Followers / Following Modal ---------- */
+async function openFollowModal(mode) {
+  $("fl-title").textContent = mode === "followers" ? "Followers" : "Following";
+  $("fl-list").innerHTML = '<div style="color:var(--muted);padding:12px">Loading…</div>';
+  $("followListDlg").showModal();
+
+  const col = mode === "followers" ? "follower_id" : "following_id";
+  const filterCol = mode === "followers" ? "following_id" : "follower_id";
+  const { data: rows } = await sb.from("follows").select(col).eq(filterCol, targetId);
+  const ids = (rows || []).map(r => r[col]);
+  if (!ids.length) {
+    $("fl-list").innerHTML = `<div style="color:var(--muted);padding:12px">No ${mode} yet.</div>`;
+    return;
+  }
+  const { data: profs } = await sb.from("profiles").select("id, username, display_name, avatar_url").in("id", ids);
+  const list = $("fl-list");
+  list.innerHTML = "";
+  (profs || []).forEach(p => {
+    const row = document.createElement("div");
+    row.className = "u-row";
+    const init = escapeHtml((p.display_name || p.username || "U")[0].toUpperCase());
+    const av = p.avatar_url ? `style="background-image:url(${escapeHtml(p.avatar_url)})"` : "";
+    const btnHtml = (user && p.id !== user.id)
+      ? `<button class="btn sm ${myFollowing.has(p.id) ? "tonal" : "primary"}" data-uid="${p.id}">${myFollowing.has(p.id) ? (myFollowers.has(p.id) ? "Friends" : "Following") : (myFollowers.has(p.id) ? "Follow back" : "Follow")}</button>`
+      : "";
+    row.innerHTML = `<div class="u-av" ${av}>${p.avatar_url ? "" : init}</div>
+      <a class="u-meta" href="/profile?u=${encodeURIComponent(p.username)}"><b>${escapeHtml(p.display_name || p.username)}</b><small>@${escapeHtml(p.username)}</small></a>
+      ${btnHtml}`;
+    const fbtn = row.querySelector("button");
+    if (fbtn) fbtn.onclick = async () => {
+      const was = myFollowing.has(p.id);
+      if (was) {
+        await sb.from("follows").delete().eq("follower_id", user.id).eq("following_id", p.id);
+        myFollowing.delete(p.id);
+      } else {
+        await sb.from("follows").insert({ follower_id: user.id, following_id: p.id });
+        myFollowing.add(p.id);
+      }
+      const nowF = myFollowing.has(p.id);
+      fbtn.className = "btn sm " + (nowF ? "tonal" : "primary");
+      fbtn.textContent = nowF ? (myFollowers.has(p.id) ? "Friends" : "Following") : (myFollowers.has(p.id) ? "Follow back" : "Follow");
+      if (isMe) $("st-following").textContent = myFollowing.size;
+    };
+    list.appendChild(row);
+  });
+}
+$("btn-followers-list").onclick = () => openFollowModal("followers");
+$("btn-following-list").onclick = () => openFollowModal("following");
+
+/* ---------- Upload ---------- */
 function uploadToBucket(storagePath, file, token, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -410,23 +552,16 @@ function uploadToBucket(storagePath, file, token, onProgress) {
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.setRequestHeader("x-upsert", "true");
     xhr.timeout = 120000;
-    xhr.upload.onprogress = e => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
+    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else {
-        let msg = `Upload failed (${xhr.status})`;
-        try { msg = JSON.parse(xhr.responseText).message || msg; } catch {}
-        reject(new Error(msg));
-      }
+      else { let msg = `Upload failed (${xhr.status})`; try { msg = JSON.parse(xhr.responseText).message || msg; } catch {} reject(new Error(msg)); }
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
     xhr.ontimeout = () => reject(new Error("Upload timed out. Try a smaller video."));
     xhr.send(file);
   });
 }
-
 function openUpload() {
   $("upFile").value = ""; $("upTitle").value = ""; $("upHint").textContent = "";
   $("upHint").className = "hint"; $("upSubmit").disabled = false;
@@ -437,11 +572,7 @@ $("btn-upload-acct").onclick = openUpload;
 $("upSubmit").onclick = async () => {
   const file = $("upFile").files[0];
   if (!file) { $("upHint").textContent = "Pick a video file first."; $("upHint").className = "hint bad"; return; }
-  if (file.size > 50 * 1024 * 1024) {
-    $("upHint").textContent = "Video is over 50 MB (Supabase free-tier limit).";
-    $("upHint").className = "hint bad";
-    return;
-  }
+  if (file.size > 50 * 1024 * 1024) { $("upHint").textContent = "Video is over 50 MB (Supabase free-tier limit)."; $("upHint").className = "hint bad"; return; }
   $("upSubmit").disabled = true; $("upHint").textContent = "Starting upload…"; $("upHint").className = "hint";
   try {
     const { data: { session } } = await sb.auth.getSession();
@@ -449,15 +580,11 @@ $("upSubmit").onclick = async () => {
     const ext = (file.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
     const safe = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
     const storagePath = `${user.id}/${Date.now()}-${safe}${ext}`;
-    await uploadToBucket(storagePath, file, session.access_token, pct => {
-      $("upHint").textContent = `Uploading… ${pct}%`;
-    });
+    await uploadToBucket(storagePath, file, session.access_token, pct => { $("upHint").textContent = `Uploading… ${pct}%`; });
     $("upHint").textContent = "Saving post…";
     const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
     const title = $("upTitle").value.trim() || safe.replace(/[-_]+/g, " ");
-    const { error: dbErr } = await sb.from("videos").insert({
-      user_id: user.id, title, video_url: videoUrl, storage_path: storagePath
-    });
+    const { error: dbErr } = await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath });
     if (dbErr) throw dbErr;
     $("uploadDlg").close();
     await loadAccountData();
@@ -504,8 +631,7 @@ $("ep-save").onclick = async () => {
       avatar_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?t=" + Date.now();
     }
     await sb.from("profiles").upsert({ id: user.id, username: un, display_name: dn || un, bio, avatar_url });
-    await loadProfile();
-    paintProfileHeader();
+    await resolveTargetAndLoad();
     $("editProfDlg").close();
   } catch (e) {
     $("ep-hint").textContent = e.message || "Could not save profile."; $("ep-hint").className = "hint bad";
@@ -568,10 +694,8 @@ function escapeHtml(s) {
   if (!sb) return location.href = "/login";
   const { data } = await sb.auth.getSession();
   user = data.session?.user || null;
-  if (!user) return location.href = "/login";
-  await loadProfile();
-  paintProfileHeader();
-  await loadAccountData();
+  await loadMyFollows();
+  await resolveTargetAndLoad();
 })();
 </script>
 </body>
