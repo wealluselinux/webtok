@@ -95,7 +95,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 <div id="wp-scrim"></div>
 
 <div id="bar">
-  <a class="chip" href="/#feed">← Feed</a>
+  <a class="chip" href="/scroll">← Feed</a>
   <button class="chip p" id="openUpload">+ Upload</button>
 </div>
 
@@ -387,7 +387,7 @@ function renderAccountTab() {
     tile.className = "vid-tile";
     tile.innerHTML = `<video src="${v.src}" muted playsinline preload="metadata"></video>
       <div class="v-ov"><b>${escapeHtml(v.name)}</b><span>♥ ${v.likesCount} · 💬 ${v.commentsCount}</span></div>`;
-    tile.onclick = () => location.href = "/#feed";
+    tile.onclick = () => location.href = "/scroll";
     grid.appendChild(tile);
   });
   box.innerHTML = ""; box.appendChild(grid);
@@ -558,7 +558,7 @@ $("st-reset").onclick = async () => {
   if (sb && user) { try { await sb.from("profiles").update({ theme: {} }).eq("id", user.id); } catch {} }
   renderSettings();
 };
-$("btn-signout").onclick = async () => { try { await sb.auth.signOut(); } catch {} location.href = "/#feed"; };
+$("btn-signout").onclick = async () => { try { await sb.auth.signOut(); } catch {} location.href = "/scroll"; };
 
 function escapeHtml(s) {
   return String(s || "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
