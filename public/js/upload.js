@@ -1,6 +1,5 @@
-/* Full-screen Material You batch upload studio (100 MB limit + auto-compress >48 MB + status bar + ETA) */
-const MAX_INPUT_BYTES = 100 * 1024 * 1024;
-const SUPABASE_LIMIT_BYTES = 48 * 1024 * 1024;
+/* Full-screen Material You batch upload studio (Supabase direct upload + status bar + ETA, no compression) */
+const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false;
 
 function fmtEta(sec) {
@@ -24,89 +23,16 @@ function hideStatusBar() {
   if (wrap) wrap.classList.add("hidden");
 }
 
-function compressVideo(file, onProgress) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const vid = document.createElement("video");
-    vid.src = url;
-    vid.playsInline = true;
-    vid.preload = "auto";
-
-    vid.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read video for compression.")); };
-    vid.onloadedmetadata = async () => {
-      try {
-        const dur = vid.duration || 30;
-        const maxDim = 1280;
-        const scale = Math.min(maxDim / (vid.videoWidth || 720), maxDim / (vid.videoHeight || 1280), 1);
-        const w = Math.max(2, Math.round((vid.videoWidth * scale) / 2) * 2);
-        const h = Math.max(2, Math.round((vid.videoHeight * scale) / 2) * 2);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-
-        const stream = canvas.captureStream(30);
-        let audioCtx = null;
-        try {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const src = audioCtx.createMediaElementSource(vid);
-          const dest = audioCtx.createMediaStreamDestination();
-          src.connect(dest);
-          dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
-        } catch {}
-
-        const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
-          .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
-        const targetBps = Math.min(Math.max(Math.floor((42 * 1024 * 1024 * 8) / dur) - 96000, 350000), 3000000);
-        const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: targetBps } : { videoBitsPerSecond: targetBps });
-        const chunks = [];
-        rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-        rec.onstop = () => {
-          URL.revokeObjectURL(url);
-          if (audioCtx) audioCtx.close().catch(() => {});
-          const outType = mime.split(";")[0] || "video/webm";
-          const ext = outType.includes("mp4") ? ".mp4" : ".webm";
-          const outFile = new File(chunks, file.name.replace(/\.[^.]+$/, "") + ext, { type: outType });
-          if (outFile.size > 50 * 1024 * 1024) reject(new Error("Compressed file is still over 50 MB. Try a shorter clip."));
-          else resolve(outFile);
-        };
-
-        const startedAt = Date.now();
-        let raf = 0;
-        const draw = () => {
-          if (vid.paused || vid.ended) return;
-          ctx.drawImage(vid, 0, 0, w, h);
-          if (onProgress && dur > 0) {
-            const pct = Math.min(99, Math.round((vid.currentTime / dur) * 100));
-            const elapsed = (Date.now() - startedAt) / 1000;
-            const eta = pct >= 3 ? fmtEta(Math.round((elapsed / pct) * (100 - pct))) : "estimating…";
-            onProgress(pct, eta);
-          }
-          raf = requestAnimationFrame(draw);
-        };
-        vid.onended = () => { cancelAnimationFrame(raf); if (rec.state !== "inactive") rec.stop(); };
-
-        rec.start(1000);
-        await vid.play();
-        draw();
-      } catch (err) {
-        URL.revokeObjectURL(url);
-        reject(err);
-      }
-    };
-  });
-}
-
-function uploadToBucket(storagePath, file, token, onProgress) {
+function uploadToSupabaseStorage(file, path, token, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const startedAt = Date.now();
-    xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/videos/${storagePath}`);
+    xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/videos/${path}`);
     xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.setRequestHeader("x-upsert", "true");
-    xhr.timeout = 240000;
+    xhr.timeout = 300000;
     xhr.upload.onprogress = e => {
       if (e.lengthComputable && onProgress) {
         const pct = Math.round((e.loaded / e.total) * 100);
@@ -116,8 +42,10 @@ function uploadToBucket(storagePath, file, token, onProgress) {
       }
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const url = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
+        resolve({ url, storagePath: path });
+      } else {
         let msg = `Upload failed (${xhr.status})`;
         try { msg = JSON.parse(xhr.responseText).message || msg; } catch {}
         reject(new Error(msg));
@@ -176,7 +104,7 @@ function initFullUploadUI() {
     <div class="up-body">
       <label class="up-drop" for="upFile">
         <b>Choose videos to upload</b>
-        <span>MP4, WebM, or MOV · Up to 100 MB (files over 48 MB auto-compress)</span>
+        <span>MP4, WebM, or MOV · Up to 50 MB each · Select multiple at once</span>
       </label>
       <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
       <div class="up-bar-wrap hidden" id="upBarWrap">
@@ -193,7 +121,7 @@ function initFullUploadUI() {
   $("upFile").onchange = e => {
     [...(e.target.files || [])].forEach(file => {
       const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-      const item = { file, title: defTitle, orientation: "portrait", status: file.size > SUPABASE_LIMIT_BYTES ? "Will compress" : "Ready", url: URL.createObjectURL(file) };
+      const item = { file, title: defTitle, orientation: "portrait", status: "Ready", url: URL.createObjectURL(file) };
       const probe = document.createElement("video");
       probe.preload = "metadata";
       probe.src = item.url;
@@ -223,7 +151,7 @@ function renderUpQueue() {
       <div class="up-fields">
         <div class="up-meta">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
-          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
+          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 50 MB" : escapeHtml(item.status)}</span>
         </div>
         <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
         <div class="up-orients">
@@ -245,12 +173,13 @@ function renderUpQueue() {
 async function submitBatchUpload() {
   const valid = upQueue.filter(it => it.file.size <= MAX_INPUT_BYTES);
   if (!valid.length) {
-    $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
+    $("upHint").textContent = upQueue.length ? "All selected videos exceed 50 MB." : "Pick one or more video files first.";
     $("upHint").className = "hint bad";
     return;
   }
   $("upSubmit").disabled = true;
   $("upHint").className = "hint";
+  setStatusBar("Starting upload…", 0, "");
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session?.access_token) throw new Error("Session expired. Sign in again.");
@@ -258,35 +187,25 @@ async function submitBatchUpload() {
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
-      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
+      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>50 MB)"; continue; }
       const stEl = document.querySelector(`[data-st="${i}"]`);
       const setSt = txt => { item.status = txt; if (stEl) stEl.textContent = txt; };
       try {
-        let fileToUpload = item.file;
-        if (fileToUpload.size > SUPABASE_LIMIT_BYTES) {
-          setStatusBar(`Compressing video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
-          fileToUpload = await compressVideo(fileToUpload, (pct, eta) => {
-            setSt(`Compressing ${pct}%`);
-            setStatusBar(`Compressing video (${i + 1} of ${upQueue.length})…`, pct, eta);
-          });
-        }
         setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
-        const ext = (fileToUpload.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
-        const safe = fileToUpload.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
-        const storagePath = `${user.id}/${Date.now()}-${i}-${safe}${ext}`;
-        await uploadToBucket(storagePath, fileToUpload, session.access_token, (pct, eta) => {
+        const ext = (item.file.name.split(".").pop() || "mp4").toLowerCase();
+        const path = `${user.id}/${Date.now()}_${i}.${ext}`;
+        const { url, storagePath } = await uploadToSupabaseStorage(item.file, path, session.access_token, (pct, eta) => {
           setSt(`Uploading ${pct}%`);
           setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, pct, eta);
         });
         setSt("Saving…");
         setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
-        const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
-        const title = item.title.trim() || safe.replace(/[-_]+/g, " ");
+        const title = item.title.trim() || item.file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
         let { error: dbErr } = await sb.from("videos").insert({
-          user_id: user.id, title, video_url: videoUrl, storage_path: storagePath, orientation: item.orientation
+          user_id: user.id, title, video_url: url, storage_path: storagePath, orientation: item.orientation
         });
         if (dbErr && /orientation/i.test(dbErr.message)) {
-          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath })).error;
+          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath })).error;
         }
         if (dbErr) throw dbErr;
         setSt("Done");
