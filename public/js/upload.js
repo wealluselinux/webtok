@@ -1,7 +1,28 @@
-/* Full-screen Material You batch upload studio (100 MB limit + auto-compress >48 MB + orientation selector) */
+/* Full-screen Material You batch upload studio (100 MB limit + auto-compress >48 MB + status bar + ETA) */
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
 const SUPABASE_LIMIT_BYTES = 48 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false;
+
+function fmtEta(sec) {
+  if (!isFinite(sec) || sec <= 0) return "almost done";
+  if (sec < 60) return `~${sec}s left`;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `~${m}m ${s}s left`;
+}
+
+function setStatusBar(phase, pct, etaText) {
+  const wrap = $("upBarWrap");
+  if (!wrap) return;
+  wrap.classList.remove("hidden");
+  $("upPhase").textContent = phase;
+  $("upStats").textContent = etaText ? `${pct}% · ${etaText}` : `${pct}%`;
+  $("upBarFill").style.width = `${Math.min(100, Math.max(0, pct))}%`;
+}
+
+function hideStatusBar() {
+  const wrap = $("upBarWrap");
+  if (wrap) wrap.classList.add("hidden");
+}
 
 function compressVideo(file, onProgress) {
   return new Promise((resolve, reject) => {
@@ -50,11 +71,17 @@ function compressVideo(file, onProgress) {
           else resolve(outFile);
         };
 
+        const startedAt = Date.now();
         let raf = 0;
         const draw = () => {
           if (vid.paused || vid.ended) return;
           ctx.drawImage(vid, 0, 0, w, h);
-          if (onProgress && dur > 0) onProgress(Math.min(99, Math.round((vid.currentTime / dur) * 100)));
+          if (onProgress && dur > 0) {
+            const pct = Math.min(99, Math.round((vid.currentTime / dur) * 100));
+            const elapsed = (Date.now() - startedAt) / 1000;
+            const eta = pct >= 3 ? fmtEta(Math.round((elapsed / pct) * (100 - pct))) : "estimating…";
+            onProgress(pct, eta);
+          }
           raf = requestAnimationFrame(draw);
         };
         vid.onended = () => { cancelAnimationFrame(raf); if (rec.state !== "inactive") rec.stop(); };
@@ -73,6 +100,7 @@ function compressVideo(file, onProgress) {
 function uploadToBucket(storagePath, file, token, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const startedAt = Date.now();
     xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/videos/${storagePath}`);
     xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
@@ -80,7 +108,12 @@ function uploadToBucket(storagePath, file, token, onProgress) {
     xhr.setRequestHeader("x-upsert", "true");
     xhr.timeout = 240000;
     xhr.upload.onprogress = e => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      if (e.lengthComputable && onProgress) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const eta = pct >= 3 ? fmtEta(Math.round((elapsed / pct) * (100 - pct))) : "estimating…";
+        onProgress(pct, eta);
+      }
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) resolve();
@@ -113,6 +146,11 @@ function initFullUploadUI() {
     .up-drop:hover{transform:scale(.995)}
     .up-drop b{display:block;font-size:17px;margin-bottom:4px}
     .up-drop span{font-size:13px;color:var(--muted)}
+    .up-bar-wrap{background:var(--card);border-radius:var(--r-xl);padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+    .up-bar-wrap.hidden{display:none}
+    .up-bar-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;gap:10px}
+    .up-bar-track{width:100%;height:10px;border-radius:999px;background:var(--surface);overflow:hidden}
+    .up-bar-fill{height:100%;width:0%;border-radius:999px;background:var(--primary);transition:width .2s ease}
     .up-list{display:flex;flex-direction:column;gap:12px}
     .up-card{display:flex;gap:16px;background:var(--surface);padding:14px;border-radius:var(--r-xl);align-items:center;flex-wrap:wrap}
     .up-prev{width:76px;height:104px;border-radius:16px;background:#000;object-fit:contain;flex-shrink:0}
@@ -141,6 +179,13 @@ function initFullUploadUI() {
         <span>MP4, WebM, or MOV · Up to 100 MB (files over 48 MB auto-compress)</span>
       </label>
       <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
+      <div class="up-bar-wrap hidden" id="upBarWrap">
+        <div class="up-bar-head">
+          <span id="upPhase">Preparing…</span>
+          <span id="upStats" style="color:var(--primary)">0%</span>
+        </div>
+        <div class="up-bar-track"><div class="up-bar-fill" id="upBarFill"></div></div>
+      </div>
       <div class="up-list" id="upQueue"></div>
     </div>`;
 
@@ -219,19 +264,22 @@ async function submitBatchUpload() {
       try {
         let fileToUpload = item.file;
         if (fileToUpload.size > SUPABASE_LIMIT_BYTES) {
-          fileToUpload = await compressVideo(fileToUpload, pct => {
+          setStatusBar(`Compressing video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
+          fileToUpload = await compressVideo(fileToUpload, (pct, eta) => {
             setSt(`Compressing ${pct}%`);
-            $("upHint").textContent = `Compressing ${i + 1} of ${upQueue.length} (${pct}%)…`;
+            setStatusBar(`Compressing video (${i + 1} of ${upQueue.length})…`, pct, eta);
           });
         }
+        setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
         const ext = (fileToUpload.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
         const safe = fileToUpload.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
         const storagePath = `${user.id}/${Date.now()}-${i}-${safe}${ext}`;
-        await uploadToBucket(storagePath, fileToUpload, session.access_token, pct => {
-          setSt(`${pct}%`);
-          $("upHint").textContent = `Uploading ${i + 1} of ${upQueue.length} (${pct}%)…`;
+        await uploadToBucket(storagePath, fileToUpload, session.access_token, (pct, eta) => {
+          setSt(`Uploading ${pct}%`);
+          setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, pct, eta);
         });
         setSt("Saving…");
+        setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
         const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
         const title = item.title.trim() || safe.replace(/[-_]+/g, " ");
         let { error: dbErr } = await sb.from("videos").insert({
@@ -250,6 +298,7 @@ async function submitBatchUpload() {
         console.warn(err);
       }
     }
+    hideStatusBar();
     if (okCount === upQueue.length) {
       $("uploadDlg").close();
       await loadFeed();
@@ -259,6 +308,7 @@ async function submitBatchUpload() {
       if (okCount > 0) await loadFeed();
     }
   } catch (e) {
+    hideStatusBar();
     $("upSubmit").disabled = false;
     $("upHint").textContent = e.message;
     $("upHint").className = "hint bad";
@@ -267,6 +317,7 @@ async function submitBatchUpload() {
 
 $("openUpload").onclick = () => requireLogin(() => {
   initFullUploadUI();
+  hideStatusBar();
   upQueue = [];
   $("upFile").value = "";
   $("upHint").textContent = "";
