@@ -81,6 +81,7 @@ input:focus{outline:0;border-color:var(--primary)}
 /* ---------- Landing ---------- */
 #landing{display:grid!important;place-items:center;padding:28px;overflow:auto;gap:0}
 #landing::before,#landing::after{display:none!important}
+#landing.hidden{display:none!important}
 #landing .blob{position:absolute;z-index:-1;pointer-events:none;animation:drift 18s ease-in-out infinite alternate}
 .b1{width:56vmax;height:56vmax;background:var(--accent);top:-22vmax;right:-14vmax;border-radius:48% 52% 40% 60%;opacity:.75}
 .b2{width:44vmax;height:44vmax;background:var(--card);bottom:-20vmax;left:-12vmax;border-radius:60% 40% 55% 45%;animation-delay:-6s!important}
@@ -389,11 +390,16 @@ function slide(v) {
 
 async function loadFeed() {
   const feed = $("feed");
-  feed.innerHTML = '<div class="empty">Loading…</div>';
+  feed.innerHTML = '<div class="empty"><div>Loading…</div></div>';
   try {
     const vids = await listVideos();
     if (!vids.length) {
-      feed.innerHTML = '<div class="empty">No videos yet.<br>Click <b>+ Upload</b> to post the first one!</div>';
+      const h = location.hash;
+      const msg = h === "#following" ? "You're not following anyone with videos yet.<br>Tap <b>Follow</b> on a video to see them here."
+        : h === "#friends" ? "No videos from friends yet.<br>Follow someone and have them follow you back to become friends."
+        : h.startsWith("#search=") ? "No results found."
+        : "No videos yet.<br>Click <b>+ Upload</b> to post the first one!";
+      feed.innerHTML = `<div class="empty"><div>${msg}</div></div>`;
       return;
     }
     feed.innerHTML = "";
@@ -404,7 +410,7 @@ async function loadFeed() {
     }), { threshold: .7 });
     vids.forEach(v => { const s = slide(v); feed.appendChild(s); obs.observe(s); });
   } catch (e) {
-    feed.innerHTML = `<div class="empty">Couldn't load videos.<br>${e.message}</div>`;
+    feed.innerHTML = `<div class="empty"><div>Couldn't load videos.<br>${e.message}</div></div>`;
   }
 }
 
