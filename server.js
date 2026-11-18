@@ -17,9 +17,9 @@ app.get("/config.js", (_req, res) => {
 
 app.get(["/login", "/sign-in", "/signin"], (_q, res) => res.sendFile(path.join(__dirname, "public", "login.html")));
 app.get(["/profile", "/account"], (_q, res) => res.sendFile(path.join(__dirname, "public", "profile.html")));
-
 app.get(["/scroll", "/feed"], (_q, res) => res.sendFile(path.join(__dirname, "public", "scroll.html")));
 app.get("/messages", (_q, res) => res.sendFile(path.join(__dirname, "public", "messages.html")));
+app.get("/activity", (_q, res) => res.sendFile(path.join(__dirname, "public", "activity.html")));
 
 // Lists every sticker image or Lottie JSON in public/stickers (add files there to add stickers)
 app.get("/api/stickers", (_q, res) => {
