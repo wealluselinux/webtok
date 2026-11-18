@@ -1,4 +1,7 @@
-/* Video upload dialog: batch multi-video upload with per-video title editing */
+/* Full-screen Material You batch upload studio (100 MB limit + orientation selector) */
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+let upQueue = [], uploadUIReady = false;
+
 function uploadToBucket(storagePath, file, token, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -7,7 +10,7 @@ function uploadToBucket(storagePath, file, token, onProgress) {
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.setRequestHeader("x-upsert", "true");
-    xhr.timeout = 120000;
+    xhr.timeout = 240000;
     xhr.upload.onprogress = e => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };
@@ -20,27 +23,77 @@ function uploadToBucket(storagePath, file, token, onProgress) {
       }
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
-    xhr.ontimeout = () => reject(new Error("Upload timed out. Try a smaller video."));
+    xhr.ontimeout = () => reject(new Error("Upload timed out."));
     xhr.send(file);
   });
 }
 
-let upQueue = [];
-function ensureBatchUI() {
-  const fileEl = $("upFile");
-  if (!fileEl) return;
-  fileEl.multiple = true;
-  if ($("upQueue")) return;
-  const titleEl = $("upTitle");
-  if (titleEl) {
-    titleEl.classList.add("hidden");
-    const lbl = titleEl.previousElementSibling;
-    if (lbl && lbl.tagName === "LABEL") lbl.classList.add("hidden");
-  }
-  const q = document.createElement("div");
-  q.id = "upQueue";
-  q.style.cssText = "display:flex;flex-direction:column;gap:8px;max-height:42vh;overflow-y:auto;margin-top:10px";
-  $("upHint").parentNode.insertBefore(q, $("upHint"));
+function initFullUploadUI() {
+  if (uploadUIReady) return;
+  uploadUIReady = true;
+  const dlg = $("uploadDlg");
+  if (!dlg) return;
+
+  const style = document.createElement("style");
+  style.textContent = `
+    #uploadDlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);overflow:hidden}
+    #uploadDlg[open]{display:flex;flex-direction:column}
+    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg)}
+    .up-top h2{font-size:22px;font-weight:700}
+    .up-body{flex:1;overflow-y:auto;padding:24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+    .up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer;transition:transform .15s}
+    .up-drop:hover{transform:scale(.995)}
+    .up-drop b{display:block;font-size:17px;margin-bottom:4px}
+    .up-drop span{font-size:13px;color:var(--muted)}
+    .up-list{display:flex;flex-direction:column;gap:12px}
+    .up-card{display:flex;gap:16px;background:var(--surface);padding:14px;border-radius:var(--r-xl);align-items:center;flex-wrap:wrap}
+    .up-prev{width:76px;height:104px;border-radius:16px;background:#000;object-fit:contain;flex-shrink:0}
+    .up-fields{flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px}
+    .up-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);gap:8px}
+    .up-orients{display:flex;gap:6px;flex-wrap:wrap}
+    .up-or{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);color:var(--text)}
+    .up-or.on{background:var(--primary);color:var(--on-primary)}
+  `;
+  document.head.appendChild(style);
+
+  dlg.innerHTML = `
+    <div class="up-top">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button type="button" class="btn icon" id="upClose">✕</button>
+        <h2>Upload videos</h2>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="hint" id="upHint" style="margin:0"></span>
+        <button type="button" class="btn primary" id="upSubmit">Upload all</button>
+      </div>
+    </div>
+    <div class="up-body">
+      <label class="up-drop" for="upFile">
+        <b>Choose videos to upload</b>
+        <span>MP4, WebM, or MOV · Up to 100 MB each · Select multiple at once</span>
+      </label>
+      <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
+      <div class="up-list" id="upQueue"></div>
+    </div>`;
+
+  $("upClose").onclick = () => dlg.close();
+  $("upFile").onchange = e => {
+    [...(e.target.files || [])].forEach(file => {
+      const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
+      const item = { file, title: defTitle, orientation: "portrait", status: "Ready", url: URL.createObjectURL(file) };
+      const probe = document.createElement("video");
+      probe.preload = "metadata";
+      probe.src = item.url;
+      probe.onloadedmetadata = () => {
+        if (probe.videoWidth > probe.videoHeight * 1.15) item.orientation = "landscape";
+        else if (Math.abs(probe.videoWidth - probe.videoHeight) <= probe.videoWidth * 0.15) item.orientation = "square";
+        renderUpQueue();
+      };
+      upQueue.push(item);
+    });
+    renderUpQueue();
+  };
+  $("upSubmit").onclick = submitBatchUpload;
 }
 
 function renderUpQueue() {
@@ -48,50 +101,38 @@ function renderUpQueue() {
   if (!q) return;
   q.innerHTML = "";
   upQueue.forEach((item, idx) => {
-    const row = document.createElement("div");
-    row.style.cssText = "background:var(--surface);padding:10px 12px;border-radius:18px;display:flex;flex-direction:column;gap:6px";
+    const card = document.createElement("div");
+    card.className = "up-card";
     const mb = (item.file.size / (1024 * 1024)).toFixed(1);
-    const over = item.file.size > 50 * 1024 * 1024;
-    row.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)">
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
-        <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 50 MB" : escapeHtml(item.status || "Ready")}</span>
+    const over = item.file.size > MAX_VIDEO_BYTES;
+    card.innerHTML = `
+      <video class="up-prev" src="${item.url}" muted playsinline></video>
+      <div class="up-fields">
+        <div class="up-meta">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
+          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
+        </div>
+        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
+        <div class="up-orients">
+          <button type="button" class="up-or ${item.orientation === "portrait" ? "on" : ""}" data-o="portrait">Portrait (9:16)</button>
+          <button type="button" class="up-or ${item.orientation === "landscape" ? "on" : ""}" data-o="landscape">Landscape (16:9)</button>
+          <button type="button" class="up-or ${item.orientation === "square" ? "on" : ""}" data-o="square">Square (1:1)</button>
+        </div>
       </div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="padding:10px 12px;background:var(--bg)">
-        <button type="button" class="btn icon" style="width:36px;height:36px;flex-shrink:0" title="Remove">✕</button>
-      </div>`;
-    const inp = row.querySelector("input");
-    inp.oninput = e => { item.title = e.target.value; };
-    row.querySelector("button").onclick = () => { upQueue.splice(idx, 1); renderUpQueue(); };
-    q.appendChild(row);
+      <button type="button" class="btn icon" title="Remove">✕</button>`;
+    card.querySelector("input").oninput = e => { item.title = e.target.value; };
+    card.querySelectorAll(".up-or").forEach(b => {
+      b.onclick = () => { item.orientation = b.dataset.o; renderUpQueue(); };
+    });
+    card.querySelector(".btn.icon").onclick = () => { upQueue.splice(idx, 1); renderUpQueue(); };
+    q.appendChild(card);
   });
 }
 
-$("openUpload").onclick = () => requireLogin(() => {
-  ensureBatchUI();
-  upQueue = [];
-  $("upFile").value = "";
-  $("upHint").textContent = "";
-  $("upHint").className = "hint";
-  $("upSubmit").disabled = false;
-  renderUpQueue();
-  $("uploadDlg").showModal();
-});
-
-$("upFile").onchange = e => {
-  ensureBatchUI();
-  const files = [...(e.target.files || [])];
-  files.forEach(file => {
-    const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-    upQueue.push({ file, title: defTitle, status: "Ready" });
-  });
-  renderUpQueue();
-};
-
-$("upSubmit").onclick = async () => {
-  const valid = upQueue.filter(it => it.file.size <= 50 * 1024 * 1024);
+async function submitBatchUpload() {
+  const valid = upQueue.filter(it => it.file.size <= MAX_VIDEO_BYTES);
   if (!valid.length) {
-    $("upHint").textContent = upQueue.length ? "All selected videos exceed the 50 MB limit." : "Pick one or more video files first.";
+    $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
     $("upHint").className = "hint bad";
     return;
   }
@@ -104,7 +145,7 @@ $("upSubmit").onclick = async () => {
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
-      if (item.file.size > 50 * 1024 * 1024) { item.status = "Skipped (>50 MB)"; continue; }
+      if (item.file.size > MAX_VIDEO_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
       const stEl = document.querySelector(`[data-st="${i}"]`);
       const setSt = txt => { item.status = txt; if (stEl) stEl.textContent = txt; };
       try {
@@ -118,9 +159,12 @@ $("upSubmit").onclick = async () => {
         setSt("Saving…");
         const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
         const title = item.title.trim() || safe.replace(/[-_]+/g, " ");
-        const { error: dbErr } = await sb.from("videos").insert({
-          user_id: user.id, title, video_url: videoUrl, storage_path: storagePath
+        let { error: dbErr } = await sb.from("videos").insert({
+          user_id: user.id, title, video_url: videoUrl, storage_path: storagePath, orientation: item.orientation
         });
+        if (dbErr && /orientation/i.test(dbErr.message)) {
+          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath })).error;
+        }
         if (dbErr) throw dbErr;
         setSt("Done");
         okCount++;
@@ -143,4 +187,15 @@ $("upSubmit").onclick = async () => {
     $("upHint").textContent = e.message;
     $("upHint").className = "hint bad";
   }
-};
+}
+
+$("openUpload").onclick = () => requireLogin(() => {
+  initFullUploadUI();
+  upQueue = [];
+  $("upFile").value = "";
+  $("upHint").textContent = "";
+  $("upHint").className = "hint";
+  $("upSubmit").disabled = false;
+  renderUpQueue();
+  $("uploadDlg").showModal();
+});
