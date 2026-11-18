@@ -1,6 +1,74 @@
-/* Full-screen Material You batch upload studio (100 MB limit + orientation selector) */
-const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+/* Full-screen Material You batch upload studio (100 MB limit + auto-compress >48 MB + orientation selector) */
+const MAX_INPUT_BYTES = 100 * 1024 * 1024;
+const SUPABASE_LIMIT_BYTES = 48 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false;
+
+function compressVideo(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const vid = document.createElement("video");
+    vid.src = url;
+    vid.playsInline = true;
+    vid.preload = "auto";
+
+    vid.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read video for compression.")); };
+    vid.onloadedmetadata = async () => {
+      try {
+        const dur = vid.duration || 30;
+        const maxDim = 1280;
+        const scale = Math.min(maxDim / (vid.videoWidth || 720), maxDim / (vid.videoHeight || 1280), 1);
+        const w = Math.max(2, Math.round((vid.videoWidth * scale) / 2) * 2);
+        const h = Math.max(2, Math.round((vid.videoHeight * scale) / 2) * 2);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+
+        const stream = canvas.captureStream(30);
+        let audioCtx = null;
+        try {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          const src = audioCtx.createMediaElementSource(vid);
+          const dest = audioCtx.createMediaStreamDestination();
+          src.connect(dest);
+          dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+        } catch {}
+
+        const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
+          .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
+        const targetBps = Math.min(Math.max(Math.floor((42 * 1024 * 1024 * 8) / dur) - 96000, 350000), 3000000);
+        const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: targetBps } : { videoBitsPerSecond: targetBps });
+        const chunks = [];
+        rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+        rec.onstop = () => {
+          URL.revokeObjectURL(url);
+          if (audioCtx) audioCtx.close().catch(() => {});
+          const outType = mime.split(";")[0] || "video/webm";
+          const ext = outType.includes("mp4") ? ".mp4" : ".webm";
+          const outFile = new File(chunks, file.name.replace(/\.[^.]+$/, "") + ext, { type: outType });
+          if (outFile.size > 50 * 1024 * 1024) reject(new Error("Compressed file is still over 50 MB. Try a shorter clip."));
+          else resolve(outFile);
+        };
+
+        let raf = 0;
+        const draw = () => {
+          if (vid.paused || vid.ended) return;
+          ctx.drawImage(vid, 0, 0, w, h);
+          if (onProgress && dur > 0) onProgress(Math.min(99, Math.round((vid.currentTime / dur) * 100)));
+          raf = requestAnimationFrame(draw);
+        };
+        vid.onended = () => { cancelAnimationFrame(raf); if (rec.state !== "inactive") rec.stop(); };
+
+        rec.start(1000);
+        await vid.play();
+        draw();
+      } catch (err) {
+        URL.revokeObjectURL(url);
+        reject(err);
+      }
+    };
+  });
+}
 
 function uploadToBucket(storagePath, file, token, onProgress) {
   return new Promise((resolve, reject) => {
@@ -70,7 +138,7 @@ function initFullUploadUI() {
     <div class="up-body">
       <label class="up-drop" for="upFile">
         <b>Choose videos to upload</b>
-        <span>MP4, WebM, or MOV · Up to 100 MB each · Select multiple at once</span>
+        <span>MP4, WebM, or MOV · Up to 100 MB (files over 48 MB auto-compress)</span>
       </label>
       <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
       <div class="up-list" id="upQueue"></div>
@@ -80,7 +148,7 @@ function initFullUploadUI() {
   $("upFile").onchange = e => {
     [...(e.target.files || [])].forEach(file => {
       const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-      const item = { file, title: defTitle, orientation: "portrait", status: "Ready", url: URL.createObjectURL(file) };
+      const item = { file, title: defTitle, orientation: "portrait", status: file.size > SUPABASE_LIMIT_BYTES ? "Will compress" : "Ready", url: URL.createObjectURL(file) };
       const probe = document.createElement("video");
       probe.preload = "metadata";
       probe.src = item.url;
@@ -104,7 +172,7 @@ function renderUpQueue() {
     const card = document.createElement("div");
     card.className = "up-card";
     const mb = (item.file.size / (1024 * 1024)).toFixed(1);
-    const over = item.file.size > MAX_VIDEO_BYTES;
+    const over = item.file.size > MAX_INPUT_BYTES;
     card.innerHTML = `
       <video class="up-prev" src="${item.url}" muted playsinline></video>
       <div class="up-fields">
@@ -130,7 +198,7 @@ function renderUpQueue() {
 }
 
 async function submitBatchUpload() {
-  const valid = upQueue.filter(it => it.file.size <= MAX_VIDEO_BYTES);
+  const valid = upQueue.filter(it => it.file.size <= MAX_INPUT_BYTES);
   if (!valid.length) {
     $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
     $("upHint").className = "hint bad";
@@ -145,14 +213,21 @@ async function submitBatchUpload() {
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
-      if (item.file.size > MAX_VIDEO_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
+      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
       const stEl = document.querySelector(`[data-st="${i}"]`);
       const setSt = txt => { item.status = txt; if (stEl) stEl.textContent = txt; };
       try {
-        const ext = (item.file.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
-        const safe = item.file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
+        let fileToUpload = item.file;
+        if (fileToUpload.size > SUPABASE_LIMIT_BYTES) {
+          fileToUpload = await compressVideo(fileToUpload, pct => {
+            setSt(`Compressing ${pct}%`);
+            $("upHint").textContent = `Compressing ${i + 1} of ${upQueue.length} (${pct}%)…`;
+          });
+        }
+        const ext = (fileToUpload.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
+        const safe = fileToUpload.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
         const storagePath = `${user.id}/${Date.now()}-${i}-${safe}${ext}`;
-        await uploadToBucket(storagePath, item.file, session.access_token, pct => {
+        await uploadToBucket(storagePath, fileToUpload, session.access_token, pct => {
           setSt(`${pct}%`);
           $("upHint").textContent = `Uploading ${i + 1} of ${upQueue.length} (${pct}%)…`;
         });
@@ -171,6 +246,7 @@ async function submitBatchUpload() {
       } catch (err) {
         setSt("Failed");
         if (stEl) stEl.style.color = "var(--bad)";
+        $("upHint").textContent = err.message;
         console.warn(err);
       }
     }
