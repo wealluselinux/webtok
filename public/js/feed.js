@@ -44,7 +44,8 @@ async function listVideos() {
 function slide(v) {
   const s = document.createElement("section");
   s.className = "slide";
-  const by = v.username ? `<small>@${escapeHtml(v.username)}</small>` : "";
+  s.dataset.vid = v.id;
+  const by = v.username ? `<small><a href="/profile?u=${encodeURIComponent(v.username)}">@${escapeHtml(v.username)}</a></small>` : "";
   s.innerHTML = `<div class="player"><video loop playsinline muted preload="metadata"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
     <div class="rail">
       ${followBtn(v)}
@@ -114,6 +115,11 @@ async function loadFeed() {
       else { v.pause(); v.currentTime = 0; }
     }), { threshold: .7 });
     vids.forEach(v => { const s = slide(v); feed.appendChild(s); obs.observe(s); });
+    if (location.hash.startsWith("#v=")) {
+      const targetId = decodeURIComponent(location.hash.slice(3));
+      const el = feed.querySelector(`[data-vid="${CSS.escape(targetId)}"]`);
+      if (el) el.scrollIntoView({ behavior: "instant" });
+    }
   } catch (e) {
     feed.innerHTML = `<div class="empty"><div>Couldn't load videos.<br>${e.message}</div></div>`;
   }
