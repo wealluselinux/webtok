@@ -78,6 +78,7 @@ input:focus{outline:0;border-color:var(--primary)}
 .cmt-form{display:flex;gap:8px;align-items:center}
 .cmt-form input{flex:1}
 </style>
+<link rel="icon" href="/logo.png">
 </head>
 <body>
 <div id="wp-layer"></div>
@@ -105,7 +106,7 @@ input:focus{outline:0;border-color:var(--primary)}
 <dialog id="commentsDlg">
   <div class="dlg-head">
     <h2>Comments</h2>
-    <button class="btn icon" onclick="document.getElementById('commentsDlg').close()">✕</button>
+    <button class="btn icon" onclick="document.getElementById('commentsDlg').close()"><span class="ms">close</span></button>
   </div>
   <div class="cmt-list" id="cmtList"></div>
   <form class="cmt-form" id="cmtForm">
@@ -118,7 +119,7 @@ input:focus{outline:0;border-color:var(--primary)}
 <dialog id="uploadDlg">
   <div class="dlg-head">
     <h2>Upload video</h2>
-    <button class="btn icon" onclick="document.getElementById('uploadDlg').close()">✕</button>
+    <button class="btn icon" onclick="document.getElementById('uploadDlg').close()"><span class="ms">close</span></button>
   </div>
   <label class="fld">Video file (MP4, WebM, MOV)</label>
   <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" style="padding:10px;background:var(--surface);border-radius:var(--r-lg);width:100%">
@@ -133,6 +134,7 @@ input:focus{outline:0;border-color:var(--primary)}
 
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/sidebar.js"></script>
 <script>
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.WT_CONFIG || {};
 const $ = id => document.getElementById(id);
@@ -232,11 +234,11 @@ async function initAuth() {
   try {
     const { data } = await sb.auth.getSession();
     user = data.session?.user || null;
-    await loadProfile();
+    await loadProfile(); await loadSocial();
     paintAuth();
     sb.auth.onAuthStateChange(async (_e, s) => {
       user = s?.user || null;
-      await loadProfile();
+      await loadProfile(); await loadSocial();
       paintAuth();
     });
   } catch (e) { console.warn(e); }
@@ -250,7 +252,7 @@ function requireLogin(fn) { if (user) fn(); else openAuth(); }
 let obs, muted = true;
 async function listVideos() {
   if (!sb) return [];
-  const { data: vids, error } = await sb
+  let { data: vids, error } = await sb
     .from("videos")
     .select("id, user_id, title, video_url, created_at")
     .order("created_at", { ascending: false });
@@ -276,15 +278,16 @@ async function listVideos() {
     cmtCounts[c.video_id] = (cmtCounts[c.video_id] || 0) + 1;
   });
 
-  return vids.map(v => ({
+  return filterMode(vids.map(v => ({
     id: v.id,
+    user_id: v.user_id,
     name: v.title,
     src: v.video_url,
     username: profMap[v.user_id]?.username || null,
     likesCount: likeCounts[v.id] || 0,
     commentsCount: cmtCounts[v.id] || 0,
     likedByMe: likedSet.has(v.id)
-  }));
+  })));
 }
 
 function slide(v) {
@@ -293,9 +296,10 @@ function slide(v) {
   const by = v.username ? `<small>@${escapeHtml(v.username)}</small>` : "";
   s.innerHTML = `<div class="player"><video loop playsinline muted preload="metadata"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
     <div class="rail">
-      <button class="fab ${v.likedByMe ? "on" : ""}" data-a="like" aria-label="Like"><span>${v.likedByMe ? "♥" : "♡"}</span><small>${v.likesCount || 0}</small></button>
-      <button class="fab" data-a="comment" aria-label="Comment"><span>💬</span><small>${v.commentsCount || 0}</small></button>
-      <button class="fab" data-a="sound" aria-label="Sound"><span>${muted ? "🔇" : "🔊"}</span><small>${muted ? "Muted" : "Sound"}</small></button>
+      ${followBtn(v)}
+      <button class="fab ${v.likedByMe ? "on" : ""}" data-a="like" aria-label="Like"><span class="ms">favorite</span><small>${v.likesCount || 0}</small></button>
+      <button class="fab" data-a="comment" aria-label="Comment"><span class="ms">chat_bubble</span><small>${v.commentsCount || 0}</small></button>
+      <button class="fab" data-a="sound" aria-label="Sound"><span class="ms">${muted ? "volume_off" : "volume_up"}</span><small>${muted ? "Muted" : "Sound"}</small></button>
     </div>`;
   const vid = s.querySelector("video");
   vid.src = v.src;
@@ -304,6 +308,14 @@ function slide(v) {
   s.querySelector(".rail").onclick = e => {
     const b = e.target.closest("button");
     if (!b) return;
+    if (b.dataset.a === "follow") requireLogin(async () => {
+      const id = v.user_id, was = following.has(id);
+      const { error } = was ? await sb.from("follows").delete().eq("follower_id", user.id).eq("following_id", id)
+                            : await sb.from("follows").insert({ follower_id: user.id, following_id: id });
+      if (error) return;
+      was ? following.delete(id) : following.add(id);
+      document.querySelectorAll(`[data-follow="${id}"]`).forEach(paintFollow);
+    });
     if (b.dataset.a === "like") requireLogin(async () => {
       if (v.likedByMe) {
         const { error } = await sb.from("likes").delete().eq("video_id", v.id).eq("user_id", user.id);
@@ -315,7 +327,6 @@ function slide(v) {
         v.likedByMe = true; v.likesCount += 1;
       }
       b.classList.toggle("on", v.likedByMe);
-      b.querySelector("span").textContent = v.likedByMe ? "♥" : "♡";
       b.querySelector("small").textContent = v.likesCount;
     });
     if (b.dataset.a === "comment") openComments(v, b);
@@ -323,7 +334,7 @@ function slide(v) {
       muted = !muted;
       document.querySelectorAll("video").forEach(x => x.muted = muted);
       document.querySelectorAll('[data-a=sound]').forEach(btn => {
-        btn.querySelector("span").textContent = muted ? "🔇" : "🔊";
+        btn.querySelector("span").textContent = muted ? "volume_off" : "volume_up";
         btn.querySelector("small").textContent = muted ? "Muted" : "Sound";
       });
     }
@@ -493,7 +504,46 @@ $("home").onclick = () => {
   document.querySelectorAll("video").forEach(v => v.pause());
   $("landing").classList.remove("hidden");
 };
-initAuth().then(() => { if (location.hash === "#feed") showFeed(); });
+/* ---------- Social: follow / friends / search ---------- */
+let following = new Set(), followedBy = new Set();
+const friendIds = () => [...following].filter(id => followedBy.has(id));
+async function loadSocial() {
+  following = new Set(); followedBy = new Set();
+  if (!sb || !user) return;
+  const [a, b] = await Promise.all([
+    sb.from("follows").select("following_id").eq("follower_id", user.id),
+    sb.from("follows").select("follower_id").eq("following_id", user.id)]);
+  (a.data || []).forEach(r => following.add(r.following_id));
+  (b.data || []).forEach(r => followedBy.add(r.follower_id));
+}
+function followBtn(v) {
+  if (!v.user_id || (user && v.user_id === user.id)) return "";
+  return `<button class="fab" data-a="follow" data-follow="${v.user_id}"><span class="ms">person_add</span><small>Follow</small></button>`;
+}
+function paintFollow(b) {
+  const id = b.dataset.follow, f = following.has(id);
+  b.classList.toggle("on", f);
+  b.querySelector("span").textContent = f ? "how_to_reg" : "person_add";
+  b.querySelector("small").textContent = f ? (followedBy.has(id) ? "Friends" : "Following") : "Follow";
+}
+function filterMode(list) {
+  const h = location.hash;
+  if (h === "#following") return list.filter(v => following.has(v.user_id));
+  if (h === "#friends") { const f = new Set(friendIds()); return list.filter(v => f.has(v.user_id)); }
+  if (h.startsWith("#search=")) {
+    const q = decodeURIComponent(h.slice(8)).toLowerCase();
+    return list.filter(v => (v.name || "").toLowerCase().includes(q) || (v.username || "").toLowerCase().includes(q));
+  }
+  return list;
+}
+const FEED_HASH = /^#(feed|following|friends|search=)/;
+addEventListener("hashchange", () => {
+  if (!FEED_HASH.test(location.hash)) return;
+  if ($("feed").classList.contains("hidden")) showFeed(); else loadFeed();
+});
+const _lf = loadFeed;
+loadFeed = async function () { await _lf(); document.querySelectorAll("[data-follow]").forEach(paintFollow); };
+initAuth().then(() => { if (FEED_HASH.test(location.hash)) showFeed(); });
 </script>
 </body>
 </html>
