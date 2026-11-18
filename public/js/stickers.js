@@ -1,5 +1,26 @@
 /* Sticker picker (stickers come from public/stickers via /api/stickers) */
-let stickersLoaded = false;
+let stickersLoaded = false, lottieReady = null;
+
+function ensureLottie() {
+  if (window.lottie) return Promise.resolve(window.lottie);
+  if (lottieReady) return lottieReady;
+  lottieReady = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";
+    s.onload = () => resolve(window.lottie);
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+  return lottieReady;
+}
+
+async function loadLottieSticker(el, path) {
+  try {
+    const lottie = await ensureLottie();
+    lottie.loadAnimation({ container: el, renderer: "svg", loop: true, autoplay: true, path });
+  } catch (e) { console.warn(e); }
+}
+
 $("stkBtn").onclick = async () => {
   const pn = $("stkPanel");
   pn.classList.toggle("hidden");
@@ -11,7 +32,15 @@ $("stkBtn").onclick = async () => {
     list.forEach(f => {
       const b = document.createElement("button");
       b.type = "button";
-      b.innerHTML = `<img src="/stickers/${encodeURIComponent(f)}" alt="" loading="lazy">`;
+      const url = `/stickers/${encodeURIComponent(f)}`;
+      if (/\.json$/i.test(f)) {
+        const box = document.createElement("div");
+        box.className = "stk-lottie";
+        b.appendChild(box);
+        loadLottieSticker(box, url);
+      } else {
+        b.innerHTML = `<img src="${url}" alt="" loading="lazy">`;
+      }
       b.onclick = () => { pn.classList.add("hidden"); postComment(`[sticker:${f}]`); };
       pn.appendChild(b);
     });
