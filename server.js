@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,10 +14,19 @@ app.get("/config.js", (_req, res) => {
     }) + ";"
   );
 });
-app.get("/messages", (_q, res) => res.sendFile(path.join(__dirname, "public", "messages.html")));
+
 app.get(["/login", "/sign-in", "/signin"], (_q, res) => res.sendFile(path.join(__dirname, "public", "login.html")));
 app.get(["/profile", "/account"], (_q, res) => res.sendFile(path.join(__dirname, "public", "profile.html")));
 
-app.use(express.static(path.join(__dirname, "public")));
+app.get("/messages", (_q, res) => res.sendFile(path.join(__dirname, "public", "messages.html")));
+
+// Lists every sticker image in public/stickers (add files there to add stickers)
+app.get("/api/stickers", (_q, res) => {
+  fs.readdir(path.join(__dirname, "public", "stickers"), (err, files) => {
+    res.set("Cache-Control", "no-store").json(err ? [] : files.filter(f => /\.(png|gif|webp|jpe?g|svg)$/i.test(f)).sort());
+  });
+});
+
+app.use(express.static(path.join(__dirname, "public"), { extensions: ["html"] }));
 
 app.listen(PORT, () => console.log("Web Tok running on port " + PORT));
