@@ -44,7 +44,7 @@ async function listVideos() {
     orientation: v.orientation || null,
     username: profMap[v.user_id]?.username || null,
     likesCount: likeCounts[v.id] || 0,
-    commentsCount: cCounts[v.id] || 0,
+    commentsCount: cmtCounts[v.id] || 0,
     likedByMe: likedSet.has(v.id)
   })));
 }
