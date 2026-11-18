@@ -29,7 +29,15 @@ body.has-sb #bar{display:none!important}
  #sb{top:auto;width:100%;height:var(--sbh);flex-direction:row;justify-content:space-around;align-items:center;padding:0 6px;border-right:0;border-top:1px solid var(--surface);overflow:visible}
  #sb .brand,#sb .srch-wrap,#sb .lbl{display:none}#sb .it{width:auto;padding:12px}#sb .menu{bottom:70px;left:auto;right:8px;width:220px}}`;
 document.head.insertAdjacentHTML("beforeend","<style>"+css+"</style>");
-const items=[["explore","explore","Explore","/scroll"],["following","person_check","Following","/scroll#following"],["friends","group","Friends","/scroll#friends"],["upload","add_box","Upload",null],["messages","chat_bubble","Messages","/messages"],["profile","account_circle","Profile","/profile"]];
+const items=[
+  ["explore","explore","Explore","/scroll"],
+  ["following","person_check","Following","/scroll#following"],
+  ["friends","group","Friends","/scroll#friends"],
+  ["upload","add_box","Upload",null],
+  ["activity","notifications","Activity","/activity"],
+  ["messages","chat_bubble","Messages","/messages"],
+  ["profile","account_circle","Profile","/profile"]
+];
 const page=document.body.dataset.page||"home";
 const nav=document.createElement("nav");nav.id="sb";
 nav.innerHTML=`<a class="brand" href="/"><img src="/logo.png" alt=""><span>Web Tok</span></a>
@@ -75,7 +83,7 @@ sInput.addEventListener("input",()=>{
     users.forEach(u=>{
       const a=document.createElement("a");
       a.className="srch-it";
-      a.href="/scroll#search="+encodeURIComponent(u.username);
+      a.href="/profile?u="+encodeURIComponent(u.username);
       const init=esc((u.display_name||u.username||"U")[0].toUpperCase());
       const av=u.avatar_url?`style="background-image:url(${esc(u.avatar_url)})"`:"";
       a.innerHTML=`<span class="srch-av" ${av}>${u.avatar_url?"":init}</span><span class="srch-meta"><b>${esc(u.display_name||u.username)}</b><small>@${esc(u.username)}</small></span>`;
