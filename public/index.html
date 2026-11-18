@@ -110,6 +110,25 @@ input:focus{outline:0;border-color:var(--primary)}
 @keyframes float{to{transform:translateY(-14px) rotate(-1deg)}}
 @media(max-width:800px){.hero{grid-template-columns:1fr;text-align:center}.copy{text-align:center}.brand-row,.chips,#landing .row{justify-content:center}.art{height:300px}#landing .tag{margin-inline:auto}}
 @media(prefers-reduced-motion:reduce){#landing *{animation:none!important}}
+
+/* ---------- Comments side panel ---------- */
+#commentsDlg{position:fixed;inset:12px 12px 12px auto;margin:0;width:min(400px,calc(100vw - 24px));height:calc(100dvh - 24px);max-height:none;border:0;border-radius:28px;padding:0;background:var(--bg);color:var(--text);box-shadow:0 10px 40px #0005;z-index:40;overflow:hidden}
+#commentsDlg[open]{display:flex;flex-direction:column}
+#commentsDlg .dlg-head{padding:18px 20px 10px;display:flex;justify-content:space-between;align-items:center}
+#commentsDlg .cmt-list{flex:1;overflow-y:auto;padding:0 16px}
+#commentsDlg .cmt-form{display:flex;gap:8px;align-items:center;padding:12px 14px}
+#commentsDlg .cmt-form input{flex:1;min-width:0}
+.cmt-stk{width:120px;height:120px;object-fit:contain;margin-top:6px;display:block}
+.cmt-meta{font-size:12px;color:var(--muted);margin-top:4px}
+#stkPanel{max-height:190px;overflow-y:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 14px;background:var(--surface)}
+#stkPanel button{background:none;border:0;cursor:pointer;border-radius:16px;padding:4px}
+#stkPanel button:hover{background:var(--card)}#stkPanel img{width:100%;aspect-ratio:1;object-fit:contain;display:block}
+#vnav{position:fixed;right:24px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;z-index:12}
+#vnav button{width:48px;height:48px;border-radius:50%;border:0;background:var(--surface);color:var(--text);cursor:pointer;display:grid;place-items:center}
+#feed.hidden ~ #vnav{display:none}
+body.cmt-open #feed{right:min(412px,100vw)}
+body.cmt-open #vnav{right:424px}
+@media(max-width:800px){#commentsDlg{inset:auto 0 0 0;width:100%;height:70dvh;border-radius:28px 28px 0 0}body.cmt-open #feed{right:0}#vnav{display:none}}
 </style>
 <link rel="icon" href="/logo.png">
 </head>
@@ -148,16 +167,17 @@ input:focus{outline:0;border-color:var(--primary)}
 </div>
 
 <main id="feed" class="hidden"></main>
+<div id="vnav"><button id="vprev" aria-label="Previous video"><span class="ms">keyboard_arrow_up</span></button><button id="vnext" aria-label="Next video"><span class="ms">keyboard_arrow_down</span></button></div>
 
 <dialog id="commentsDlg">
-  <div class="dlg-head">
-    <h2>Comments</h2>
-    <button class="btn icon" onclick="document.getElementById('commentsDlg').close()"><span class="ms">close</span></button>
-  </div>
+  <div class="dlg-head"><h2>Comments <span id="cmtCount" style="color:var(--muted);font-weight:400"></span></h2>
+    <button class="btn icon" aria-label="Close" onclick="document.getElementById('commentsDlg').close()"><span class="ms">close</span></button></div>
   <div class="cmt-list" id="cmtList"></div>
+  <div id="stkPanel" class="hidden"></div>
   <form class="cmt-form" id="cmtForm">
-    <input type="text" id="cmtInput" placeholder="Add a comment…" maxlength="500" autocomplete="off">
-    <button class="btn primary sm" type="submit">Send</button>
+    <input type="text" id="cmtInput" placeholder="Add comment…" maxlength="500" autocomplete="off">
+    <button type="button" class="btn icon" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button>
+    <button class="btn primary sm" type="submit" aria-label="Send"><span class="ms">send</span></button>
   </form>
   <div class="hint" id="cmtHint"></div>
 </dialog>
@@ -422,7 +442,7 @@ async function openComments(v, btn) {
   $("cmtHint").textContent = "";
   $("cmtInput").value = "";
   $("cmtList").innerHTML = '<div style="color:var(--muted);padding:12px">Loading comments…</div>';
-  $("commentsDlg").showModal();
+  $("cmtCount").textContent = v.commentsCount || ""; $("stkPanel").classList.add("hidden"); document.body.classList.add("cmt-open"); $("commentsDlg").show();
   await fetchAndRenderComments();
 }
 async function fetchAndRenderComments() {
@@ -451,7 +471,7 @@ async function fetchAndRenderComments() {
     item.innerHTML = `<div class="mini-av" ${av}>${p.avatar_url ? "" : init}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:13px;font-weight:700">${escapeHtml(dname)} <span style="color:var(--muted);font-weight:400">@${escapeHtml(uname)}</span></div>
-        <div style="font-size:14px;margin-top:2px;word-break:break-word">${escapeHtml(c.text)}</div>
+        ${commentBody(c.text)}<div class="cmt-meta">${timeAgo(c.created_at)}</div>
       </div>`;
     box.appendChild(item);
   });
@@ -555,6 +575,59 @@ $("home").onclick = () => {
   document.querySelectorAll("video").forEach(v => v.pause());
   $("landing").classList.remove("hidden");
 };
+/* ---------- Comments panel: stickers, time, up/down ---------- */
+$("commentsDlg").addEventListener("close", () => document.body.classList.remove("cmt-open"));
+function commentBody(tx) {
+  const m = /^\[sticker:([\w.\- ]+\.(?:png|gif|webp|jpe?g|svg))\]$/i.exec(tx || "");
+  if (m) return `<img class="cmt-stk" src="/stickers/${encodeURIComponent(m[1])}" alt="sticker">`;
+  return `<div class="cmt-t">${escapeHtml(tx || "")}</div>`;
+}
+function timeAgo(iso) {
+  const s = Math.max(1, (Date.now() - new Date(iso)) / 1000);
+  for (const [n, l] of [[31536000, "y"], [2592000, "mo"], [604800, "w"], [86400, "d"], [3600, "h"], [60, "m"]]) if (s >= n) return Math.floor(s / n) + l + " ago";
+  return "just now";
+}
+async function postComment(text) {
+  requireLogin(async () => {
+    $("cmtHint").textContent = "Posting…";
+    const { error } = await sb.from("comments").insert({ video_id: activeVideo.id, user_id: user.id, text });
+    if (error) { $("cmtHint").textContent = error.message; return; }
+    $("cmtHint").textContent = "";
+    activeVideo.commentsCount += 1;
+    $("cmtCount").textContent = activeVideo.commentsCount;
+    if (activeCommentBtn) activeCommentBtn.querySelector("small").textContent = activeVideo.commentsCount;
+    await fetchAndRenderComments();
+    $("cmtList").scrollTop = 1e9;
+  });
+}
+$("cmtForm").onsubmit = e => {
+  e.preventDefault();
+  const tx = $("cmtInput").value.trim();
+  if (!tx) return;
+  $("cmtInput").value = "";
+  postComment(tx);
+};
+let stickersLoaded = false;
+$("stkBtn").onclick = async () => {
+  const pn = $("stkPanel");
+  pn.classList.toggle("hidden");
+  if (stickersLoaded || pn.classList.contains("hidden")) return;
+  stickersLoaded = true;
+  try {
+    const list = await (await fetch("/api/stickers")).json();
+    pn.innerHTML = list.length ? "" : '<div style="grid-column:1/-1;color:var(--muted);padding:8px">No stickers yet.</div>';
+    list.forEach(f => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = `<img src="/stickers/${encodeURIComponent(f)}" alt="" loading="lazy">`;
+      b.onclick = () => { pn.classList.add("hidden"); postComment(`[sticker:${f}]`); };
+      pn.appendChild(b);
+    });
+  } catch { stickersLoaded = false; pn.innerHTML = '<div style="grid-column:1/-1;color:var(--muted);padding:8px">Couldn\'t load stickers.</div>'; }
+};
+$("vprev").onclick = () => $("feed").scrollBy({ top: -$("feed").clientHeight, behavior: "smooth" });
+$("vnext").onclick = () => $("feed").scrollBy({ top: $("feed").clientHeight, behavior: "smooth" });
+
 /* ---------- Social: follow / friends / search ---------- */
 let following = new Set(), followedBy = new Set();
 const friendIds = () => [...following].filter(id => followedBy.has(id));
