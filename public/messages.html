@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Tok · Messages</title><link rel="icon" href="/logo.png">
+<style>
+:root{--bg:#fff0ee;--surface:#ffe3e8;--card:#fbd5de;--primary:#7b3f8c;--on-primary:#fff;--text:#3b1f2b;--muted:#85626f}
+@media(prefers-color-scheme:dark){:root{--bg:#22141b;--surface:#33202a;--card:#47303c;--primary:#e7b6f2;--on-primary:#3a1745;--text:#f7dde5;--muted:#c3a1ae}}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden}
+#app{position:fixed;left:var(--sbw);right:0;top:0;bottom:var(--sbh);display:flex}
+#list{width:300px;border-right:1px solid var(--surface);overflow-y:auto;padding:14px 10px}
+#list h2{padding:6px 12px 12px}
+.fr{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:20px;cursor:pointer}
+.fr:hover,.fr.on{background:var(--surface)}
+.av{width:42px;height:42px;border-radius:38% 62% 55% 45%;background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;flex:none}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--primary);margin-left:auto;display:none}.fr.unread .dot{display:block}
+#chat{flex:1;display:flex;flex-direction:column;min-width:0}
+#head{padding:14px 20px;font-weight:700;border-bottom:1px solid var(--surface);display:flex;align-items:center;gap:10px}
+#msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:6px}
+.m{max-width:72%;padding:10px 16px;border-radius:20px;background:var(--surface);word-break:break-word;align-self:flex-start}
+.m.me{align-self:flex-end;background:var(--primary);color:var(--on-primary)}
+#form{display:flex;gap:10px;padding:12px 16px}
+#form input{flex:1;padding:14px 20px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font:inherit;outline:0}
+#form button{border:0;border-radius:999px;background:var(--primary);color:var(--on-primary);width:50px;cursor:pointer;display:grid;place-items:center}
+.empty{margin:auto;color:var(--muted);text-align:center;padding:30px;max-width:34ch}
+#back{display:none;background:none;border:0;color:var(--text);cursor:pointer}
+@media(max-width:800px){#list{width:100%}#chat{display:none}body.chatting #list{display:none}body.chatting #chat{display:flex}#back{display:block}}
+</style></head>
+<body data-page="messages">
+<div id="app">
+ <aside id="list"><h2>Messages</h2><div id="fl"></div></aside>
+ <section id="chat"><div class="empty" id="ph">Pick a friend to start chatting. You become friends when you follow each other.</div></section>
+</div>
+<script src="/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/sidebar.js"></script>
+<script>
+const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let me=null, cur=null, friends=[];
+const avStyle=p=>p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
+function bubble(m){const d=document.createElement("div");d.className="m"+(m.sender_id===me?" me":"");d.textContent=m.body;$("msgs").appendChild(d);$("msgs").scrollTop=1e9}
+async function openChat(f){
+  cur=f; document.body.classList.add("chatting");
+  document.querySelectorAll(".fr").forEach(e=>e.classList.toggle("on",e.dataset.id===f.id));
+  document.querySelector(`.fr[data-id="${f.id}"]`)?.classList.remove("unread");
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div>${esc(f.display_name||f.username)} <span style="color:var(--muted);font-weight:400">@${esc(f.username)}</span></div></div>
+  <div id="msgs"></div><form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null};
+  const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
+  (data||[]).forEach(bubble);
+  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";
+    const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
+    if(error){$("txt").value=body;alert("Couldn't send: "+error.message);return}bubble(m)};
+  $("txt").focus();
+}
+(async()=>{
+  const {data}=await sb.auth.getSession(); if(!data.session){location.href="/login";return}
+  me=data.session.user.id;
+  const [a,b]=await Promise.all([sb.from("follows").select("following_id").eq("follower_id",me),sb.from("follows").select("follower_id").eq("following_id",me)]);
+  const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
+  if(!ids.length){$("fl").innerHTML='<div class="empty">No friends yet. Follow someone and have them follow you back.</div>';return}
+  const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);
+  friends=ps||[];
+  friends.forEach(f=>{const e=document.createElement("div");e.className="fr";e.dataset.id=f.id;
+    e.innerHTML=`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div>${esc(f.display_name||f.username)}</div><i class="dot"></i>`;
+    e.onclick=()=>openChat(f);$("fl").appendChild(e)});
+  sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
+    const m=p.new; if(cur&&cur.id===m.sender_id)bubble(m); else document.querySelector(`.fr[data-id="${m.sender_id}"]`)?.classList.add("unread")}).subscribe();
+})();
+</script></body></html>
