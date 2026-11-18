@@ -89,6 +89,13 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .u-meta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-meta small{display:block;font-size:12px;color:var(--muted)}
 
+/* batch upload queue */
+.up-queue{display:flex;flex-direction:column;gap:8px;max-height:42vh;overflow-y:auto;margin-top:10px}
+.up-item{background:var(--surface);padding:10px 12px;border-radius:18px;display:flex;flex-direction:column;gap:6px}
+.up-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.up-item-row{display:flex;gap:6px;align-items:center}
+.up-item-row input{padding:10px 12px;background:var(--bg)}
+
 /* settings swatches & wallpapers */
 .swatches{display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
 .swatch{width:38px;height:38px;border-radius:50%;border:3px solid transparent;cursor:pointer;transition:transform .15s}
@@ -125,7 +132,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
       </div>
       <div class="p-actions" id="p-actions-me">
         <button class="btn primary sm" id="btn-edit-prof">Edit profile</button>
-        <button class="btn tonal sm" id="btn-upload-acct">+ Upload video</button>
+        <button class="btn tonal sm" id="btn-upload-acct">+ Upload videos</button>
         <button class="btn icon" id="btn-settings" title="Theme & Settings">⚙</button>
         <button class="btn sm" id="btn-signout">Sign out</button>
       </div>
@@ -155,20 +162,19 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
   <div class="u-list" id="fl-list"></div>
 </dialog>
 
-<!-- Upload Video Modal -->
+<!-- Batch Upload Videos Modal -->
 <dialog id="uploadDlg">
   <div class="dlg-head">
-    <h2>Upload video</h2>
+    <h2>Upload videos</h2>
     <button class="btn icon" onclick="document.getElementById('uploadDlg').close()">✕</button>
   </div>
-  <label class="fld">Video file (MP4, WebM, MOV)</label>
-  <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" style="padding:10px;background:var(--surface);border-radius:var(--r-lg);width:100%">
-  <label class="fld">Caption / Title</label>
-  <input type="text" id="upTitle" placeholder="What's this video about?" maxlength="100">
+  <label class="fld">Select one or more videos (MP4, WebM, MOV)</label>
+  <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple style="padding:10px;background:var(--surface);border-radius:var(--r-lg);width:100%">
+  <div class="up-queue" id="upQueue"></div>
   <div class="hint" id="upHint"></div>
   <div class="row">
     <button class="btn sm" onclick="document.getElementById('uploadDlg').close()">Cancel</button>
-    <button class="btn primary sm" id="upSubmit">Upload</button>
+    <button class="btn primary sm" id="upSubmit">Upload all</button>
   </div>
 </dialog>
 
@@ -542,7 +548,8 @@ async function openFollowModal(mode) {
 $("btn-followers-list").onclick = () => openFollowModal("followers");
 $("btn-following-list").onclick = () => openFollowModal("following");
 
-/* ---------- Upload ---------- */
+/* ---------- Batch Upload ---------- */
+let upQueue = [];
 function uploadToBucket(storagePath, file, token, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -562,32 +569,89 @@ function uploadToBucket(storagePath, file, token, onProgress) {
     xhr.send(file);
   });
 }
+function renderUpQueue() {
+  const q = $("upQueue");
+  q.innerHTML = "";
+  upQueue.forEach((item, idx) => {
+    const row = document.createElement("div");
+    row.className = "up-item";
+    const mb = (item.file.size / (1024 * 1024)).toFixed(1);
+    const over = item.file.size > 50 * 1024 * 1024;
+    row.innerHTML = `<div class="up-item-top">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
+        <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 50 MB" : escapeHtml(item.status || "Ready")}</span>
+      </div>
+      <div class="up-item-row">
+        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100">
+        <button type="button" class="btn icon" style="width:36px;height:36px;flex-shrink:0" title="Remove">✕</button>
+      </div>`;
+    row.querySelector("input").oninput = e => { item.title = e.target.value; };
+    row.querySelector("button").onclick = () => { upQueue.splice(idx, 1); renderUpQueue(); };
+    q.appendChild(row);
+  });
+}
 function openUpload() {
-  $("upFile").value = ""; $("upTitle").value = ""; $("upHint").textContent = "";
+  upQueue = [];
+  $("upFile").value = ""; $("upHint").textContent = "";
   $("upHint").className = "hint"; $("upSubmit").disabled = false;
+  renderUpQueue();
   $("uploadDlg").showModal();
 }
 $("openUpload").onclick = openUpload;
 $("btn-upload-acct").onclick = openUpload;
+$("upFile").onchange = e => {
+  [...(e.target.files || [])].forEach(file => {
+    const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
+    upQueue.push({ file, title: defTitle, status: "Ready" });
+  });
+  renderUpQueue();
+};
 $("upSubmit").onclick = async () => {
-  const file = $("upFile").files[0];
-  if (!file) { $("upHint").textContent = "Pick a video file first."; $("upHint").className = "hint bad"; return; }
-  if (file.size > 50 * 1024 * 1024) { $("upHint").textContent = "Video is over 50 MB (Supabase free-tier limit)."; $("upHint").className = "hint bad"; return; }
-  $("upSubmit").disabled = true; $("upHint").textContent = "Starting upload…"; $("upHint").className = "hint";
+  const valid = upQueue.filter(it => it.file.size <= 50 * 1024 * 1024);
+  if (!valid.length) {
+    $("upHint").textContent = upQueue.length ? "All selected videos exceed the 50 MB limit." : "Pick one or more video files first.";
+    $("upHint").className = "hint bad";
+    return;
+  }
+  $("upSubmit").disabled = true; $("upHint").className = "hint";
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session?.access_token) throw new Error("Session expired. Sign in again.");
-    const ext = (file.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
-    const safe = file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
-    const storagePath = `${user.id}/${Date.now()}-${safe}${ext}`;
-    await uploadToBucket(storagePath, file, session.access_token, pct => { $("upHint").textContent = `Uploading… ${pct}%`; });
-    $("upHint").textContent = "Saving post…";
-    const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
-    const title = $("upTitle").value.trim() || safe.replace(/[-_]+/g, " ");
-    const { error: dbErr } = await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath });
-    if (dbErr) throw dbErr;
-    $("uploadDlg").close();
-    await loadAccountData();
+    let okCount = 0;
+    for (let i = 0; i < upQueue.length; i++) {
+      const item = upQueue[i];
+      if (item.file.size > 50 * 1024 * 1024) { item.status = "Skipped (>50 MB)"; continue; }
+      const stEl = document.querySelector(`[data-st="${i}"]`);
+      const setSt = txt => { item.status = txt; if (stEl) stEl.textContent = txt; };
+      try {
+        const ext = (item.file.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
+        const safe = item.file.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
+        const storagePath = `${user.id}/${Date.now()}-${i}-${safe}${ext}`;
+        await uploadToBucket(storagePath, item.file, session.access_token, pct => {
+          setSt(`${pct}%`);
+          $("upHint").textContent = `Uploading ${i + 1} of ${upQueue.length} (${pct}%)…`;
+        });
+        setSt("Saving…");
+        const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
+        const title = item.title.trim() || safe.replace(/[-_]+/g, " ");
+        const { error: dbErr } = await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath });
+        if (dbErr) throw dbErr;
+        setSt("Done");
+        okCount++;
+      } catch (err) {
+        setSt("Failed");
+        if (stEl) stEl.style.color = "var(--bad)";
+        console.warn(err);
+      }
+    }
+    if (okCount === upQueue.length) {
+      $("uploadDlg").close();
+      await loadAccountData();
+    } else {
+      $("upSubmit").disabled = false;
+      $("upHint").textContent = `Uploaded ${okCount} of ${upQueue.length} videos.`;
+      if (okCount > 0) await loadAccountData();
+    }
   } catch (e) {
     $("upSubmit").disabled = false; $("upHint").textContent = e.message; $("upHint").className = "hint bad";
   }
