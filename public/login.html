@@ -87,7 +87,7 @@ $("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in");
 $("do-in").onclick=async()=>{
   say("h-in","Signing in…");
   const {error}=await sb.auth.signInWithPassword({email:$("li-email").value.trim(),password:$("li-pass").value});
-  if(!error) return location.href="/#feed";
+  if(!error) return location.href="/scroll";
   say("h-in",error.message,"bad");
 };
 
@@ -165,7 +165,7 @@ async function finish(user){
     }
     localStorage.removeItem("wt_avatar");
   }catch(e){console.warn(e)}
-  location.href="/#feed";
+  location.href="/scroll";
 }
 sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur!=="in") setTimeout(()=>finish(sess.user),0); });
 
