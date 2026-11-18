@@ -13,7 +13,7 @@ app.get("/config.js", (_req, res) => {
     }) + ";"
   );
 });
-
+app.get("/messages", (_q, res) => res.sendFile(path.join(__dirname, "public", "messages.html")));
 app.get(["/login", "/sign-in", "/signin"], (_q, res) => res.sendFile(path.join(__dirname, "public", "login.html")));
 app.get(["/profile", "/account"], (_q, res) => res.sendFile(path.join(__dirname, "public", "profile.html")));
 
