@@ -93,6 +93,11 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer}
 .up-drop b{display:block;font-size:17px;margin-bottom:4px}
 .up-drop span{font-size:13px;color:var(--muted)}
+.up-bar-wrap{background:var(--card);border-radius:var(--r-xl);padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+.up-bar-wrap.hidden{display:none}
+.up-bar-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;gap:10px}
+.up-bar-track{width:100%;height:10px;border-radius:999px;background:var(--surface);overflow:hidden}
+.up-bar-fill{height:100%;width:0%;border-radius:999px;background:var(--primary);transition:width .2s ease}
 .up-list{display:flex;flex-direction:column;gap:12px}
 .up-card{display:flex;gap:16px;background:var(--surface);padding:14px;border-radius:var(--r-xl);align-items:center;flex-wrap:wrap}
 .up-prev{width:76px;height:104px;border-radius:16px;background:#000;object-fit:contain;flex-shrink:0}
@@ -102,7 +107,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .up-or{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);color:var(--text)}
 .up-or.on{background:var(--primary);color:var(--on-primary)}
 
-/* followers list modal */
+/* followers & switcher list modal */
 .u-list{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .u-row{display:flex;align-items:center;gap:12px;background:var(--surface);padding:10px 14px;border-radius:var(--r-lg)}
 .u-av{width:40px;height:40px;border-radius:38% 62% 55% 45%;background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex-shrink:0}
@@ -148,6 +153,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
         <button class="btn primary sm" id="btn-edit-prof">Edit profile</button>
         <button class="btn tonal sm" id="btn-upload-acct">+ Upload videos</button>
         <button class="btn icon" id="btn-settings" title="Theme & Settings">⚙</button>
+        <button class="btn sm" id="btn-switch-acct">Switch account</button>
         <button class="btn sm" id="btn-signout">Sign out</button>
       </div>
       <div class="p-actions hidden" id="p-actions-other">
@@ -166,6 +172,20 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 
   <div id="acct-content"><div class="empty-box">Loading…</div></div>
 </main>
+
+<!-- Switch Account Modal -->
+<dialog id="switchDlg">
+  <div class="dlg-head">
+    <h2>Switch account</h2>
+    <button class="btn icon" onclick="document.getElementById('switchDlg').close()">✕</button>
+  </div>
+  <div class="u-list" id="sw-list"></div>
+  <div class="hint" id="sw-hint"></div>
+  <div class="row" style="justify-content:space-between">
+    <a class="btn tonal sm" href="/login?add=1" style="text-decoration:none">+ Add account</a>
+    <button class="btn sm" onclick="document.getElementById('switchDlg').close()">Close</button>
+  </div>
+</dialog>
 
 <!-- Followers / Following Modal -->
 <dialog id="followListDlg">
@@ -191,9 +211,16 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
   <div class="up-body">
     <label class="up-drop" for="upFile">
       <b>Choose videos to upload</b>
-      <span>MP4, WebM, or MOV · Up to 100 MB (files over 48 MB auto-compress)</span>
+      <span>MP4, WebM, or MOV · Up to 50 MB each · Select multiple at once</span>
     </label>
     <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
+    <div class="up-bar-wrap hidden" id="upBarWrap">
+      <div class="up-bar-head">
+        <span id="upPhase">Preparing…</span>
+        <span id="upStats" style="color:var(--primary)">0%</span>
+      </div>
+      <div class="up-bar-track"><div class="up-bar-fill" id="upBarFill"></div></div>
+    </div>
     <div class="up-list" id="upQueue"></div>
   </div>
 </dialog>
@@ -256,8 +283,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.WT_CONFIG || {};
-const MAX_INPUT_BYTES = 100 * 1024 * 1024;
-const SUPABASE_LIMIT_BYTES = 48 * 1024 * 1024;
+const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const $ = id => document.getElementById(id);
 let sb = null, user = null, profile = null, targetId = null, isMe = false, acctData = null, acctTab = "posted";
 let myFollowing = new Set(), myFollowers = new Set();
@@ -516,7 +542,9 @@ function renderAccountTab() {
     if (db) db.onclick = async e => {
       e.stopPropagation();
       if (!confirm(`Delete "${v.name}"?`)) return;
-      if (v.storage_path) await sb.storage.from("videos").remove([v.storage_path]);
+      if (v.storage_path && !v.storage_path.startsWith("cloudinary:")) {
+        await sb.storage.from("videos").remove([v.storage_path]);
+      }
       await sb.from("videos").delete().eq("id", v.id).eq("user_id", user.id);
       await loadAccountData();
     };
@@ -583,88 +611,53 @@ async function openFollowModal(mode) {
 $("btn-followers-list").onclick = () => openFollowModal("followers");
 $("btn-following-list").onclick = () => openFollowModal("following");
 
-/* ---------- Full-Screen Batch Upload (100 MB + Auto-Compress >48 MB + Orientation) ---------- */
+/* ---------- Full-Screen Batch Upload (Supabase 50 MB + Status Bar + ETA, No Compression) ---------- */
 let upQueue = [];
-function compressVideo(file, onProgress) {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const vid = document.createElement("video");
-    vid.src = url;
-    vid.playsInline = true;
-    vid.preload = "auto";
-
-    vid.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read video for compression.")); };
-    vid.onloadedmetadata = async () => {
-      try {
-        const dur = vid.duration || 30;
-        const maxDim = 1280;
-        const scale = Math.min(maxDim / (vid.videoWidth || 720), maxDim / (vid.videoHeight || 1280), 1);
-        const w = Math.max(2, Math.round((vid.videoWidth * scale) / 2) * 2);
-        const h = Math.max(2, Math.round((vid.videoHeight * scale) / 2) * 2);
-
-        const canvas = document.createElement("canvas");
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext("2d");
-
-        const stream = canvas.captureStream(30);
-        let audioCtx = null;
-        try {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-          const src = audioCtx.createMediaElementSource(vid);
-          const dest = audioCtx.createMediaStreamDestination();
-          src.connect(dest);
-          dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
-        } catch {}
-
-        const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
-          .find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || "";
-        const targetBps = Math.min(Math.max(Math.floor((42 * 1024 * 1024 * 8) / dur) - 96000, 350000), 3000000);
-        const rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: targetBps } : { videoBitsPerSecond: targetBps });
-        const chunks = [];
-        rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
-        rec.onstop = () => {
-          URL.revokeObjectURL(url);
-          if (audioCtx) audioCtx.close().catch(() => {});
-          const outType = mime.split(";")[0] || "video/webm";
-          const ext = outType.includes("mp4") ? ".mp4" : ".webm";
-          const outFile = new File(chunks, file.name.replace(/\.[^.]+$/, "") + ext, { type: outType });
-          if (outFile.size > 50 * 1024 * 1024) reject(new Error("Compressed file is still over 50 MB. Try a shorter clip."));
-          else resolve(outFile);
-        };
-
-        let raf = 0;
-        const draw = () => {
-          if (vid.paused || vid.ended) return;
-          ctx.drawImage(vid, 0, 0, w, h);
-          if (onProgress && dur > 0) onProgress(Math.min(99, Math.round((vid.currentTime / dur) * 100)));
-          raf = requestAnimationFrame(draw);
-        };
-        vid.onended = () => { cancelAnimationFrame(raf); if (rec.state !== "inactive") rec.stop(); };
-
-        rec.start(1000);
-        await vid.play();
-        draw();
-      } catch (err) {
-        URL.revokeObjectURL(url);
-        reject(err);
-      }
-    };
-  });
+function fmtEta(sec) {
+  if (!isFinite(sec) || sec <= 0) return "almost done";
+  if (sec < 60) return `~${sec}s left`;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `~${m}m ${s}s left`;
 }
-
-function uploadToBucket(storagePath, file, token, onProgress) {
+function setStatusBar(phase, pct, etaText) {
+  const wrap = $("upBarWrap");
+  if (!wrap) return;
+  wrap.classList.remove("hidden");
+  $("upPhase").textContent = phase;
+  $("upStats").textContent = etaText ? `${pct}% · ${etaText}` : `${pct}%`;
+  $("upBarFill").style.width = `${Math.min(100, Math.max(0, pct))}%`;
+}
+function hideStatusBar() {
+  const wrap = $("upBarWrap");
+  if (wrap) wrap.classList.add("hidden");
+}
+function uploadToSupabaseStorage(file, path, token, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/videos/${storagePath}`);
+    const startedAt = Date.now();
+    xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/videos/${path}`);
     xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
     xhr.setRequestHeader("Authorization", `Bearer ${token}`);
     xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
     xhr.setRequestHeader("x-upsert", "true");
-    xhr.timeout = 240000;
-    xhr.upload.onprogress = e => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.timeout = 300000;
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable && onProgress) {
+        const pct = Math.round((e.loaded / e.total) * 100);
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const eta = pct >= 3 ? fmtEta(Math.round((elapsed / pct) * (100 - pct))) : "estimating…";
+        onProgress(pct, eta);
+      }
+    };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else { let msg = `Upload failed (${xhr.status})`; try { msg = JSON.parse(xhr.responseText).message || msg; } catch {} reject(new Error(msg)); }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const url = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
+        resolve({ url, storagePath: path });
+      } else {
+        let msg = `Upload failed (${xhr.status})`;
+        try { msg = JSON.parse(xhr.responseText).message || msg; } catch {}
+        reject(new Error(msg));
+      }
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
     xhr.ontimeout = () => reject(new Error("Upload timed out."));
@@ -684,7 +677,7 @@ function renderUpQueue() {
       <div class="up-fields">
         <div class="up-meta">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
-          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
+          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 50 MB" : escapeHtml(item.status)}</span>
         </div>
         <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
         <div class="up-orients">
@@ -703,6 +696,7 @@ function renderUpQueue() {
   });
 }
 function openUpload() {
+  hideStatusBar();
   upQueue = [];
   $("upFile").value = ""; $("upHint").textContent = "";
   $("upHint").className = "hint"; $("upSubmit").disabled = false;
@@ -714,7 +708,7 @@ $("btn-upload-acct").onclick = openUpload;
 $("upFile").onchange = e => {
   [...(e.target.files || [])].forEach(file => {
     const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-    const item = { file, title: defTitle, orientation: "portrait", status: file.size > SUPABASE_LIMIT_BYTES ? "Will compress" : "Ready", url: URL.createObjectURL(file) };
+    const item = { file, title: defTitle, orientation: "portrait", status: "Ready", url: URL.createObjectURL(file) };
     const probe = document.createElement("video");
     probe.preload = "metadata";
     probe.src = item.url;
@@ -730,43 +724,37 @@ $("upFile").onchange = e => {
 $("upSubmit").onclick = async () => {
   const valid = upQueue.filter(it => it.file.size <= MAX_INPUT_BYTES);
   if (!valid.length) {
-    $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
+    $("upHint").textContent = upQueue.length ? "All selected videos exceed 50 MB." : "Pick one or more video files first.";
     $("upHint").className = "hint bad";
     return;
   }
   $("upSubmit").disabled = true; $("upHint").className = "hint";
+  setStatusBar("Starting upload…", 0, "");
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (!session?.access_token) throw new Error("Session expired. Sign in again.");
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
-      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
+      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>50 MB)"; continue; }
       const stEl = document.querySelector(`[data-st="${i}"]`);
       const setSt = txt => { item.status = txt; if (stEl) stEl.textContent = txt; };
       try {
-        let fileToUpload = item.file;
-        if (fileToUpload.size > SUPABASE_LIMIT_BYTES) {
-          fileToUpload = await compressVideo(fileToUpload, pct => {
-            setSt(`Compressing ${pct}%`);
-            $("upHint").textContent = `Compressing ${i + 1} of ${upQueue.length} (${pct}%)…`;
-          });
-        }
-        const ext = (fileToUpload.name.match(/\.(mp4|webm|mov)$/i)?.[0] || ".mp4").toLowerCase();
-        const safe = fileToUpload.name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 40) || "video";
-        const storagePath = `${user.id}/${Date.now()}-${i}-${safe}${ext}`;
-        await uploadToBucket(storagePath, fileToUpload, session.access_token, pct => {
-          setSt(`${pct}%`);
-          $("upHint").textContent = `Uploading ${i + 1} of ${upQueue.length} (${pct}%)…`;
+        setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
+        const ext = (item.file.name.split(".").pop() || "mp4").toLowerCase();
+        const path = `${user.id}/${Date.now()}_${i}.${ext}`;
+        const { url, storagePath } = await uploadToSupabaseStorage(item.file, path, session.access_token, (pct, eta) => {
+          setSt(`Uploading ${pct}%`);
+          setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, pct, eta);
         });
         setSt("Saving…");
-        const videoUrl = sb.storage.from("videos").getPublicUrl(storagePath).data.publicUrl;
-        const title = item.title.trim() || safe.replace(/[-_]+/g, " ");
+        setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
+        const title = item.title.trim() || item.file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
         let { error: dbErr } = await sb.from("videos").insert({
-          user_id: user.id, title, video_url: videoUrl, storage_path: storagePath, orientation: item.orientation
+          user_id: user.id, title, video_url: url, storage_path: storagePath, orientation: item.orientation
         });
         if (dbErr && /orientation/i.test(dbErr.message)) {
-          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: videoUrl, storage_path: storagePath })).error;
+          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath })).error;
         }
         if (dbErr) throw dbErr;
         setSt("Done");
@@ -778,6 +766,7 @@ $("upSubmit").onclick = async () => {
         console.warn(err);
       }
     }
+    hideStatusBar();
     if (okCount === upQueue.length) {
       $("uploadDlg").close();
       await loadAccountData();
@@ -787,6 +776,7 @@ $("upSubmit").onclick = async () => {
       if (okCount > 0) await loadAccountData();
     }
   } catch (e) {
+    hideStatusBar();
     $("upSubmit").disabled = false; $("upHint").textContent = e.message; $("upHint").className = "hint bad";
   }
 };
@@ -897,7 +887,83 @@ $("btn-del-acct").onclick = async () => {
   try { await sb.auth.signOut(); localStorage.clear(); } catch {}
   location.href = "/";
 };
-$("btn-signout").onclick = async () => { try { await sb.auth.signOut(); } catch {} location.href = "/scroll"; };
+
+/* ---------- Account Switcher ---------- */
+function getSavedAccounts() {
+  try { return JSON.parse(localStorage.getItem("wt_accounts") || "[]"); } catch { return []; }
+}
+function setSavedAccounts(list) {
+  try { localStorage.setItem("wt_accounts", JSON.stringify(list.slice(0, 10))); } catch {}
+}
+function syncCurrentAccount(session, prof) {
+  if (!session?.user || !session?.refresh_token) return;
+  const list = getSavedAccounts().filter(a => a.id !== session.user.id);
+  const meta = session.user.user_metadata || {};
+  list.unshift({
+    id: session.user.id,
+    email: session.user.email || "",
+    username: prof?.username || meta.username || (session.user.email || "user").split("@")[0],
+    display_name: prof?.display_name || meta.display_name || prof?.username || "Web Tok User",
+    avatar_url: prof?.avatar_url || null,
+    refresh_token: session.refresh_token
+  });
+  setSavedAccounts(list);
+}
+function renderSwitchList() {
+  const listEl = $("sw-list");
+  const accounts = getSavedAccounts();
+  $("sw-hint").textContent = "";
+  $("sw-hint").className = "hint";
+  if (!accounts.length) {
+    listEl.innerHTML = '<div style="color:var(--muted);padding:12px">No saved accounts yet.</div>';
+    return;
+  }
+  listEl.innerHTML = "";
+  accounts.forEach(acct => {
+    const isCur = user && acct.id === user.id;
+    const row = document.createElement("div");
+    row.className = "u-row";
+    row.style.cursor = isCur ? "default" : "pointer";
+    const init = escapeHtml((acct.display_name || acct.username || "U")[0].toUpperCase());
+    const av = acct.avatar_url ? `style="background-image:url(${escapeHtml(acct.avatar_url)})"` : "";
+    row.innerHTML = `
+      <div class="u-av" ${av}>${acct.avatar_url ? "" : init}</div>
+      <div class="u-meta">
+        <b>${escapeHtml(acct.display_name || acct.username)}</b>
+        <small>@${escapeHtml(acct.username)}</small>
+      </div>
+      ${isCur ? '<span class="chip p" style="padding:5px 12px;font-size:12px">Active</span>' : '<button type="button" class="btn icon" title="Remove">✕</button>'}`;
+    if (!isCur) {
+      row.onclick = async e => {
+        if (e.target.closest("button")) return;
+        $("sw-hint").textContent = `Switching to @${acct.username}…`;
+        $("sw-hint").className = "hint";
+        const { data, error } = await sb.auth.refreshSession({ refresh_token: acct.refresh_token });
+        if (error || !data?.session) {
+          $("sw-hint").textContent = "Session expired for @" + acct.username + ". Please sign in again.";
+          $("sw-hint").className = "hint bad";
+          return;
+        }
+        syncCurrentAccount(data.session, acct);
+        location.href = "/profile";
+      };
+      const rmBtn = row.querySelector("button");
+      if (rmBtn) rmBtn.onclick = e => {
+        e.stopPropagation();
+        setSavedAccounts(getSavedAccounts().filter(a => a.id !== acct.id));
+        renderSwitchList();
+      };
+    }
+    listEl.appendChild(row);
+  });
+}
+$("btn-switch-acct").onclick = () => { renderSwitchList(); $("switchDlg").showModal(); };
+
+$("btn-signout").onclick = async () => {
+  if (user) setSavedAccounts(getSavedAccounts().filter(a => a.id !== user.id));
+  try { await sb.auth.signOut(); } catch {}
+  location.href = "/scroll";
+};
 
 function escapeHtml(s) {
   return String(s || "").replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
@@ -909,6 +975,7 @@ function escapeHtml(s) {
   user = data.session?.user || null;
   await loadMyFollows();
   await resolveTargetAndLoad();
+  if (data.session && isMe && profile) syncCurrentAccount(data.session, profile);
 })();
 </script>
 </body>
