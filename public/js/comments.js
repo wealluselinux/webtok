@@ -1,4 +1,4 @@
-/* Comments panel: list, post, time-ago */
+/* Comments panel: list, post, time-ago, image + WebP + Lottie JSON stickers */
 /* ---------- Comments (Supabase) ---------- */
 let activeVideo = null, activeCommentBtn = null;
 async function openComments(v, btn) {
@@ -40,30 +40,20 @@ async function fetchAndRenderComments() {
       </div>`;
     box.appendChild(item);
   });
-}
-$("cmtForm").onsubmit = e => {
-  e.preventDefault();
-  requireLogin(async () => {
-    const text = $("cmtInput").value.trim();
-    if (!text) return;
-    $("cmtHint").textContent = "Posting…";
-    const { error } = await sb.from("comments").insert({
-      video_id: activeVideo.id, user_id: user.id, text
-    });
-    if (error) { $("cmtHint").textContent = error.message; return; }
-    $("cmtInput").value = "";
-    $("cmtHint").textContent = "";
-    activeVideo.commentsCount += 1;
-    if (activeCommentBtn) activeCommentBtn.querySelector("small").textContent = activeVideo.commentsCount;
-    await fetchAndRenderComments();
+  box.querySelectorAll(".lottie-stk").forEach(el => {
+    if (typeof loadLottieSticker === "function") loadLottieSticker(el, el.dataset.src);
   });
-};
+}
 
 /* ---------- Comments panel: stickers, time, up/down ---------- */
 $("commentsDlg").addEventListener("close", () => document.body.classList.remove("cmt-open"));
 function commentBody(tx) {
-  const m = /^\[sticker:([\w.\- ]+\.(?:png|gif|webp|jpe?g|svg))\]$/i.exec(tx || "");
-  if (m) return `<img class="cmt-stk" src="/stickers/${encodeURIComponent(m[1])}" alt="sticker">`;
+  const m = /^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i.exec((tx || "").trim());
+  if (m) {
+    const url = `/stickers/${encodeURIComponent(m[1])}`;
+    if (/\.json$/i.test(m[1])) return `<div class="cmt-stk lottie-stk" data-src="${url}"></div>`;
+    return `<img class="cmt-stk" src="${url}" alt="sticker">`;
+  }
   return `<div class="cmt-t">${escapeHtml(tx || "")}</div>`;
 }
 function timeAgo(iso) {
