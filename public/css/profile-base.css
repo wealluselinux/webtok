@@ -1,0 +1,33 @@
+/* Profile page: theme variables, buttons, top bar */
+:root{
+  --bg:#fff0ee; --surface:#ffe3e8; --card:#fbd5de; --primary:#7b3f8c; --on-primary:#fff;
+  --text:#3b1f2b; --muted:#85626f; --accent:#ffd58a; --mint:#cfe8d5; --ok:#2e7d4f; --bad:#b3261e;
+  --r-xl:32px; --r-lg:24px; --r-md:18px;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#22141b; --surface:#33202a; --card:#47303c; --primary:#e7b6f2; --on-primary:#3a1745;
+    --text:#f7dde5; --muted:#c3a1ae; --accent:#6b5320; --mint:#2e4a37; --ok:#8fd5a6; --bad:#ffb4ab}
+}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Google Sans","Roboto",system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding:76px 16px 40px;transition:background-color .25s,color .25s}
+#wp-layer{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center;opacity:0;pointer-events:none;transition:opacity .3s}
+#wp-scrim{position:fixed;inset:0;z-index:-1;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .3s}
+body.has-wp #wp-layer{opacity:1}
+body.has-wp #wp-scrim{opacity:.76}
+button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
+.hidden{display:none!important}
+
+/* top bar */
+#bar{position:fixed;top:12px;left:12px;right:12px;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:8px;pointer-events:none}
+#bar>*{pointer-events:auto}
+.chip{padding:9px 16px;border-radius:999px;background:var(--surface);font-weight:600;box-shadow:0 2px 10px #0002;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit}
+.chip.p{background:var(--primary);color:var(--on-primary)}
+
+.btn{padding:12px 22px;border-radius:999px;font-weight:600;background:var(--surface);color:var(--text);transition:transform .15s}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:var(--primary);color:var(--on-primary)}
+.btn.tonal{background:var(--card);color:var(--text)}
+.btn.danger{background:var(--bad);color:#fff}
+.btn.sm{padding:10px 18px;font-size:14px}
+.btn.icon{width:42px;height:42px;padding:0;display:grid;place-items:center;border-radius:16px;background:var(--surface)}
+.btn:disabled{opacity:.45;cursor:default}
