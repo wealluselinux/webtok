@@ -108,3 +108,5 @@ nav.querySelector("#sbmore").onclick=()=>nav.querySelector("#sbmenu").classList.
 nav.querySelector("#sbout").onclick=async()=>{try{await getSb().auth.signOut()}catch(e){}location.href="/"};
 })();
 
+
+document.body.appendChild(Object.assign(document.createElement("script"),{src:"/js/notify.js"}));
