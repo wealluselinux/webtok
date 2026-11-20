@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Tok · Forgot password</title>
+<link rel="icon" href="/images/logo.png">
+<style>
+:root{--bg:#fff0ee;--surface:#ffe3e8;--card:#fbd5de;--primary:#7b3f8c;--on:#fff;--text:#3b1f2b;--muted:#85626f;--ok:#2e7d4f;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#22141b;--surface:#33202a;--card:#47303c;--primary:#e7b6f2;--on:#3a1745;--text:#f7dde5;--muted:#c3a1ae;--ok:#8fd5a6;--bad:#ffb4ab}}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:grid;place-items:center;padding:20px}
+.card{width:min(100%,430px);background:var(--card);border-radius:32px;padding:28px}
+h1{font-size:26px;margin-bottom:6px}.sub{color:var(--muted);margin-bottom:16px}
+input{width:100%;padding:15px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit}
+input:focus{outline:0;border-color:var(--primary)}
+.btn{padding:15px 26px;border-radius:999px;border:0;font:inherit;font-weight:600;cursor:pointer;background:var(--primary);color:var(--on)}
+.btn:disabled{opacity:.5}.row{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:10px;flex-wrap:wrap}
+a{color:var(--primary)}.hint{font-size:14px;min-height:20px;margin:10px 4px 0;color:var(--muted)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Forgot your password?</h1>
+  <p class="sub">Please contact the site owner to reset your password.</p>
+  <p style="margin:14px 4px 4px">Email them at:</p>
+  <p style="margin:0 4px 18px;font-weight:700;font-size:18px;word-break:break-all"><a id="owner" href="mailto:meganlayow440@gmail.com?subject=Web%20Tok%20password%20reset">meganlayow440@gmail.com</a></p>
+  <p class="hint">Include the email address you signed up with, and your username.</p>
+  <div class="row"><a href="/login">Back to sign in</a></div>
+</main>
+
+</body>
+</html>
