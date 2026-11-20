@@ -1,4 +1,4 @@
-/* Full-screen Material You batch upload studio (Supabase direct upload + status bar + ETA, no compression) */
+/* Full-screen Material You batch upload studio (Cloudflare R2 direct upload + status bar + ETA, no compression) */
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false;
 
@@ -23,15 +23,21 @@ function hideStatusBar() {
   if (wrap) wrap.classList.add("hidden");
 }
 
-function uploadToSupabaseStorage(file, path, token, onProgress) {
+async function uploadToSupabaseStorage(file, path, token, onProgress) {
+  const ct = file.type || "video/mp4";
+  const pre = await fetch("/api/storage/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ bucket: "videos", path, contentType: ct })
+  });
+  const { uploadUrl, publicUrl, error } = await pre.json();
+  if (!pre.ok || error || !uploadUrl) throw new Error(error?.message || "Could not start upload.");
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const startedAt = Date.now();
-    xhr.open("POST", `${SUPABASE_URL}/storage/v1/object/videos/${path}`);
-    xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("Content-Type", file.type || "video/mp4");
-    xhr.setRequestHeader("x-upsert", "true");
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", ct);
     xhr.timeout = 300000;
     xhr.upload.onprogress = e => {
       if (e.lengthComputable && onProgress) {
@@ -43,12 +49,9 @@ function uploadToSupabaseStorage(file, path, token, onProgress) {
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        const url = sb.storage.from("videos").getPublicUrl(path).data.publicUrl;
-        resolve({ url, storagePath: path });
+        resolve({ url: publicUrl, storagePath: path });
       } else {
-        let msg = `Upload failed (${xhr.status})`;
-        try { msg = JSON.parse(xhr.responseText).message || msg; } catch {}
-        reject(new Error(msg));
+        reject(new Error(`Upload failed (${xhr.status})`));
       }
     };
     xhr.onerror = () => reject(new Error("Network error during upload."));
