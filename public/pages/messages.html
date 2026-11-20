@@ -23,6 +23,13 @@ body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);
 #form input{flex:1;padding:14px 20px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font:inherit;outline:0}
 #form button{border:0;border-radius:999px;background:var(--primary);color:var(--on-primary);width:50px;cursor:pointer;display:grid;place-items:center}
 .empty{margin:auto;color:var(--muted);text-align:center;padding:30px;max-width:34ch}
+.hidden{display:none!important}
+#stkPanel{max-height:200px;overflow-y:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 16px;background:var(--surface)}
+#stkPanel button{background:none!important;border:0;cursor:pointer;border-radius:16px;padding:4px;width:auto!important}
+#stkPanel button:hover{background:var(--card)!important}
+#stkPanel img,#stkPanel .stk-box{width:100%;aspect-ratio:1;object-fit:contain;display:block}
+#form #stkBtn{background:var(--surface);color:var(--text)}
+.m.stk{background:none;padding:0}.m.stk img,.m.stk .stk-box{width:150px;height:150px;object-fit:contain;display:block}
 #back{display:none;background:none;border:0;color:var(--text);cursor:pointer}
 @media(max-width:800px){#list{width:100%}#chat{display:none}body.chatting #list{display:none}body.chatting #chat{display:flex}#back{display:block}}
 </style></head>
@@ -39,19 +46,32 @@ const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPA
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let me=null, cur=null, friends=[];
 const avStyle=p=>p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
-function bubble(m){const d=document.createElement("div");d.className="m"+(m.sender_id===me?" me":"");d.textContent=m.body;$("msgs").appendChild(d);$("msgs").scrollTop=1e9}
+let lottieP=null;
+function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
+async function lottieIn(el,path){try{(await ensureLottie()).loadAnimation({container:el,renderer:"svg",loop:true,autoplay:true,path})}catch(e){console.warn(e)}}
+const STK=/^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i;
+function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.json$/i.test(file)){const b=document.createElement("div");b.className="stk-box";lottieIn(b,url);return b}const i=document.createElement("img");i.src=url;i.alt="sticker";i.loading="lazy";return i}
+function bubble(m){const d=document.createElement("div");d.className="m"+(m.sender_id===me?" me":"");const s=STK.exec((m.body||"").trim());
+  if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}else d.textContent=m.body;
+  $("msgs").appendChild(d);$("msgs").scrollTop=1e9}
+let stickerList=null;
 async function openChat(f){
   cur=f; document.body.classList.add("chatting");
   document.querySelectorAll(".fr").forEach(e=>e.classList.toggle("on",e.dataset.id===f.id));
   document.querySelector(`.fr[data-id="${f.id}"]`)?.classList.remove("unread");
   $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div>${esc(f.display_name||f.username)} <span style="color:var(--muted);font-weight:400">@${esc(f.username)}</span></div></div>
-  <div id="msgs"></div><form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  <div id="msgs"></div><div id="stkPanel" class="hidden"></div><form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
   $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null};
   const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
   (data||[]).forEach(bubble);
-  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";
-    const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
-    if(error){$("txt").value=body;alert("Couldn't send: "+error.message);return}bubble(m)};
+  if(window.wtMarkRead)wtMarkRead(f.id);
+  async function send(body){const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
+    if(error){alert("Couldn't send: "+error.message);return false}bubble(m);return true}
+  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
+  $("stkBtn").onclick=async()=>{const pn=$("stkPanel");pn.classList.toggle("hidden");if(pn.classList.contains("hidden")||pn.dataset.ready)return;pn.dataset.ready="1";
+    try{stickerList=stickerList||await (await fetch("/api/stickers")).json()}catch{stickerList=[]}
+    pn.innerHTML=stickerList.length?"":'<div style="grid-column:1/-1;color:var(--muted);padding:8px">No stickers yet.</div>';
+    stickerList.forEach(file=>{const b=document.createElement("button");b.type="button";b.appendChild(stickerEl(file));b.onclick=()=>{pn.classList.add("hidden");send("[sticker:"+file+"]")};pn.appendChild(b)})};
   $("txt").focus();
 }
 (async()=>{
@@ -65,8 +85,11 @@ async function openChat(f){
   friends.forEach(f=>{const e=document.createElement("div");e.className="fr";e.dataset.id=f.id;
     e.innerHTML=`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div>${esc(f.display_name||f.username)}</div><i class="dot"></i>`;
     e.onclick=()=>openChat(f);$("fl").appendChild(e)});
+  try{const s=(await sb.auth.getSession()).data.session;const r=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+s.access_token}});const u=(await r.json()).data.bySender||{};
+    Object.keys(u).forEach(id=>document.querySelector(`.fr[data-id="${id}"]`)?.classList.add("unread"))}catch{}
+  addEventListener("hashchange",()=>{const f=friends.find(x=>x.id===location.hash.slice(1));if(f)openChat(f)});
   const want=location.hash.slice(1),wf=friends.find(x=>x.id===want); if(wf) openChat(wf);
   sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
-    const m=p.new; if(cur&&cur.id===m.sender_id)bubble(m); else document.querySelector(`.fr[data-id="${m.sender_id}"]`)?.classList.add("unread")}).subscribe();
+    const m=p.new; if(cur&&cur.id===m.sender_id){bubble(m);if(window.wtMarkRead)wtMarkRead(m.sender_id)} else document.querySelector(`.fr[data-id="${m.sender_id}"]`)?.classList.add("unread")}).subscribe();
 })();
 </script></body></html>
