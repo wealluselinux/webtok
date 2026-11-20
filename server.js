@@ -370,6 +370,7 @@ app.get("/messages", page("messages.html"));
 app.get("/activity", page("activity.html"));
 app.get(["/login", "/sign-in", "/signin"], page("login.html"));
 app.get(["/profile", "/account"], page("profile.html"));
+require("./routes/extras")({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso });
 app.use(express.static(path.join(__dirname, "public")));
 
 if (require.main === module) {
