@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Tok · Sign in</title>
+<style>
+:root{--bg:#fff0ee;--surface:#ffe3e8;--card:#fbd5de;--primary:#7b3f8c;--on:#fff;--text:#3b1f2b;--muted:#85626f;--ok:#2e7d4f;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#22141b;--surface:#33202a;--card:#47303c;--primary:#e7b6f2;--on:#3a1745;--text:#f7dde5;--muted:#c3a1ae;--ok:#8fd5a6;--bad:#ffb4ab}}
+*{box-sizing:border-box;margin:0}
+body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:grid;place-items:center;padding:20px}
+.card{width:min(100%,430px);background:var(--card);border-radius:32px;padding:28px}
+.logo{font-size:30px;font-weight:600;margin-bottom:4px}.sub{color:var(--muted);margin-bottom:18px}
+.step{display:none}.step.on{display:block}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 4px 4px}
+input,textarea{width:100%;padding:15px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit}
+textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-color:var(--primary)}
+.btn{padding:15px 26px;border-radius:999px;border:0;font:inherit;font-weight:600;cursor:pointer;background:var(--surface);color:var(--text)}
+.btn.p{background:var(--primary);color:var(--on)}.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:10px;justify-content:space-between;margin-top:18px;flex-wrap:wrap}
+.hint{font-size:13px;min-height:18px;margin:6px 4px;color:var(--muted)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+.av{width:96px;height:96px;border-radius:38% 62% 55% 45%;background:var(--surface) center/cover;display:grid;place-items:center;margin:0 auto 6px;cursor:pointer;font-size:32px}
+.rules{list-style:none;padding:0;font-size:13px;margin:8px 4px}.rules li::before{content:"○ "}.rules li.y{color:var(--ok)}.rules li.y::before{content:"● "}
+.link{background:none;border:0;color:var(--primary);font:inherit;cursor:pointer;text-decoration:underline;padding:4px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);margin:10px 4px;cursor:pointer}.chk input{width:auto}
+.dots{display:flex;gap:6px;margin-bottom:16px}.dots i{flex:1;height:5px;border-radius:9px;background:var(--surface)}.dots i.on{background:var(--primary)}
+</style></head><body>
+<main class="card">
+<a href="/" style="text-decoration:none;color:inherit"><div class="logo">Web Tok</div></a>
+<p class="sub" id="sub"></p>
+<div class="dots" id="dots"></div>
+
+<section class="step" id="s-in">
+ <label>Email</label><input id="li-email" type="email" autocomplete="email">
+ <label>Password</label><input id="li-pass" type="password" autocomplete="current-password">
+ <label class="chk"><input type="checkbox" class="showpw" data-t="li-pass"> Show password</label>
+ <div class="hint" id="h-in"></div>
+ <div class="row"><button class="btn" id="to-up">Create account</button><button class="btn p" id="do-in">Sign in</button></div>
+</section>
+
+<section class="step" id="s-email">
+ <label>Email</label><input id="email" type="email" autocomplete="email">
+ <div class="hint" id="h-email"></div>
+ <div class="row"><button class="btn" id="to-in">I have an account</button><button class="btn p" id="n-email">Next</button></div>
+</section>
+
+<section class="step" id="s-username">
+ <label>Username</label><input id="username" autocomplete="off" maxlength="20" placeholder="3–20 letters, numbers, _ or .">
+ <div class="hint" id="h-user"></div>
+ <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-user" disabled>Next</button></div>
+</section>
+
+<section class="step" id="s-profile">
+ <div class="av" id="av" title="Add profile picture">📷</div><input id="file" type="file" accept="image/*" hidden>
+ <label>Display name</label><input id="dname" maxlength="40">
+ <label>Bio</label><textarea id="bio" maxlength="160"></textarea>
+ <div class="hint" id="h-bio">0 / 160 · everything here is optional</div>
+ <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-prof">Next</button></div>
+</section>
+
+<section class="step" id="s-pass">
+ <label>Password</label><input id="pw" type="password" autocomplete="new-password">
+ <label>Confirm password</label><input id="pw2" type="password" autocomplete="new-password">
+ <label class="chk"><input type="checkbox" class="showpw" data-t="pw,pw2"> Show password</label>
+ <ul class="rules" id="rules"></ul><div class="hint" id="h-pw"></div>
+ <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-pw" disabled>Create account</button></div>
+</section>
+</main>
+
+<script src="/config.js"></script>
+<script src="/js/wt-local.js"></script>
+<script>
+const $=id=>document.getElementById(id), C=window.WT_CONFIG||{};
+if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){document.querySelector(".card").innerHTML="<h3>Setup problem</h3><p style=\"margin-top:8px\">The server did not send its Supabase settings. Make sure you opened this site through the Render URL (not a local file) and that /config.js loads.</p>";throw new Error("Missing Supabase config");}
+const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
+const qs=new URLSearchParams(location.search);
+const isAddMode=qs.get("add")==="1";
+const FLOW=["email","username","profile","pass"], SUBS={in:isAddMode?"Add another account":"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password"};
+let d={}, avatar=null, cur="in";
+
+function saveSavedAccount(session, prof){
+  if(!session?.user||!session?.refresh_token) return;
+  try{
+    const list=JSON.parse(localStorage.getItem("wt_accounts")||"[]").filter(a=>a.id!==session.user.id);
+    const meta=session.user.user_metadata||{};
+    list.unshift({
+      id:session.user.id,
+      email:session.user.email||"",
+      username:prof?.username||meta.username||(session.user.email||"user").split("@")[0],
+      display_name:prof?.display_name||meta.display_name||prof?.username||"Web Tok User",
+      avatar_url:prof?.avatar_url||null,
+      refresh_token:session.refresh_token
+    });
+    localStorage.setItem("wt_accounts",JSON.stringify(list.slice(0,10)));
+  }catch(e){}
+}
+
+function go(s){
+  cur=s; document.querySelectorAll(".step").forEach(e=>e.classList.toggle("on",e.id==="s-"+s));
+  $("sub").textContent=SUBS[s]; const i=FLOW.indexOf(s);
+  $("dots").innerHTML=i<0?"":FLOW.map((_,k)=>`<i class="${k<=i?"on":""}"></i>`).join("");
+}
+function say(id,msg,cls){const e=$(id);e.textContent=msg;e.className="hint "+(cls||"")}
+document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>go(FLOW[FLOW.indexOf(cur)-1]));
+$("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in");
+if(qs.get("email")) $("li-email").value=qs.get("email");
+
+/* sign in */
+$("do-in").onclick=async()=>{
+  say("h-in","Signing in…");
+  const {data,error}=await sb.auth.signInWithPassword({email:$("li-email").value.trim(),password:$("li-pass").value});
+  if(!error){
+    if(data?.session){
+      const {data:prof}=await sb.from("profiles").select("username,display_name,avatar_url").eq("id",data.session.user.id).maybeSingle();
+      saveSavedAccount(data.session,prof);
+    }
+    return location.href=isAddMode?"/profile":"/scroll";
+  }
+  say("h-in",error.message,"bad");
+};
+
+/* 1 email */
+$("n-email").onclick=()=>{
+  const v=$("email").value.trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return say("h-email","Enter a valid email.","bad");
+  d.email=v; go("username");
+};
+
+/* 2 username (checked against the database) */
+let t=null,seq=0;
+$("username").oninput=()=>{
+  const v=$("username").value.trim().toLowerCase(); $("n-user").disabled=true; clearTimeout(t);
+  if(!/^[a-z0-9_.]{3,20}$/.test(v)) return say("h-user","3–20 characters: a–z, 0–9, _ or .");
+  say("h-user","Checking…"); const my=++seq;
+  t=setTimeout(async()=>{
+    const {data,error}=await sb.rpc("username_available",{name:v}); if(my!==seq) return;
+    if(error) return say("h-user","Couldn't check. Try again.","bad");
+    if(data){d.username=v;$("n-user").disabled=false;say("h-user","@"+v+" is available","ok")}
+    else say("h-user","@"+v+" is taken","bad");
+  },400);
+};
+$("n-user").onclick=()=>go("profile");
+
+/* 3 profile */
+$("av").onclick=()=>$("file").click();
+$("bio").oninput=()=>say("h-bio",$("bio").value.length+" / 160 · everything here is optional");
+$("file").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const img=new Image(); img.onload=()=>{
+    const c=document.createElement("canvas"); c.width=c.height=256; const s=Math.min(img.width,img.height);
+    c.getContext("2d").drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,256,256);
+    avatar=c.toDataURL("image/jpeg",.85);$("av").style.backgroundImage=`url(${avatar})`;$("av").textContent="";
+  }; img.src=URL.createObjectURL(f);
+};
+$("n-prof").onclick=()=>{d.display_name=$("dname").value.trim();d.bio=$("bio").value.trim();go("pass")};
+
+/* 4 password */
+const COMMON=["password","123456","qwerty","letmein","welcome","admin","iloveyou","webtok"];
+const RULES=[["At least 10 characters",p=>p.length>=10],["Upper and lower case",p=>/[a-z]/.test(p)&&/[A-Z]/.test(p)],["A number",p=>/\d/.test(p)],["A symbol",p=>/[^A-Za-z0-9]/.test(p)],
+ ["Not a common password",p=>!COMMON.some(w=>p.toLowerCase().includes(w))],["Doesn't contain your username or email name",p=>![d.username,(d.email||"").split("@")[0]].some(w=>w&&w.length>2&&p.toLowerCase().includes(w))]];
+function checkPw(){
+  const p=$("pw").value; let all=true;
+  $("rules").innerHTML=RULES.map(([t,f])=>{const y=f(p);all=all&&y;return`<li class="${y?"y":""}">${t}</li>`}).join("");
+  const m=p&&p===$("pw2").value; say("h-pw",$("pw2").value?(m?"Passwords match":"Passwords don't match"):"",m?"ok":"bad");
+  $("n-pw").disabled=!(all&&m);
+}
+$("pw").oninput=$("pw2").oninput=checkPw; $("pw").onfocus=checkPw;
+$("n-pw").onclick=async()=>{
+  $("n-pw").disabled=true; say("h-pw","Creating account…");
+  const pw=$("pw").value;
+  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
+  if(error){$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
+  if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){$("n-pw").disabled=false;return say("h-pw","That email already has an account. Sign in instead, or use a different email.","bad")}
+  try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){}
+  if(su&&su.session&&su.user) return finish(su.user,su.session);
+  const {data:si,error:siErr}=await sb.auth.signInWithPassword({email:d.email,password:pw});
+  if(siErr){$("n-pw").disabled=false;return say("h-pw",siErr.message,"bad")}
+  if(si&&si.user) return finish(si.user,si.session);
+};
+
+document.querySelectorAll(".showpw").forEach(c=>c.onchange=()=>c.dataset.t.split(",").forEach(id=>$(id).type=c.checked?"text":"password"));
+
+let done=false;
+async function finish(user,sess){
+  if(done) return; done=true; $("sub").textContent="Account created. Finishing up…";
+  let avUrl=null;
+  try{
+    const a=avatar||localStorage.getItem("wt_avatar");
+    if(a&&user){
+      const blob=await (await fetch(a)).blob(), path=user.id+"/avatar.jpg";
+      await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/jpeg"});
+      avUrl=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+      await sb.from("profiles").update({avatar_url:avUrl}).eq("id",user.id);
+    }
+    localStorage.removeItem("wt_avatar");
+  }catch(e){console.warn(e)}
+  const activeSess=sess||(await sb.auth.getSession()).data?.session;
+  if(activeSess) saveSavedAccount(activeSess,{username:d.username,display_name:d.display_name,avatar_url:avUrl});
+  location.href=isAddMode?"/profile":"/scroll";
+}
+sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur!=="in") setTimeout(()=>finish(sess.user,sess),0); });
+
+go(location.hash==="#signup"?"email":"in");
+</script></body></html>
+
