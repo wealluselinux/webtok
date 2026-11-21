@@ -1,4 +1,4 @@
-/* Web Tok server: static site + JSON API on Turso (libSQL) with our own login, and Cloudflare R2 for video/avatar files.
+/* Web Tok server: static site + JSON API on Turso (libSQL) with our own login, and Cloudflare R2 for video/avatar/sound files.
    Environment (set in Render): TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, JWT_SECRET, R2_ACCOUNT_ID, R2_BUCKET,
    R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL */
 const express = require("express");
@@ -194,6 +194,10 @@ async function runQuery(p, uid) {
   const op = p.op;
   if (op === "select") {
     if (P.read !== "public" && !uid) throw new HttpError(401, "Sign in required");
+    if (t === "likes") {
+      const asksUser = (p.filters || []).some(f => f && f.c === "user_id" && f.v !== uid);
+      if (asksUser) throw new HttpError(403, "Liked videos are private");
+    }
     const cols = (p.columns || "*") === "*" ? T.cols : String(p.columns).split(",").map(s => s.trim()).filter(Boolean);
     if (!cols.length || !cols.every(c => T.cols.includes(c))) throw new HttpError(400, "Unknown column");
     const w = where(t, p, P.read === "own" ? P.owner : null, uid, P.read === "party");
@@ -271,7 +275,11 @@ function r2() {
   }
   return { s3, S3 };
 }
-const BUCKETS = { videos: /^video\/(mp4|webm|quicktime|x-m4v)$/, avatars: /^image\/(jpeg|png|webp|gif)$/ };
+const BUCKETS = {
+  videos: /^video\/(mp4|webm|quicktime|x-m4v)$/,
+  avatars: /^image\/(jpeg|png|webp|gif)$/,
+  sounds: /^audio\/(mpeg|mp3|wav|x-wav|ogg|aac|mp4|webm|x-m4a)$/
+};
 const SAFE_PATH = /^[A-Za-z0-9-]{8,64}\/[A-Za-z0-9._-]{1,120}$/;
 async function removeFromR2(keys) {
   if (!keys.length || !process.env.R2_ACCESS_KEY_ID) return;

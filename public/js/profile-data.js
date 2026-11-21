@@ -1,4 +1,4 @@
-/* Profile page: load profile, role/tenure badge, follow button, tabs (videos / liked / comments) */
+/* Profile page: load profile, role/tenure badge, private liked tab, follow button, tabs */
 async function loadMyFollows() {
   myFollowing = new Set(); myFollowers = new Set();
   if (!user) return;
@@ -85,6 +85,13 @@ async function resolveTargetAndLoad() {
     applyTheme(pubTheme);
   }
 
+  const likedTabBtn = document.querySelector('.tab[data-tab="liked"]');
+  if (likedTabBtn) likedTabBtn.classList.toggle("hidden", !isMe);
+  if (!isMe && acctTab === "liked") {
+    acctTab = "posted";
+    document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === "posted"));
+  }
+
   $("openUpload").classList.toggle("hidden", !isMe);
   $("p-actions-me").classList.toggle("hidden", !isMe);
   $("p-actions-other").classList.toggle("hidden", isMe);
@@ -143,14 +150,14 @@ async function loadAccountData() {
   try {
     const [postedRes, myLikesRes, myCmtsRes, followingRes, followersRes] = await Promise.all([
       sb.from("videos").select("id, title, video_url, storage_path, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
-      sb.from("likes").select("video_id").eq("user_id", targetId),
+      isMe ? sb.from("likes").select("video_id").eq("user_id", targetId) : Promise.resolve({ data: [] }),
       sb.from("comments").select("id, video_id, text, created_at").eq("user_id", targetId).order("created_at", { ascending: false }),
       sb.from("follows").select("following_id", { count: "exact", head: true }).eq("follower_id", targetId),
       sb.from("follows").select("follower_id", { count: "exact", head: true }).eq("following_id", targetId)
     ]);
 
     const postedRows = postedRes.data || [];
-    const likedIds = (myLikesRes.data || []).map(l => l.video_id);
+    const likedIds = isMe ? (myLikesRes.data || []).map(l => l.video_id) : [];
     const myCmts = myCmtsRes.data || [];
 
     const allRelevantIds = [...new Set([...postedRows.map(v => v.id), ...likedIds, ...myCmts.map(c => c.video_id)])];

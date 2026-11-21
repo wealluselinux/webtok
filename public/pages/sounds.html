@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Web Tok · Sounds</title>
+<link rel="icon" href="/images/logo.png">
+<link rel="stylesheet" href="/css/base.css">
+<style>
+body{overflow:auto;padding:24px 16px 80px}
+.wrap{max-width:760px;margin:0 auto;padding-left:var(--sbw,0px);display:flex;flex-direction:column;gap:16px}
+@media(max-width:800px){.wrap{padding-left:0}}
+.head-row{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:28px;font-weight:700;letter-spacing:-.3px}
+.card{background:var(--card);border-radius:var(--r-xl);padding:20px;box-shadow:0 4px 18px #0001;display:flex;flex-direction:column;gap:10px}
+.snd-card{background:var(--surface);border-radius:var(--r-xl);padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.snd-ic{width:46px;height:46px;border-radius:16px;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
+.snd-meta{flex:1;min-width:160px}
+.snd-meta b{display:block;font-size:15px}
+.snd-meta small{color:var(--muted);font-size:12px}
+audio{max-width:260px;height:36px}
+</style>
+</head>
+<body data-page="sounds">
+<div id="wp-layer"></div>
+<div id="wp-scrim"></div>
+<main class="wrap">
+  <div class="head-row">
+    <h1>Sounds</h1>
+    <a class="btn sm" href="/scroll"><span class="ms" style="font-size:18px">arrow_back</span>Back to Feed</a>
+  </div>
+
+  <div class="card">
+    <b style="font-size:16px">Upload Your Own Sound</b>
+    <input type="text" id="sndTitle" maxlength="60" placeholder="Sound title (e.g. Funny Vine Boom)">
+    <input type="text" id="sndArtist" maxlength="40" placeholder="Creator / Artist (optional)">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <input type="file" id="sndFile" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/aac,audio/mp4,audio/webm,audio/x-m4a" style="flex:1">
+      <button type="button" class="btn primary sm" id="sndUpload">Upload sound</button>
+    </div>
+    <div class="hint" id="sndHint"></div>
+  </div>
+
+  <div id="sndList">
+    <div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div><span>Loading sounds…</span></div>
+  </div>
+</main>
+
+<script src="/config.js"></script>
+<script src="/js/wt-local.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/core.js"></script>
+<script src="/js/theme.js"></script>
+<script>
+let me = null, tok = null;
+async function loadSounds() {
+  const listEl = $("sndList");
+  try {
+    const r = await fetch("/api/sounds");
+    const j = await r.json();
+    const rows = j.data || [];
+    if (!rows.length) { listEl.innerHTML = '<div class="card" style="text-align:center;color:var(--muted)">No sounds uploaded yet. Be the first!</div>'; return; }
+    listEl.innerHTML = "";
+    rows.forEach(s => {
+      const c = document.createElement("div");
+      c.className = "snd-card";
+      c.innerHTML = `<div class="snd-ic"><span class="ms">music_note</span></div>
+        <div class="snd-meta"><b>${escapeHtml(s.title)}</b><small>${escapeHtml(s.artist)} · by @${escapeHtml(s.username || "user")}</small></div>
+        <audio controls preload="none" src="${escapeHtml(s.audio_url)}"></audio>
+        ${me && s.user_id === me ? '<button type="button" class="btn icon" title="Delete sound"><span class="ms" style="font-size:18px">delete</span></button>' : ""}`;
+      const del = c.querySelector("button");
+      if (del) del.onclick = async () => {
+        if (!confirm(`Delete "${s.title}"?`)) return;
+        await fetch(`/api/sounds/${encodeURIComponent(s.id)}`, { method: "DELETE", headers: { Authorization: "Bearer " + tok } });
+        loadSounds();
+      };
+      listEl.appendChild(c);
+    });
+  } catch { listEl.innerHTML = '<div class="card">Could not load sounds.</div>'; }
+}
+
+$("sndUpload").onclick = async () => {
+  const { data } = await sb.auth.getSession();
+  if (!data?.session) { location.href = "/login"; return; }
+  me = data.session.user.id; tok = data.session.access_token;
+  const f = $("sndFile").files?.[0];
+  const title = $("sndTitle").value.trim();
+  const artist = $("sndArtist").value.trim();
+  const hint = $("sndHint");
+  if (!title) { hint.textContent = "Enter a sound title."; hint.className = "hint bad"; return; }
+  if (!f) { hint.textContent = "Pick an audio file first."; hint.className = "hint bad"; return; }
+  if (f.size > 15 * 1024 * 1024) { hint.textContent = "Sound must be under 15 MB."; hint.className = "hint bad"; return; }
+
+  $("sndUpload").disabled = true; hint.textContent = "Uploading sound…"; hint.className = "hint";
+  try {
+    const ext = (f.name.split(".").pop() || "mp3").toLowerCase().replace(/[^a-z0-9]/g, "") || "mp3";
+    const path = `${me}/sound-${Date.now()}.${ext}`;
+    const up = await sb.storage.from("sounds").upload(path, f, { upsert: true, contentType: f.type || "audio/mpeg" });
+    if (up?.error) throw up.error;
+    const r = await fetch("/api/sounds", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
+      body: JSON.stringify({ title, artist, storage_path: path })
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Upload failed");
+    $("sndTitle").value = ""; $("sndArtist").value = ""; $("sndFile").value = "";
+    hint.textContent = "Sound uploaded!";
+    loadSounds();
+  } catch (e) {
+    hint.textContent = e.message || "Could not upload sound."; hint.className = "hint bad";
+  } finally { $("sndUpload").disabled = false; }
+};
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  me = data?.session?.user?.id || null;
+  tok = data?.session?.access_token || null;
+  loadSounds();
+})();
+</script>
+</body>
+</html>

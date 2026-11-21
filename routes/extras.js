@@ -6,7 +6,8 @@
    5) Group chats with friend invites & acceptance
    6) Custom user stickers & comment replies
    7) Group Voice Calls, Group Watch, Shared Whiteboard
-   8) Security hardening: 20-minute post-login posting cooldown & new-device login alerts */
+   8) Security hardening: 20-minute post-login posting cooldown & new-device login alerts
+   9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds) */
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -49,10 +50,14 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS user_stickers (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS known_devices (user_id TEXT NOT NULL, device_id TEXT NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, PRIMARY KEY (user_id, device_id))",
       "CREATE TABLE IF NOT EXISTS login_alerts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL, user_agent TEXT NOT NULL, ip TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, media_url TEXT NOT NULL, media_type TEXT NOT NULL, caption TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS sounds (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, storage_path TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_alerts_user ON login_alerts(user_id, seen, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_stories_exp ON stories(expires_at, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_sounds_created ON sounds(created_at DESC)",
     ], "write");
 
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
@@ -196,6 +201,65 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.get("/admin", page("admin.html"));
   app.get("/terms", page("terms.html"));
   app.get("/privacy", page("privacy.html"));
+  app.get("/sounds", page("sounds.html"));
+
+  /* ---------- 24-hour Stories ---------- */
+  app.get("/api/stories", wrap(async () => {
+    const now = nowIso();
+    const rows = await run(`
+      SELECT s.id, s.user_id, s.media_url, s.media_type, s.caption, s.created_at, s.expires_at,
+        p.username, p.display_name, p.avatar_url
+      FROM stories s LEFT JOIN profiles p ON p.id = s.user_id
+      WHERE s.expires_at > ? ORDER BY s.created_at DESC LIMIT 100`, [now]);
+    return { data: rows, error: null };
+  }));
+  app.post("/api/stories", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (req.wt?.restrictions?.includes("post")) throw new HttpError(403, "You aren't allowed to post right now.");
+    const media_url = String(req.body?.media_url || "").trim();
+    const media_type = req.body?.media_type === "video" ? "video" : "image";
+    const caption = String(req.body?.caption || "").trim().slice(0, 140);
+    if (!media_url || (R2_PUBLIC_URL && !media_url.startsWith(R2_PUBLIC_URL + "/"))) throw new HttpError(400, "Invalid story media URL");
+    const id = crypto.randomUUID(), ts = nowIso(), exp = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+    await db.execute({ sql: "INSERT INTO stories (id, user_id, media_url, media_type, caption, created_at, expires_at) VALUES (?,?,?,?,?,?,?)", args: [id, uid, media_url, media_type, caption, ts, exp] });
+    return { data: { id, user_id: uid, media_url, media_type, caption, created_at: ts, expires_at: exp }, error: null };
+  }));
+  app.delete("/api/stories/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await db.execute({ sql: "DELETE FROM stories WHERE id = ? AND user_id = ?", args: [String(req.params.id || ""), uid] });
+    return { data: true, error: null };
+  }));
+
+  /* ---------- Sounds (upload & browse) ---------- */
+  app.get("/api/sounds", wrap(async () => {
+    const rows = await run(`
+      SELECT s.id, s.user_id, s.title, s.artist, s.audio_url, s.created_at,
+        p.username, p.display_name
+      FROM sounds s LEFT JOIN profiles p ON p.id = s.user_id
+      ORDER BY s.created_at DESC LIMIT 100`);
+    return { data: rows, error: null };
+  }));
+  app.post("/api/sounds", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const title = String(req.body?.title || "").trim().slice(0, 60);
+    const artist = String(req.body?.artist || "").trim().slice(0, 40) || "Original sound";
+    const storage_path = String(req.body?.storage_path || "").trim();
+    if (!title) throw new HttpError(400, "Enter a sound title.");
+    if (!storage_path.startsWith(uid + "/") || /\.\./.test(storage_path)) throw new HttpError(400, "Invalid storage path.");
+    const audio_url = `${R2_PUBLIC_URL}/sounds/${storage_path}`;
+    const id = crypto.randomUUID(), ts = nowIso();
+    await db.execute({ sql: "INSERT INTO sounds (id, user_id, title, artist, audio_url, storage_path, created_at) VALUES (?,?,?,?,?,?,?)", args: [id, uid, title, artist, audio_url, storage_path, ts] });
+    return { data: { id, user_id: uid, title, artist, audio_url, created_at: ts }, error: null };
+  }));
+  app.delete("/api/sounds/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const s = (await run("SELECT storage_path FROM sounds WHERE id = ? AND user_id = ?", [String(req.params.id || ""), uid]))[0];
+    if (s) {
+      await db.execute({ sql: "DELETE FROM sounds WHERE id = ? AND user_id = ?", args: [String(req.params.id || ""), uid] });
+      if (s.storage_path && removeFromR2) await removeFromR2([`sounds/${s.storage_path}`]);
+    }
+    return { data: true, error: null };
+  }));
 
   /* ---------- custom + built-in stickers ---------- */
   app.get("/api/stickers", async (_req, res) => {
