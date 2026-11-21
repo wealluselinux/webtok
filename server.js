@@ -133,6 +133,20 @@ function cleanTags(v) {
 }
 const str = (v, min, max, what) => { if (typeof v !== "string" || v.trim().length < min || v.length > max) throw new HttpError(400, `Invalid ${what}`); return v; };
 
+function cleanTheme(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  if (typeof raw.color === "string" && /^#[0-9a-fA-F]{6}$/.test(raw.color)) out.color = raw.color;
+  if (["auto", "light", "dark"].includes(raw.mode)) out.mode = raw.mode;
+  if (typeof raw.wallpaper === "string") {
+    const wp = raw.wallpaper.trim();
+    if (!wp) out.wallpaper = "";
+    else if (R2_PUBLIC_URL && wp.startsWith(R2_PUBLIC_URL + "/avatars/")) out.wallpaper = wp.slice(0, 500);
+    else if (/^(radial-gradient|linear-gradient)\([a-zA-Z0-9#%,.\s()-]+\)$/.test(wp) && wp.length <= 500) out.wallpaper = wp;
+  }
+  return out;
+}
+
 async function prepareRow(t, raw, uid, op) {
   const T = TABLES[t], P = POLICY[t], row = {};
   for (const c of T.cols) if (raw && raw[c] !== undefined) row[c] = raw[c];
@@ -165,8 +179,8 @@ async function prepareRow(t, raw, uid, op) {
     if (row.username !== undefined && !/^[a-z0-9_.]{3,20}$/.test(row.username = String(row.username).toLowerCase())) throw new HttpError(400, "Invalid username");
     if (row.display_name != null && String(row.display_name).length > 40) throw new HttpError(400, "Display name too long");
     if (row.bio != null && String(row.bio).length > 160) throw new HttpError(400, "Bio too long");
-    if (row.avatar_url && !String(row.avatar_url).startsWith(R2_PUBLIC_URL + "/avatars/")) throw new HttpError(400, "Invalid avatar");
-    if (row.theme !== undefined && JSON.stringify(row.theme).length > 4000) throw new HttpError(400, "Theme too large");
+    if (row.avatar_url && (!R2_PUBLIC_URL || !String(row.avatar_url).startsWith(R2_PUBLIC_URL + "/avatars/"))) throw new HttpError(400, "Invalid avatar");
+    if (row.theme !== undefined) row.theme = cleanTheme(row.theme);
   }
   if (t === "video_views") { row.liked = !!row.liked; }
   for (const c of (T.json || [])) if (row[c] !== undefined) row[c] = JSON.stringify(row[c]);
@@ -270,7 +284,15 @@ const app = express();
 const server = http.createServer(app);
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "200kb" }));
-app.use((_q, res, next) => { res.set({ "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin" }); next(); });
+app.use((_q, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), geolocation=()"
+  });
+  next();
+});
 const wrap = fn => async (req, res) => {
   try { res.json(await fn(req, res)); }
   catch (e) {
@@ -301,6 +323,7 @@ app.post("/api/auth/signup", limit(8, 600000), wrap(async req => {
     { sql: "INSERT INTO users (id, email, encrypted_password, raw_user_meta_data, created_at) VALUES (?,?,?,?,?)", args: [id, em, await bcrypt.hash(password, 10), JSON.stringify(meta), ts] },
     { sql: "INSERT INTO profiles (id, username, display_name, bio, avatar_url, theme, created_at) VALUES (?,?,?,?,NULL,'{}',?)", args: [id, username, meta.display_name || null, meta.bio, ts] },
   ], "write");
+  if (app.locals.recordLoginDevice) await app.locals.recordLoginDevice(id, req, true);
   const u = { id, email: em, raw_user_meta_data: JSON.stringify(meta) };
   const session = makeSession(u);
   return { data: { user: session.user, session }, error: null };
@@ -310,6 +333,9 @@ app.post("/api/auth/login", limit(20, 600000), wrap(async req => {
   const u = (await run("SELECT * FROM users WHERE email = ?", [em]))[0];
   const ok = await bcrypt.compare(pw, u ? u.encrypted_password : DUMMY_HASH);
   if (!u || !ok) throw new HttpError(400, "Invalid login credentials");
+  await db.execute({ sql: "UPDATE users SET last_login_at = ? WHERE id = ?", args: [nowIso(), u.id] });
+  if (app.locals.forgetUser) app.locals.forgetUser(u.id);
+  if (app.locals.recordLoginDevice) await app.locals.recordLoginDevice(u.id, req, false);
   const session = makeSession(u);
   return { data: { user: session.user, session }, error: null };
 }));

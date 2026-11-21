@@ -1,5 +1,4 @@
-/* Profile page: account switcher and sign out */
-/* ---------- Account Switcher ---------- */
+/* Profile page: account switcher and sign out (isolated so other users' switch accounts never leak) */
 function getSavedAccounts() {
   try { return JSON.parse(localStorage.getItem("wt_accounts") || "[]"); } catch { return []; }
 }
@@ -8,17 +7,20 @@ function setSavedAccounts(list) {
 }
 function syncCurrentAccount(session, prof) {
   if (!session?.user || !session?.refresh_token) return;
-  const list = getSavedAccounts().filter(a => a.id !== session.user.id);
+  const existing = getSavedAccounts();
+  const isKnown = existing.some(a => a.id === session.user.id);
+  const isAdding = sessionStorage.getItem("wt_adding_acct") === "1";
+  sessionStorage.removeItem("wt_adding_acct");
+  const base = (isKnown || isAdding) ? existing.filter(a => a.id !== session.user.id) : [];
   const meta = session.user.user_metadata || {};
-  list.unshift({
+  base.unshift({
     id: session.user.id,
-    email: session.user.email || "",
     username: prof?.username || meta.username || (session.user.email || "user").split("@")[0],
     display_name: prof?.display_name || meta.display_name || prof?.username || "Web Tok User",
     avatar_url: prof?.avatar_url || null,
     refresh_token: session.refresh_token
   });
-  setSavedAccounts(list);
+  setSavedAccounts(base);
 }
 function renderSwitchList() {
   const listEl = $("sw-list");
@@ -43,7 +45,7 @@ function renderSwitchList() {
         <b>${escapeHtml(acct.display_name || acct.username)}</b>
         <small>@${escapeHtml(acct.username)}</small>
       </div>
-      ${isCur ? '<span class="chip p" style="padding:5px 12px;font-size:12px">Active</span>' : '<button type="button" class="btn icon" title="Remove">✕</button>'}`;
+      ${isCur ? '<span class="chip p" style="padding:5px 12px;font-size:12px">Active</span>' : '<button type="button" class="btn icon" title="Remove" aria-label="Remove"><span class="ms" style="font-size:18px">close</span></button>'}`;
     if (!isCur) {
       row.onclick = async e => {
         if (e.target.closest("button")) return;
@@ -69,6 +71,8 @@ function renderSwitchList() {
   });
 }
 $("btn-switch-acct").onclick = () => { renderSwitchList(); $("switchDlg").showModal(); };
+const addAcctLink = document.querySelector('#switchDlg a[href*="add=1"]');
+if (addAcctLink) addAcctLink.onclick = () => sessionStorage.setItem("wt_adding_acct", "1");
 
 $("btn-signout").onclick = async () => {
   if (user) setSavedAccounts(getSavedAccounts().filter(a => a.id !== user.id));

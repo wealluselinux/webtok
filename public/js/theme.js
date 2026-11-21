@@ -1,5 +1,4 @@
-/* Material You theme + wallpaper (uses localStorage and profiles.theme) */
-/* ---------- Material You Theme ---------- */
+/* Material You theme + wallpaper + new-device security alert check */
 function hexToHsl(hex) {
   let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -57,20 +56,49 @@ function applyTheme(t) {
 }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
+
 (async () => {
   try {
-    if (typeof sb !== "undefined" && sb?.auth?.getSession) {
-      const { data } = await sb.auth.getSession();
-      const uid = data?.session?.user?.id;
-      if (uid) {
-        const { data: prof } = await sb.from("profiles").select("theme").eq("id", uid).maybeSingle();
-        let rowTheme = prof?.theme;
-        if (typeof rowTheme === "string") { try { rowTheme = JSON.parse(rowTheme); } catch { rowTheme = null; } }
-        if (rowTheme && (rowTheme.color || rowTheme.mode || rowTheme.wallpaper)) {
-          try { localStorage.setItem("wt_theme", JSON.stringify(rowTheme)); } catch {}
-          applyTheme(rowTheme);
-        }
+    if (typeof sb === "undefined" || !sb?.auth?.getSession) return;
+    const { data } = await sb.auth.getSession();
+    const sess = data?.session;
+    const uid = sess?.user?.id;
+    if (!uid) return;
+
+    const { data: prof } = await sb.from("profiles").select("theme").eq("id", uid).maybeSingle();
+    let rowTheme = prof?.theme;
+    if (typeof rowTheme === "string") { try { rowTheme = JSON.parse(rowTheme); } catch { rowTheme = null; } }
+    if (rowTheme && (rowTheme.color || rowTheme.mode || rowTheme.wallpaper)) {
+      try { localStorage.setItem("wt_theme", JSON.stringify(rowTheme)); } catch {}
+      applyTheme(rowTheme);
+    }
+
+    const ar = await fetch("/api/security/alerts", { headers: { Authorization: "Bearer " + sess.access_token } });
+    const aj = await ar.json().catch(() => ({}));
+    const alerts = aj?.data || [];
+    if (alerts.length) {
+      const a = alerts[0];
+      if (window.Notification && Notification.permission === "granted") {
+        try { new Notification("Web Tok Security Alert", { body: "New login detected on your account." }); } catch {}
       }
+      const banner = document.createElement("div");
+      banner.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:99;max-width:min(92vw,520px);background:var(--card);color:var(--text);padding:14px 18px;border-radius:24px;box-shadow:0 12px 36px #0005;display:flex;flex-direction:column;gap:8px;border:2px solid var(--primary);font-size:13px";
+      banner.innerHTML = `<div style="font-weight:700">New device login detected</div>
+        <div style="color:var(--muted);word-break:break-word">${String(a.user_agent || "Unknown device").replace(/</g, "&lt;")}</div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" id="wtAckAlert" style="padding:7px 14px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font-weight:700;cursor:pointer">This was me</button>
+          <button type="button" id="wtKickAll" style="padding:7px 14px;border-radius:999px;border:0;background:var(--bad,#b3261e);color:#fff;font-weight:700;cursor:pointer">Sign out all devices</button>
+        </div>`;
+      document.body.appendChild(banner);
+      banner.querySelector("#wtAckAlert").onclick = async () => {
+        await fetch("/api/security/alerts/ack", { method: "POST", headers: { Authorization: "Bearer " + sess.access_token } });
+        banner.remove();
+      };
+      banner.querySelector("#wtKickAll").onclick = async () => {
+        await fetch("/api/security/logout-all", { method: "POST", headers: { Authorization: "Bearer " + sess.access_token } });
+        try { await sb.auth.signOut(); localStorage.removeItem("wt_accounts"); } catch {}
+        location.href = "/login";
+      };
     }
   } catch {}
 })();

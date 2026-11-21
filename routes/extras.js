@@ -5,7 +5,8 @@
    4) Sign-up accepted_terms
    5) Group chats with friend invites & acceptance
    6) Custom user stickers & comment replies
-   7) Group Voice Calls (WebRTC signaling), Group Watch (synced Web Tok + live reactions), & Shared Whiteboard */
+   7) Group Voice Calls, Group Watch, Shared Whiteboard
+   8) Security hardening: 20-minute post-login posting cooldown & new-device login alerts */
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -18,6 +19,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
   const TOS_VERSION = "2026-11-20";
   const RESTRICTIONS = ["post", "comment", "message"];
+  const POST_COOLDOWN_MS = 20 * 60 * 1000;
   const safeArr = s => { try { const a = JSON.parse(s || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
 
   /* ---------- database setup (safe to run every start) ---------- */
@@ -34,7 +36,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     }
     const ucols = (await db.execute("PRAGMA table_info(users)")).rows.map(r => r[1]);
     for (const [n, d] of [["role", "TEXT NOT NULL DEFAULT 'user'"], ["restrictions", "TEXT NOT NULL DEFAULT '[]'"], ["banned", "INTEGER NOT NULL DEFAULT 0"],
-      ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"]]) {
+      ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"], ["last_login_at", "TEXT"]]) {
       if (!ucols.includes(n)) await db.execute(`ALTER TABLE users ADD COLUMN ${n} ${d}`);
     }
     await db.batch([
@@ -43,9 +45,12 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS group_members (group_id TEXT NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL, invited_by TEXT, created_at TEXT NOT NULL, last_read_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (group_id, user_id))",
       "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, sender_id TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS user_stickers (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS known_devices (user_id TEXT NOT NULL, device_id TEXT NOT NULL, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL, PRIMARY KEY (user_id, device_id))",
+      "CREATE TABLE IF NOT EXISTS login_alerts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL, user_agent TEXT NOT NULL, ip TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_alerts_user ON login_alerts(user_id, seen, created_at DESC)",
     ], "write");
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
     if (ownerEmail && !(await run("SELECT 1 FROM users WHERE role = 'owner'")).length) {
@@ -59,12 +64,43 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   async function stateOf(uid) {
     const c = cache.get(uid);
     if (c && c.t > Date.now()) return c.s;
-    const u = (await run("SELECT role, banned, ban_reason, restrictions, sessions_valid_after FROM users WHERE id = ?", [uid]))[0];
-    const s = u ? { role: u.role, banned: !!u.banned, reason: u.ban_reason, restrictions: safeArr(u.restrictions), after: u.sessions_valid_after ? Date.parse(u.sessions_valid_after) : 0 } : null;
+    const u = (await run("SELECT role, banned, ban_reason, restrictions, sessions_valid_after, last_login_at FROM users WHERE id = ?", [uid]))[0];
+    const s = u ? {
+      role: u.role, banned: !!u.banned, reason: u.ban_reason, restrictions: safeArr(u.restrictions),
+      after: u.sessions_valid_after ? Date.parse(u.sessions_valid_after) : 0,
+      lastLoginAt: u.last_login_at ? Date.parse(u.last_login_at) : 0
+    } : null;
     cache.set(uid, { s, t: Date.now() + 20000 });
     return s;
   }
   const forget = uid => cache.delete(uid);
+  app.locals.forgetUser = forget;
+
+  function deviceFingerprint(req) {
+    const ua = String(req.headers["user-agent"] || "Unknown device").slice(0, 180);
+    const explicit = String(req.headers["x-wt-device"] || req.body?.deviceId || "").trim().slice(0, 64);
+    const id = explicit || crypto.createHash("sha256").update(ua + "|" + String(req.ip || "")).digest("hex").slice(0, 24);
+    return { id, ua, ip: String(req.ip || "").slice(0, 64) };
+  }
+
+  app.locals.recordLoginDevice = async (uid, req, isSignup = false) => {
+    try {
+      await ensure();
+      const { id, ua, ip } = deviceFingerprint(req);
+      const ts = nowIso();
+      const existing = (await run("SELECT 1 FROM known_devices WHERE user_id = ? AND device_id = ?", [uid, id]))[0];
+      if (existing) {
+        await db.execute({ sql: "UPDATE known_devices SET last_seen = ? WHERE user_id = ? AND device_id = ?", args: [ts, uid, id] });
+        return;
+      }
+      const prevCount = (await run("SELECT COUNT(*) n FROM known_devices WHERE user_id = ?", [uid]))[0].n;
+      await db.execute({ sql: "INSERT INTO known_devices (user_id, device_id, first_seen, last_seen) VALUES (?,?,?,?)", args: [uid, id, ts, ts] });
+      if (!isSignup && prevCount > 0) {
+        await db.execute({ sql: "INSERT INTO login_alerts (id, user_id, device_id, user_agent, ip, seen, created_at) VALUES (?,?,?,?,?,0,?)", args: [crypto.randomUUID(), uid, id, ua, ip, ts] });
+      }
+    } catch (e) { console.warn("recordLoginDevice:", e.message); }
+  };
+
   const deny = (res, code, message) => res.status(code).json({ data: null, error: { message } });
 
   /* ---------- checks that run before every /api request ---------- */
@@ -86,6 +122,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       if (req.method === "POST" && req.path === "/db" && (body.op === "insert" || body.op === "upsert")) need = { comments: "comment", messages: "message", videos: "post" }[body.table] || null;
       if (req.method === "POST" && req.path === "/storage/presign" && body.bucket === "videos") need = "post";
       if (need && st.restrictions.includes(need)) return deny(res, 403, `You aren't allowed to ${need === "post" ? "post videos" : need === "comment" ? "comment" : "send messages"} right now.`);
+      if (need === "post" && st.lastLoginAt) {
+        const elapsed = Date.now() - st.lastLoginAt;
+        if (elapsed >= 0 && elapsed < POST_COOLDOWN_MS) {
+          const mins = Math.ceil((POST_COOLDOWN_MS - elapsed) / 60000);
+          return deny(res, 403, `Security cooldown: you can post videos in ${mins} minute${mins === 1 ? "" : "s"} after signing in.`);
+        }
+      }
       next();
     } catch (e) { next(e); }
   });
@@ -107,6 +150,25 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     });
     next();
   });
+
+  /* ---------- security alerts API ---------- */
+  app.get("/api/security/alerts", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const alerts = await run("SELECT id, user_agent, created_at FROM login_alerts WHERE user_id = ? AND seen = 0 ORDER BY created_at DESC LIMIT 10", [uid]);
+    return { data: alerts, error: null };
+  }));
+  app.post("/api/security/alerts/ack", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await db.execute({ sql: "UPDATE login_alerts SET seen = 1 WHERE user_id = ? AND seen = 0", args: [uid] });
+    return { data: true, error: null };
+  }));
+  app.post("/api/security/logout-all", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await db.execute({ sql: "UPDATE users SET sessions_valid_after = ? WHERE id = ?", args: [nowIso(), uid] });
+    await db.execute({ sql: "UPDATE login_alerts SET seen = 1 WHERE user_id = ?", args: [uid] });
+    forget(uid);
+    return { data: true, error: null };
+  }));
 
   /* ---------- pages ---------- */
   const page = f => (_q, res) => res.sendFile(path.join(__dirname, "..", "public", "pages", f));
@@ -214,6 +276,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         const u = new URL(req.url, "http://localhost");
         const tok = jwt.verify(u.searchParams.get("token") || "", SECRET);
         if (!tok || tok.t !== "a") { ws.close(); return; }
+        const st = await stateOf(tok.sub);
+        if (!st || st.banned || tok.iat < Math.floor(st.after / 1000)) { ws.close(); return; }
         uid = tok.sub;
       } catch { ws.close(); return; }
 
