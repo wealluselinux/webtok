@@ -1,4 +1,4 @@
-/* Scratch-style Blockly workspace with Events, Motion, Jump/Gravity, Wait, NPCs & AI, Sensing & Draw blocks */
+/* Scratch-style Blockly workspace with Events, Motion, Rendering (collidable shapes), NPCs & AI, Sensing & Draw */
 let blocklyWs = null, blocklyLoaded = false;
 
 function loadScript(src) {
@@ -33,15 +33,20 @@ async function ensureBlockly(container) {
       { kind: "category", name: "Motion", colour: "#4c97ff", contents: [
         { kind: "block", type: "wt_move_xy", inputs: { DX: { shadow: { type: "math_number", fields: { NUM: 5 } } }, DY: { shadow: { type: "math_number", fields: { NUM: 0 } } } } },
         { kind: "block", type: "wt_set_xy", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 200 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 200 } } } } },
-        { kind: "block", type: "wt_jump", inputs: { PWR: { shadow: { type: "math_number", fields: { NUM: 10 } } } } },
-        { kind: "block", type: "wt_apply_gravity", inputs: { G: { shadow: { type: "math_number", fields: { NUM: 0.5 } } }, FLR: { shadow: { type: "math_number", fields: { NUM: 340 } } } } },
+        { kind: "block", type: "wt_jump", inputs: { PWR: { shadow: { type: "math_number", fields: { NUM: 12 } } } } },
+        { kind: "block", type: "wt_apply_gravity", inputs: { G: { shadow: { type: "math_number", fields: { NUM: 0.6 } } }, FLR: { shadow: { type: "math_number", fields: { NUM: 340 } } } } },
         { kind: "block", type: "wt_keep_in_bounds" },
         { kind: "block", type: "wt_player_x" },
         { kind: "block", type: "wt_player_y" }
       ]},
+      { kind: "category", name: "Rendering", colour: "#00bfa5", contents: [
+        { kind: "block", type: "wt_render_bg" },
+        { kind: "block", type: "wt_render_shape", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 200 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 260 } } }, W: { shadow: { type: "math_number", fields: { NUM: 110 } } }, H: { shadow: { type: "math_number", fields: { NUM: 22 } } } } },
+        { kind: "block", type: "wt_touching_col" }
+      ]},
       { kind: "category", name: "NPCs & AI", colour: "#ec407a", contents: [
-        { kind: "block", type: "wt_spawn_npc", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 200 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 120 } } }, SZ: { shadow: { type: "math_number", fields: { NUM: 34 } } } } },
-        { kind: "block", type: "wt_npc_ai", inputs: { SP: { shadow: { type: "math_number", fields: { NUM: 2.2 } } } } },
+        { kind: "block", type: "wt_spawn_npc", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 80 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 100 } } }, SZ: { shadow: { type: "math_number", fields: { NUM: 34 } } } } },
+        { kind: "block", type: "wt_npc_ai", inputs: { SP: { shadow: { type: "math_number", fields: { NUM: 2 } } } } },
         { kind: "block", type: "wt_update_npcs" },
         { kind: "block", type: "wt_touching_npc" },
         { kind: "block", type: "wt_npc_say" },
@@ -51,8 +56,6 @@ async function ensureBlockly(container) {
         { kind: "block", type: "wt_clear_canvas" },
         { kind: "block", type: "wt_set_color" },
         { kind: "block", type: "wt_draw_player", inputs: { SZ: { shadow: { type: "math_number", fields: { NUM: 28 } } } } },
-        { kind: "block", type: "wt_draw_rect", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 180 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 180 } } }, W: { shadow: { type: "math_number", fields: { NUM: 40 } } }, H: { shadow: { type: "math_number", fields: { NUM: 40 } } } } },
-        { kind: "block", type: "wt_draw_circle", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 200 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 200 } } }, R: { shadow: { type: "math_number", fields: { NUM: 16 } } } } },
         { kind: "block", type: "wt_draw_text", inputs: { X: { shadow: { type: "math_number", fields: { NUM: 120 } } }, Y: { shadow: { type: "math_number", fields: { NUM: 50 } } } } },
         { kind: "block", type: "wt_draw_score" }
       ]},
@@ -89,6 +92,8 @@ function registerScratchBlocks() {
   const B = Blockly.Blocks, G = getJsGen();
   const KEY_OPTS = [["ArrowLeft","ArrowLeft"],["ArrowRight","ArrowRight"],["ArrowUp","ArrowUp"],["ArrowDown","ArrowDown"],["Space"," "]];
   const AI_OPTS = [["Chase Player","chase"],["Patrol Left-Right","patrol"],["Bounce Around","bounce"],["Flee Player","flee"],["Orbit Player","orbit"],["Stand Still","none"]];
+  const SHAPE_OPTS = [["Platform","platform"],["Square","square"],["Triangle","triangle"],["Circle","circle"],["Star","star"]];
+  const BG_OPTS = [["Midnight","midnight"],["Neon Grid","grid"],["Sunset","sunset"],["Space","space"]];
 
   B["wt_when_start"] = { init() { this.appendDummyInput().appendField("when game starts"); this.appendStatementInput("DO"); this.setColour("#ffab19"); } };
   G.forBlock["wt_when_start"] = (b, g) => `(async()=>{\n${g.statementToCode(b, "DO")}})();\n`;
@@ -114,6 +119,14 @@ function registerScratchBlocks() {
   B["wt_player_y"] = { init() { this.appendDummyInput().appendField("player y"); this.setOutput(true, "Number"); this.setColour("#4c97ff"); } };
   G.forBlock["wt_player_y"] = () => ["player.y", G.ORDER_ATOMIC];
 
+  // Rendering (with collidable flag)
+  B["wt_render_bg"] = { init() { this.appendDummyInput().appendField("render background").appendField(new Blockly.FieldDropdown(BG_OPTS), "BG"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#00bfa5"); } };
+  G.forBlock["wt_render_bg"] = b => `_renderBg(${JSON.stringify(b.getFieldValue("BG"))});\n`;
+  B["wt_render_shape"] = { init() { this.appendDummyInput().appendField("render").appendField(new Blockly.FieldDropdown(SHAPE_OPTS), "SH"); this.appendValueInput("X").setCheck("Number").appendField("x"); this.appendValueInput("Y").setCheck("Number").appendField("y"); this.appendValueInput("W").setCheck("Number").appendField("w"); this.appendValueInput("H").setCheck("Number").appendField("h"); this.appendDummyInput().appendField("color").appendField(new Blockly.FieldColour("#a8dab5"), "COL").appendField("collidable").appendField(new Blockly.FieldDropdown([["Yes","1"],["No","0"]]), "SOLID"); this.setInputsInline(true); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#00bfa5"); } };
+  G.forBlock["wt_render_shape"] = (b, g) => `_renderObj(${JSON.stringify(b.getFieldValue("SH"))},${g.valueToCode(b,"X",0)||200},${g.valueToCode(b,"Y",0)||260},${g.valueToCode(b,"W",0)||80},${g.valueToCode(b,"H",0)||22},${JSON.stringify(b.getFieldValue("COL"))},${b.getFieldValue("SOLID")==="1"});\n`;
+  B["wt_touching_col"] = { init() { this.appendDummyInput().appendField("touching collidable?"); this.setOutput(true, "Boolean"); this.setColour("#00bfa5"); } };
+  G.forBlock["wt_touching_col"] = () => ["_hitCol", G.ORDER_ATOMIC];
+
   // NPCs & AI
   B["wt_spawn_npc"] = { init() { this.appendDummyInput().appendField("spawn NPC").appendField(new Blockly.FieldTextInput("enemy"), "NAME"); this.appendValueInput("X").setCheck("Number").appendField("x"); this.appendValueInput("Y").setCheck("Number").appendField("y"); this.appendValueInput("SZ").setCheck("Number").appendField("size"); this.setInputsInline(true); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#ec407a"); } };
   G.forBlock["wt_spawn_npc"] = (b, g) => `_spawnNpc(${JSON.stringify(b.getFieldValue("NAME"))},${g.valueToCode(b,"X",0)||200},${g.valueToCode(b,"Y",0)||120},${g.valueToCode(b,"SZ",0)||32});\n`;
@@ -130,15 +143,11 @@ function registerScratchBlocks() {
 
   // Looks & Draw
   B["wt_clear_canvas"] = { init() { this.appendDummyInput().appendField("clear screen"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
-  G.forBlock["wt_clear_canvas"] = () => `ctx.fillStyle="#16121e";ctx.fillRect(0,0,400,400);\n`;
+  G.forBlock["wt_clear_canvas"] = () => `_hitCol=false;ctx.fillStyle="#16121e";ctx.fillRect(0,0,400,400);\n`;
   B["wt_set_color"] = { init() { this.appendDummyInput().appendField("set color").appendField(new Blockly.FieldColour("#d0bcff"), "COL"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
   G.forBlock["wt_set_color"] = b => `ctx.fillStyle=${JSON.stringify(b.getFieldValue("COL"))};\n`;
   B["wt_draw_player"] = { init() { this.appendValueInput("SZ").setCheck("Number").appendField("draw player size"); this.setInputsInline(true); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
   G.forBlock["wt_draw_player"] = (b, g) => `{const _s=${g.valueToCode(b,"SZ",0)||28};ctx.beginPath();ctx.roundRect(player.x-_s/2,player.y-_s/2,_s,_s,8);ctx.fill();}\n`;
-  B["wt_draw_rect"] = { init() { this.appendValueInput("X").setCheck("Number").appendField("draw rect x"); this.appendValueInput("Y").setCheck("Number").appendField("y"); this.appendValueInput("W").setCheck("Number").appendField("w"); this.appendValueInput("H").setCheck("Number").appendField("h"); this.setInputsInline(true); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
-  G.forBlock["wt_draw_rect"] = (b, g) => `ctx.fillRect(${g.valueToCode(b,"X",0)||0},${g.valueToCode(b,"Y",0)||0},${g.valueToCode(b,"W",0)||30},${g.valueToCode(b,"H",0)||30});\n`;
-  B["wt_draw_circle"] = { init() { this.appendValueInput("X").setCheck("Number").appendField("draw circle x"); this.appendValueInput("Y").setCheck("Number").appendField("y"); this.appendValueInput("R").setCheck("Number").appendField("r"); this.setInputsInline(true); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
-  G.forBlock["wt_draw_circle"] = (b, g) => `ctx.beginPath();ctx.arc(${g.valueToCode(b,"X",0)||200},${g.valueToCode(b,"Y",0)||200},${g.valueToCode(b,"R",0)||15},0,7);ctx.fill();\n`;
   B["wt_draw_text"] = { init() { this.appendDummyInput().appendField("draw text").appendField(new Blockly.FieldTextInput("Web Tok!"), "TXT"); this.appendValueInput("X").setCheck("Number").appendField("x"); this.appendValueInput("Y").setCheck("Number").appendField("y"); this.setInputsInline(true); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
   G.forBlock["wt_draw_text"] = (b, g) => `ctx.font="bold 20px sans-serif";ctx.fillText(${JSON.stringify(b.getFieldValue("TXT"))},${g.valueToCode(b,"X",0)||20},${g.valueToCode(b,"Y",0)||40});\n`;
   B["wt_draw_score"] = { init() { this.appendDummyInput().appendField("draw score at top"); this.setPreviousStatement(true); this.setNextStatement(true); this.setColour("#9966ff"); } };
@@ -172,9 +181,9 @@ function loadDefaultScratchBlocks() {
       <block type="controls_if"><value name="IF0"><block type="wt_key_down"><field name="KEY">ArrowLeft</field></block></value><statement name="DO0"><block type="wt_move_xy"><value name="DX"><shadow type="math_number"><field name="NUM">-6</field></shadow></value><value name="DY"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></statement>
       <next><block type="controls_if"><value name="IF0"><block type="wt_key_down"><field name="KEY">ArrowRight</field></block></value><statement name="DO0"><block type="wt_move_xy"><value name="DX"><shadow type="math_number"><field name="NUM">6</field></shadow></value><value name="DY"><shadow type="math_number"><field name="NUM">0</field></shadow></value></block></statement>
       <next><block type="wt_apply_gravity"><value name="G"><shadow type="math_number"><field name="NUM">0.6</field></shadow></value><value name="FLR"><shadow type="math_number"><field name="NUM">340</field></shadow></value>
-      <next><block type="wt_keep_in_bounds"><next><block type="wt_clear_canvas"><next><block type="wt_set_color"><field name="COL">#d0bcff</field><next><block type="wt_draw_player"><value name="SZ"><shadow type="math_number"><field name="NUM">30</field></shadow></value><next><block type="wt_update_npcs"><next><block type="wt_draw_score"></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block>
+      <next><block type="wt_keep_in_bounds"><next><block type="wt_render_bg"><field name="BG">grid</field><next><block type="wt_render_shape"><field name="SH">platform</field><value name="X"><shadow type="math_number"><field name="NUM">200</field></shadow></value><value name="Y"><shadow type="math_number"><field name="NUM">260</field></shadow></value><value name="W"><shadow type="math_number"><field name="NUM">120</field></shadow></value><value name="H"><shadow type="math_number"><field name="NUM">20</field></shadow></value><field name="COL">#a8dab5</field><field name="SOLID">1</field><next><block type="wt_set_color"><field name="COL">#d0bcff</field><next><block type="wt_draw_player"><value name="SZ"><shadow type="math_number"><field name="NUM">30</field></shadow></value><next><block type="wt_update_npcs"><next><block type="wt_draw_score"></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block></next></block>
     </statement></block>
-    <block type="wt_on_key" x="20" y="480"><field name="KEY"> </field><statement name="DO"><block type="wt_jump"><value name="PWR"><shadow type="math_number"><field name="NUM">12</field></shadow></value></block></statement></block>
+    <block type="wt_on_key" x="20" y="520"><field name="KEY"> </field><statement name="DO"><block type="wt_jump"><value name="PWR"><shadow type="math_number"><field name="NUM">12</field></shadow></value></block></statement></block>
   </xml>`;
   blocklyWs.clear();
   Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), blocklyWs);
@@ -183,7 +192,17 @@ function loadDefaultScratchBlocks() {
 function getScratchJs() {
   const G = getJsGen();
   if (!blocklyWs || !G) return "";
-  const npcRuntime = `const _npcArt=${JSON.stringify(window.wtNpcs || {})},_npcs={};
+  const runtime = `const _npcArt=${JSON.stringify(window.wtNpcs || {})},_npcs={};let _hitCol=false;
+function _renderBg(bg){_hitCol=false;if(bg==="sunset"){const g=ctx.createLinearGradient(0,0,0,400);g.addColorStop(0,"#3a1c71");g.addColorStop(1,"#d76d77");ctx.fillStyle=g;ctx.fillRect(0,0,400,400);}else{ctx.fillStyle="#16121e";ctx.fillRect(0,0,400,400);}
+  if(bg==="grid"){ctx.strokeStyle="#ffffff12";for(let i=40;i<400;i+=40){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,400);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(400,i);ctx.stroke();}}
+  else if(bg==="space"){ctx.fillStyle="#fff6";for(let i=0;i<24;i++)ctx.fillRect((i*73)%390,(i*137)%390,2,2);}}
+function _renderObj(sh,x,y,w,h,col,solid){ctx.fillStyle=col;
+  if(sh==="circle"){ctx.beginPath();ctx.arc(x,y,Math.min(w,h)/2,0,6.28);ctx.fill();}
+  else if(sh==="triangle"){ctx.beginPath();ctx.moveTo(x,y-h/2);ctx.lineTo(x+w/2,y+h/2);ctx.lineTo(x-w/2,y+h/2);ctx.closePath();ctx.fill();}
+  else if(sh==="star"){ctx.beginPath();for(let i=0;i<10;i++){const r=i%2?Math.min(w,h)/4:Math.min(w,h)/2,a=i*Math.PI/5-Math.PI/2;ctx[i?"lineTo":"moveTo"](x+Math.cos(a)*r,y+Math.sin(a)*r);}ctx.closePath();ctx.fill();}
+  else{ctx.beginPath();ctx.roundRect(x-w/2,y-h/2,w,h,sh==="platform"?8:4);ctx.fill();}
+  if(solid){const pw=28,ph=28,dx=player.x-x,dy=player.y-y,ox=(w+pw)/2-Math.abs(dx),oy=(h+ph)/2-Math.abs(dy);
+    if(ox>0&&oy>0){_hitCol=true;if(ox<oy)player.x+=dx>0?ox:-ox;else if(dy<0&&player.vy>=0){player.y=y-h/2-ph/2;player.vy=0;player.onGround=true;}else{player.y+=dy>0?oy:-oy;if(dy>0)player.vy=0;}}}}
 function _spawnNpc(n,x,y,sz){const img=new Image();if(_npcArt[n])img.src=_npcArt[n];_npcs[n]={n,x,y,sz:sz||32,vx:2,vy:2,ai:"none",sp:2,say:"",img};}
 function _setNpcAi(n,ai,sp){if(_npcs[n]){_npcs[n].ai=ai;_npcs[n].sp=sp||2;}}
 function _hitNpc(n){const o=_npcs[n];return o?Math.hypot(player.x-o.x,player.y-o.y)<(o.sz/2+14):false;}
@@ -198,7 +217,7 @@ function _updateNpcs(){for(const k in _npcs){const o=_npcs[k],s=o.sp;
   else{ctx.fillStyle="#ff7eb6";ctx.beginPath();ctx.roundRect(o.x-o.sz/2,o.y-o.sz/2,o.sz,o.sz,8);ctx.fill();}
   if(o.say){ctx.fillStyle="#fff";ctx.font="bold 12px sans-serif";ctx.textAlign="center";ctx.fillText(o.say,o.x,o.y-o.sz/2-8);ctx.textAlign="left";}
 }}\n`;
-  return npcRuntime + G.workspaceToCode(blocklyWs);
+  return runtime + G.workspaceToCode(blocklyWs);
 }
 function getScratchXml() { return blocklyWs ? Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(blocklyWs)) : ""; }
 function setScratchXml(xml) { if (!blocklyWs || !xml) return; blocklyWs.clear(); Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), blocklyWs); }
