@@ -53,9 +53,12 @@ function buildPyDoc(py) {
 }
 
 function buildScratchDoc(jsCode) {
-  return `<!DOCTYPE html><html><body style="margin:0;background:#16121e;display:grid;place-items:center;height:100vh">
+  return `<!DOCTYPE html><html><body style="margin:0;background:#16121e;display:grid;place-items:center;height:100vh;overflow:hidden">
     <canvas id="c" width="400" height="400" style="background:#1d192b;border-radius:16px;max-width:100%"></canvas>
-    <script>const canvas=document.getElementById("c"),ctx=canvas.getContext("2d");
+    <script>const canvas=document.getElementById("c"),ctx=canvas.getContext("2d"),keys={};
+    let score=0;const player={x:200,y:340,vx:0,vy:0,onGround:true};
+    addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();keys[e.key]=true;});
+    addEventListener("keyup",e=>{keys[e.key]=false;});
     try{${jsCode}}catch(e){ctx.fillStyle="#ff8a80";ctx.font="14px monospace";ctx.fillText(e.message,12,24)}<\/script></body></html>`;
 }
 
