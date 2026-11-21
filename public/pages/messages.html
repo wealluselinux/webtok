@@ -6,7 +6,9 @@
 :root{
   --bg:#f6f1fc;--surface:#ede5f7;--card:#e2d4f4;--primary:#6750a4;--on-primary:#fff;
   --text:#1d192b;--muted:#625b71;--accent:#ffd8e4;--on-accent:#31111d;--bad:#b3261e;
-  --spring:cubic-bezier(.2,.9,.3,1.1)
+  --spring:cubic-bezier(.2,.9,.3,1.1);
+  --m3-cookie-7:polygon(94.8% 50.0%,97.1% 53.5%,98.4% 57.3%,98.4% 61.0%,96.8% 64.4%,93.9% 67.2%,90.4% 69.4%,86.7% 71.2%,83.6% 72.9%,81.3% 74.9%,79.8% 77.6%,78.8% 81.1%,77.9% 85.0%,76.6% 89.0%,74.5% 92.4%,71.5% 94.7%,67.9% 95.6%,63.9% 95.1%,60.0% 93.7%,56.3% 91.9%,53.0% 90.5%,50.0% 90.0%,47.0% 90.5%,43.7% 91.9%,40.0% 93.7%,36.1% 95.1%,32.1% 95.6%,28.5% 94.7%,25.5% 92.4%,23.4% 89.0%,22.1% 85.0%,21.2% 81.1%,20.2% 77.6%,18.7% 74.9%,16.4% 72.9%,13.3% 71.2%,9.6% 69.4%,6.1% 67.2%,3.2% 64.4%,1.6% 61.0%,1.6% 57.3%,2.9% 53.5%,5.2% 50.0%,7.7% 46.8%,9.8% 43.9%,11.0% 41.1%,11.2% 38.0%,10.5% 34.5%,9.6% 30.6%,9.1% 26.4%,9.5% 22.4%,11.2% 19.1%,14.1% 16.7%,17.9% 15.4%,22.1% 15.0%,26.1% 15.0%,29.7% 14.8%,32.6% 14.0%,35.2% 12.2%,37.5% 9.5%,40.0% 6.3%,43.0% 3.3%,46.3% 1.2%,50.0% 0.4%,53.7% 1.2%,57.0% 3.3%,60.0% 6.3%,62.5% 9.5%,64.8% 12.2%,67.4% 14.0%,70.3% 14.8%,73.9% 15.0%,77.9% 15.0%,82.1% 15.4%,85.9% 16.7%,88.8% 19.1%,90.5% 22.4%,90.9% 26.4%,90.4% 30.6%,89.5% 34.5%,88.8% 38.0%,89.0% 41.1%,90.2% 43.9%,92.3% 46.8%);
+  --m3-cookie-4:polygon(99.5% 50.0%,98.8% 54.8%,96.8% 59.3%,93.8% 63.3%,90.2% 66.6%,86.3% 69.4%,82.6% 71.8%,79.3% 74.1%,76.5% 76.5%,74.1% 79.3%,71.8% 82.6%,69.4% 86.3%,66.6% 90.2%,63.3% 93.8%,59.3% 96.8%,54.8% 98.8%,50.0% 99.5%,45.2% 98.8%,40.7% 96.8%,36.7% 93.8%,33.4% 90.2%,30.6% 86.3%,28.2% 82.6%,25.9% 79.3%,23.5% 76.5%,20.7% 74.1%,17.4% 71.8%,13.7% 69.4%,9.8% 66.6%,6.2% 63.3%,3.2% 59.3%,1.2% 54.8%,0.5% 50.0%,1.2% 45.2%,3.2% 40.7%,6.2% 36.7%,9.8% 33.4%,13.7% 30.6%,17.4% 28.2%,20.7% 25.9%,23.5% 23.5%,25.9% 20.7%,28.2% 17.4%,30.6% 13.7%,33.4% 9.8%,36.7% 6.2%,40.7% 3.2%,45.2% 1.2%,50.0% 0.5%,54.8% 1.2%,59.3% 3.2%,63.3% 6.2%,66.6% 9.8%,69.4% 13.7%,71.8% 17.4%,74.1% 20.7%,76.5% 23.5%,79.3% 25.9%,82.6% 28.2%,86.3% 30.6%,90.2% 33.4%,93.8% 36.7%,96.8% 40.7%,98.8% 45.2%)
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#16121e;--surface:#221c2e;--card:#312842;--primary:#d0bcff;--on-primary:#381e72;
@@ -44,11 +46,10 @@ body.has-wp #wp-scrim{opacity:.74}
 .fr-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fr-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* Organic Avatars */
-.av{width:44px;height:44px;border-radius:38% 62% 55% 45%/45% 38% 62% 55%;background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex:none;transition:border-radius .25s var(--spring)}
-.fr:hover .av{border-radius:50% 42% 48% 52%}
-.av.grp{background:var(--accent);color:var(--on-accent);border-radius:16px}
-.av.sys{background:var(--primary);color:var(--on-primary);border-radius:16px}
+/* 7-sided cookie & 4-sided cookie Avatars */
+.av{width:46px;height:46px;clip-path:var(--m3-cookie-7);background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex:none;transition:transform .25s var(--spring)}
+.fr:hover .av{transform:scale(1.06)}
+.av.grp{background:var(--accent);color:var(--on-accent);clip-path:var(--m3-cookie-4)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--primary);margin-left:auto;display:none;flex:none}
 .fr.unread .dot{display:block}
 .u-badge{margin-left:auto;background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;flex:none}
@@ -98,12 +99,15 @@ body.has-wp #wp-scrim{opacity:.74}
 .m-sender{font-size:11px;font-weight:700;color:var(--muted);padding:0 10px}
 .m{padding:11px 16px;border-radius:22px 22px 22px 6px;background:var(--surface);word-break:break-word;line-height:1.4}
 .m-wrap.me .m{background:var(--primary);color:var(--on-primary);border-radius:22px 22px 6px 22px}
+.vid-share-card{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:18px;background:var(--card);color:var(--text);text-decoration:none;margin-bottom:4px}
+.m-wrap.me .vid-share-card{background:#fff2;color:var(--on-primary)}
+.vid-share-ic{width:38px;height:38px;clip-path:var(--m3-cookie-4);background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
+.m-wrap.me .vid-share-ic{background:var(--on-primary);color:var(--primary)}
 #form{display:flex;gap:10px;padding:12px 16px;background:transparent}
 #form input{flex:1;padding:14px 20px;border-radius:999px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;transition:border-color .15s}
 #form input:focus{border-color:var(--primary)}
 #form button{border:0;border-radius:18px;background:var(--primary);color:var(--on-primary);width:50px;height:50px;cursor:pointer;display:grid;place-items:center;transition:border-radius .2s var(--spring),transform .15s}
 #form button:active{border-radius:999px;transform:scale(.95)}
-.ro-note{padding:14px 20px;text-align:center;color:var(--muted);font-size:13px;font-weight:600;border-top:1px solid var(--surface)}
 .empty{margin:auto;color:var(--muted);text-align:center;padding:30px;max-width:34ch;line-height:1.5}
 .hidden{display:none!important}
 #stkPanel{max-height:200px;overflow-y:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 16px;background:var(--surface);border-radius:24px 24px 0 0;margin:0 16px}
@@ -194,16 +198,16 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 <script src="/js/sidebar.js"></script>
 <script src="/js/theme.js"></script>
 <script>
-const NOTIF_ID="00000000-0000-0000-0000-000000000001";
 const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
-const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let me=null, token=null, cur=null, curType=null, friends=[], notifAcct=null, groups=[], invites=[], unreadBySender={}, activeTab="all", groupPoll=null, lastGroupMsgId=0;
+const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, activeTab="all", groupPoll=null, lastGroupMsgId=0;
 const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
 let lottieP=null;
 function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
 async function lottieIn(el,path){try{(await ensureLottie()).loadAnimation({container:el,renderer:"svg",loop:true,autoplay:true,path})}catch(e){console.warn(e)}}
 const STK=/^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i;
 const STKU=/^\[sticker_url:(https?:\/\/[^\]]+)\]$/i;
+const VSHARE=/^\[video_share:([^|\]]+)\|([^\]]*)\](?:\n([\s\S]*))?$/;
 function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.json$/i.test(file)){const b=document.createElement("div");b.className="stk-box";lottieIn(b,url);return b}const i=document.createElement("img");i.src=url;i.alt="sticker";i.loading="lazy";return i}
 function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error?.message||"Request failed");return j.data})}
 
@@ -282,8 +286,12 @@ async function handleWs(m){
 }
 
 async function joinCall(gid){
-  try{localStream=await navigator.mediaDevices.getUserMedia({audio:true});}
-  catch{alert("Microphone access is needed for voice call (or check browser permissions).");return;}
+  try{
+    localStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  }catch{
+    await wtAlert({title:"Microphone needed",message:"Microphone access is needed for voice calls. Check your browser permissions."});
+    return;
+  }
   await ensureWs();
   callGroupId=gid; isMuted=false;
   wsSend({type:"join-call",groupId:gid});
@@ -324,17 +332,23 @@ function drawStroke(s){
   ctx.lineTo(s.x1*c.width, s.y1*c.height);
   ctx.stroke();
 }
-function replayStrokes(list){setTimeout(()=>{(list||[]).forEach(drawStroke);},40);}
+function replayStrokes(list){
+  setTimeout(()=>{(list||[]).forEach(drawStroke);},40);
+}
 
-function renderCallUI(){
-  const callBtn=$("btnCall"), bar=$("callBar"), stage=$("stage");
+function renderCallUI(fromWatchSync=false){
+  const callBtn=$("btnCall");
+  const bar=$("callBar");
+  const stage=$("stage");
   if(!bar || !stage || curType!=="group" || !cur) return;
   const inThisCall = callGroupId===cur.id;
   if(callBtn){
     callBtn.innerHTML=inThisCall?'<span class="ms" style="font-size:16px">call_end</span>Leave call':`<span class="ms" style="font-size:16px">call</span>${callState.participants.length?`Join (${callState.participants.length})`:"Call"}`;
     callBtn.className="head-chip "+(inThisCall?"bad":"p");
   }
-  if(!inThisCall){bar.classList.add("hidden"); stage.classList.add("hidden"); return;}
+  if(!inThisCall){
+    bar.classList.add("hidden"); stage.classList.add("hidden"); return;
+  }
   bar.classList.remove("hidden");
   bar.innerHTML=`<div class="call-peers">${callState.participants.map(p=>`<div class="peer-pill"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`).join("")}</div>
   <div class="call-ctrls">
@@ -427,7 +441,7 @@ async function openPickVideo(){
       $("pickVidDlg").close();
       callState.watch={video:v,playing:true,time:0};
       wsSend({type:"watch-sync",video:v,playing:true,time:0});
-      renderCallUI();
+      renderCallUI(true);
     };
     list.appendChild(row);
   });
@@ -444,8 +458,15 @@ function bubble(m, showSender=false){
   }
   const d=document.createElement("div");d.className="m";
   const raw=(m.body||"").trim();
-  const su=STKU.exec(raw), s=STK.exec(raw);
-  if(su){d.classList.add("stk");const i=document.createElement("img");i.src=su[1];i.alt="sticker";i.loading="lazy";d.appendChild(i)}
+  const su=STKU.exec(raw), s=STK.exec(raw), vs=VSHARE.exec(raw);
+  if(vs){
+    const card=document.createElement("a");
+    card.className="vid-share-card";
+    card.href="/scroll#v="+encodeURIComponent(vs[1]);
+    card.innerHTML=`<div class="vid-share-ic"><span class="ms">play_arrow</span></div><div><b style="display:block;font-size:13px">${esc(vs[2]||"Shared Web Tok")}</b><small style="opacity:.8;font-size:11px">Tap to watch video</small></div>`;
+    d.appendChild(card);
+    if(vs[3]){const note=document.createElement("div");note.textContent=vs[3];d.appendChild(note);}
+  } else if(su){d.classList.add("stk");const i=document.createElement("img");i.src=su[1];i.alt="sticker";i.loading="lazy";d.appendChild(i)}
   else if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}
   else d.textContent=m.body;
   wrap.appendChild(d);
@@ -487,7 +508,7 @@ async function loadStickerGrid(pn,sendFn){
       const url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
       await api("/api/stickers",{method:"POST",body:JSON.stringify({name:f.name.replace(/\.[^.]+$/,"").slice(0,30)||"Sticker",url})});
       await loadStickerGrid(pn,sendFn);
-    }catch(err){alert(err?.message||"Could not create sticker.")}
+    }catch(err){await wtAlert({title:"Couldn't create sticker",message:err?.message||"Could not create sticker."})}
     finally{addBtn.disabled=false;e.target.value="";}
   };
   pn.appendChild(addBtn); pn.appendChild(fin);
@@ -511,26 +532,20 @@ async function openChat(f){
   cur=f; curType="dm"; document.body.classList.add("chatting");
   delete unreadBySender[f.id];
   renderSidebarList();
-  const isSys = f.id === NOTIF_ID;
-  const avHtml = isSys ? '<div class="av sys"><span class="ms">campaign</span></div>' : `<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
-  const footHtml = isSys
-    ? '<div class="ro-note">Official Web Tok announcements (read-only)</div>'
-    : '<div id="stkPanel" class="hidden"></div><form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>';
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}</div></div></div>
-  <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>${footHtml}`;
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}</div></div></div>
+  <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
+  <div id="stkPanel" class="hidden"></div>
+  <form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
   $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
   const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
   $("msgs").innerHTML="";
-  if(!data?.length) $("msgs").innerHTML=`<div class="empty">${isSys?"No announcements yet.":"No messages yet."}</div>`;
   (data||[]).forEach(m=>bubble(m,false));
   if(window.wtMarkRead)wtMarkRead(f.id);
-  if(!isSys){
-    async function send(body){const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
-      if(error){alert("Couldn't send: "+error.message);return false}bubble(m,false);return true}
-    $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
-    wireStickerPicker(send);
-    $("txt").focus();
-  }
+  async function send(body){const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
+    if(error){await wtAlert({title:"Couldn't send",message:error.message});return false}bubble(m,false);return true}
+  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
+  wireStickerPicker(send);
+  $("txt").focus();
 }
 
 async function openGroupChat(g){
@@ -547,7 +562,8 @@ async function openGroupChat(g){
   $("back").onclick=()=>{stopGroupPoll();document.body.classList.remove("chatting");cur=null;curType=null};
   $("btnCall").onclick=()=>{if(callGroupId===g.id)leaveCall();else joinCall(g.id);};
   $("btnLeaveGrp").onclick=async()=>{
-    if(!confirm(`Leave "${g.name}"?`))return;
+    const ok=await wtConfirm({title:"Leave group?",message:`Are you sure you want to leave "${g.name}"?`,icon:"logout",confirmText:"Leave",danger:true});
+    if(!ok)return;
     if(callGroupId===g.id) leaveCall();
     await api(`/api/groups/${encodeURIComponent(g.id)}/leave`,{method:"POST",body:"{}"});
     stopGroupPoll(); cur=null; curType=null; document.body.classList.remove("chatting");
@@ -571,7 +587,7 @@ async function openGroupChat(g){
       const em=$("msgs").querySelector(".empty"); if(em) em.remove();
       if(m.id>lastGroupMsgId){bubble(m,true);lastGroupMsgId=m.id;}
       return true;
-    }catch(err){alert("Couldn't send: "+err.message);return false}
+    }catch(err){await wtAlert({title:"Couldn't send",message:err.message});return false}
   }
   $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
   wireStickerPicker(send);
@@ -598,15 +614,6 @@ function renderSidebarList(){
   const showInvites=activeTab==="invites"||(activeTab==="all"&&invites.length);
   const showGroups=activeTab==="all"||activeTab==="groups";
   const showFriends=activeTab==="all"||activeTab==="friends";
-
-  if(activeTab==="all" && notifAcct){
-    const e=document.createElement("div");
-    e.className="fr"+(curType==="dm"&&cur?.id===NOTIF_ID?" on":"")+(unreadBySender[NOTIF_ID]?" unread":"");
-    e.dataset.id=NOTIF_ID;
-    e.innerHTML=`<div class="av sys"><span class="ms">campaign</span></div><div class="fr-meta"><div class="fr-name">${esc(notifAcct.display_name||"Notifications")}</div><div class="fr-sub">@${esc(notifAcct.username||"notifications")} · Announcements</div></div><i class="dot"></i>`;
-    e.onclick=()=>openChat(notifAcct);
-    fl.appendChild(e);
-  }
 
   if(showInvites && invites.length){
     const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Group Invites"; fl.appendChild(lbl);
@@ -662,7 +669,7 @@ function renderSidebarList(){
         e.onclick=()=>openChat(f);
         fl.appendChild(e);
       });
-    } else if(activeTab==="friends" || (activeTab==="all" && !groups.length && !invites.length && !notifAcct)){
+    } else if(activeTab==="friends" || (activeTab==="all" && !groups.length && !invites.length)){
       fl.innerHTML='<div class="empty">No friends yet. Follow someone and have them follow you back.</div>';
     }
   }
@@ -740,12 +747,7 @@ async function loadGroupsAndInvites(){
 (async()=>{
   const {data}=await sb.auth.getSession(); if(!data.session){location.href="/login";return}
   me=data.session.user.id; token=data.session.access_token;
-  const [a,b,np]=await Promise.all([
-    sb.from("follows").select("following_id").eq("follower_id",me),
-    sb.from("follows").select("follower_id").eq("following_id",me),
-    sb.from("profiles").select("id,username,display_name,avatar_url").eq("id",NOTIF_ID).maybeSingle()
-  ]);
-  notifAcct = np.data || { id: NOTIF_ID, username: "notifications", display_name: "Notifications", avatar_url: null };
+  const [a,b]=await Promise.all([sb.from("follows").select("following_id").eq("follower_id",me),sb.from("follows").select("follower_id").eq("following_id",me)]);
   const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
   if(ids.length){
     const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);
