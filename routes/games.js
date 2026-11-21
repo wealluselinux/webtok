@@ -87,24 +87,23 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
 
     const langGuide = lang === "python"
       ? "Write Python 3 code using the built-in `turtle` module (screen size ~400x400, `turtle.Turtle()`, `screen.listen()`, `screen.onkey(...)`, `screen.ontimer(...)`) so it runs in Skulpt in the browser. Do NOT import pygame or external packages."
-      : lang === "scratch"
-      ? "The user is using Scratch-style Blockly blocks that compile to HTML5 Canvas JavaScript. Give clear step-by-step block instructions, or provide clean HTML5 Canvas JavaScript if they want to switch to HTML/JS."
-      : "Write a complete, self-contained HTML5 document (`<!DOCTYPE html>...`) with inline CSS and `<canvas>` JavaScript. Make it responsive to fit a 420x480 box, support arrow keys/WASD and touch/click, and look clean.";
+      : "Write a complete, self-contained HTML5 document (`<!DOCTYPE html>...`) with inline CSS and `<canvas width=\"400\" height=\"400\">` JavaScript. Support arrow keys/WASD and touch/click, and make it look clean.";
 
+    const fence = lang === "python" ? "python" : "html";
     const sys = mode === "build"
-      ? `You are Web Tok Developer AI. Build a fun, playable mini-game based on the user's request.\n${langGuide}\nPut the full runnable code inside a single fenced code block (\`\`\`${lang === "python" ? "python" : "html"}\n...\n\`\`\`). Keep explanation to 1-2 short sentences.`
-      : `You are Web Tok Developer AI, a friendly coding assistant. Help the user debug, improve, or understand their ${lang} mini-game.\n${langGuide}\nIf you provide updated code, put the full runnable code in a single fenced code block.`;
+      ? `You are Web Tok Developer AI. Build a fun, playable mini-game based on the user's request.\n${langGuide}\nPut the ENTIRE complete, runnable code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`). Keep explanation to 1-2 short sentences.`
+      : `You are Web Tok Developer AI, a friendly coding assistant. Help the user fix, improve, or add features to their ${lang} mini-game.\n${langGuide}\nAlways output the ENTIRE updated, runnable game code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`) so it can be automatically applied to their game, plus 1-2 short sentences explaining the change.`;
 
     const userMsg = currentCode && mode === "help"
-      ? `My current ${lang} code:\n\`\`\`\n${currentCode}\n\`\`\`\n\nQuestion: ${prompt}`
+      ? `My current ${lang} code:\n\`\`\`\n${currentCode}\n\`\`\`\n\nRequest: ${prompt}`
       : prompt;
 
     const reply = await callNim(key, CHAT_MODELS, [
       { role: "system", content: sys },
       { role: "user", content: userMsg }
-    ], 1400);
+    ], 1500);
 
-    const codeMatch = /```(?:[a-zA-Z0-9_-]+)?\n([\s\S]*?)```/.exec(reply);
+    const codeMatch = /```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)```/.exec(reply);
     return {
       data: {
         reply,

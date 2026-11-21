@@ -24,15 +24,15 @@ s.onkey(go_right, "Right")
 print("Use arrow keys to move the dot!")`,
   html: `<!DOCTYPE html>
 <html><body style="margin:0;background:#16121e;color:#fff;display:grid;place-items:center;height:100vh;font-family:sans-serif">
-<canvas id="c" width="380" height="360" style="background:#1d192b;border-radius:16px"></canvas>
+<canvas id="c" width="400" height="400" style="background:#1d192b;border-radius:16px;max-width:100%"></canvas>
 <script>
 const c=document.getElementById("c"),ctx=c.getContext("2d");
-let x=190,y=180,vx=3,vy=2.5;
+let x=200,y=200,vx=3,vy=2.5;
 (function loop(){
   x+=vx;y+=vy;
-  if(x<16||x>364)vx=-vx;
-  if(y<16||y>344)vy=-vy;
-  ctx.fillStyle="#1d192b";ctx.fillRect(0,0,380,360);
+  if(x<16||x>384)vx=-vx;
+  if(y<16||y>384)vy=-vy;
+  ctx.fillStyle="#1d192b";ctx.fillRect(0,0,400,400);
   ctx.fillStyle="#d0bcff";ctx.beginPath();ctx.arc(x,y,16,0,7);ctx.fill();
   requestAnimationFrame(loop);
 })();
@@ -41,7 +41,7 @@ let x=190,y=180,vx=3,vy=2.5;
 
 function buildPyDoc(py) {
   return `<!DOCTYPE html><html><body style="margin:0;background:#16121e;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh">
-    <div id="mycanvas" style="width:380px;height:320px;background:#1d192b;border-radius:16px"></div>
+    <div id="mycanvas" style="width:400px;height:360px;background:#1d192b;border-radius:16px"></div>
     <pre id="out" style="margin:6px 0 0;font-size:12px;color:#d0bcff;max-height:48px;overflow:auto"></pre>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"><\/script>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"><\/script>
@@ -114,9 +114,9 @@ async function loadMyGames() {
 
 async function askAi(mode) {
   const prompt = $("aiPrompt").value.trim();
-  if (!prompt) return wtAlert({ title: "Developer AI", message: "Describe what you want to build or ask for help with." });
+  if (!prompt) return wtAlert({ title: "Developer AI", message: "Describe what you want to build or edit." });
   const out = $("aiOut");
-  out.classList.remove("hidden"); out.textContent = mode === "build" ? "AI is building your game…" : "AI is thinking…";
+  out.classList.remove("hidden"); out.textContent = mode === "build" ? "AI is building your game…" : "AI is updating your code…";
   $("btnAiHelp").disabled = $("btnAiBuild").disabled = true;
   try {
     const currentCode = curLang === "scratch" ? getScratchJs() : $("codeEd").value;
@@ -127,11 +127,13 @@ async function askAi(mode) {
     });
     const j = await r.json();
     if (!r.ok || j.error) throw new Error(j.error?.message || "AI request failed");
-    out.textContent = j.data.reply;
     if (j.data.code) {
       if (curLang === "scratch") await switchLang("html");
       $("codeEd").value = j.data.code;
       runPreview();
+      out.textContent = "Applied AI code to your game and updated Live Preview!\n\n" + j.data.reply;
+    } else {
+      out.textContent = j.data.reply;
     }
   } catch (e) {
     out.textContent = "Error: " + e.message;
