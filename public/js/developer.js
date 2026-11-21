@@ -31,7 +31,7 @@ let x=200,y=200,vx=3,vy=2.5;
 (function loop(){
   x+=vx;y+=vy;
   if(x<16||x>384)vx=-vx;
-  if(y<16||y>384)vy=-vy;
+  if(y<16||y>344)vy=-vy;
   ctx.fillStyle="#1d192b";ctx.fillRect(0,0,400,400);
   ctx.fillStyle="#d0bcff";ctx.beginPath();ctx.arc(x,y,16,0,7);ctx.fill();
   requestAnimationFrame(loop);
@@ -142,6 +142,31 @@ async function askAi(mode) {
     out.textContent = "Error: " + e.message;
   } finally { $("btnAiHelp").disabled = $("btnAiBuild").disabled = false; }
 }
+
+// Resizable coding area (drag divider + Expand toggle + Blockly auto-resize)
+const savedPrevW = Number(localStorage.getItem("wt_dev_prev_w") || 0);
+if (savedPrevW >= 280 && savedPrevW <= 760) $("prevPane").style.width = savedPrevW + "px";
+
+$("btnEdWide").onclick = () => {
+  const wide = $("devGrid").classList.toggle("ed-wide");
+  $("btnEdWide").innerHTML = wide
+    ? '<span class="ms" style="font-size:16px">close_fullscreen</span>Split View'
+    : '<span class="ms" style="font-size:16px">open_in_full</span>Expand';
+  if (typeof blocklyWs !== "undefined" && blocklyWs) Blockly.svgResize(blocklyWs);
+};
+
+let dragging = false;
+$("devResizer").onpointerdown = e => { dragging = true; $("devResizer").classList.add("on"); $("devResizer").setPointerCapture(e.pointerId); };
+$("devResizer").onpointermove = e => {
+  if (!dragging) return;
+  const r = $("devGrid").getBoundingClientRect();
+  const prevW = Math.max(280, Math.min(r.width - 300, r.right - e.clientX));
+  $("prevPane").style.width = Math.round(prevW) + "px";
+  localStorage.setItem("wt_dev_prev_w", String(Math.round(prevW)));
+  if (typeof blocklyWs !== "undefined" && blocklyWs) Blockly.svgResize(blocklyWs);
+};
+$("devResizer").onpointerup = () => { dragging = false; $("devResizer").classList.remove("on"); };
+new ResizeObserver(() => { if (typeof blocklyWs !== "undefined" && blocklyWs) Blockly.svgResize(blocklyWs); }).observe($("blocklyDiv"));
 
 $("langTabs").onclick = e => { const b = e.target.closest(".ltab"); if (b) switchLang(b.dataset.lang); };
 $("btnRun").onclick = runPreview;

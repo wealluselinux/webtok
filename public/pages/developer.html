@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="/css/base.css">
 <style>
 body{overflow:auto;padding:20px 16px 90px}
-.wrap{max-width:1240px;margin:0 auto;padding-left:var(--sbw,0px);display:flex;flex-direction:column;gap:14px}
+.wrap{max-width:1280px;margin:0 auto;padding-left:var(--sbw,0px);display:flex;flex-direction:column;gap:14px}
 @media(max-width:800px){.wrap{padding-left:0}}
 .dev-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .dev-top h1{font-size:24px;font-weight:700;display:flex;align-items:center;gap:8px}
@@ -17,11 +17,17 @@ body{overflow:auto;padding:20px 16px 90px}
 .lang-tabs{display:flex;gap:4px;background:var(--surface);padding:4px;border-radius:999px}
 .ltab{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;cursor:pointer}
 .ltab.on{background:var(--primary);color:var(--on-primary)}
-.dev-grid{display:grid;grid-template-columns:1fr 480px;gap:14px;align-items:stretch}
-@media(max-width:1080px){.dev-grid{grid-template-columns:1fr}}
+.dev-grid{display:flex;gap:0;align-items:stretch}
 .pane{background:var(--card);border-radius:var(--r-xl);padding:16px;display:flex;flex-direction:column;gap:10px;min-height:520px}
+#edPane{flex:1 1 auto;min-width:280px}
+#prevPane{width:460px;flex:none;min-width:280px}
+.dev-resizer{width:16px;flex:none;cursor:col-resize;display:grid;place-items:center;touch-action:none;user-select:none}
+.dev-resizer::after{content:"";width:4px;height:48px;border-radius:999px;background:var(--surface);transition:background .15s}
+.dev-resizer:hover::after,.dev-resizer.on::after{background:var(--primary)}
+.dev-grid.ed-wide #prevPane,.dev-grid.ed-wide .dev-resizer{display:none}
+@media(max-width:1080px){.dev-grid{flex-direction:column;gap:14px}.dev-resizer{display:none}#prevPane{width:100%}}
 #codeEd{flex:1;width:100%;min-height:440px;background:var(--bg);color:var(--text);border:0;border-radius:20px;padding:14px;font:13px/1.5 ui-monospace,monospace;resize:vertical;outline:0}
-#blocklyDiv{flex:1;min-height:440px;border-radius:20px;overflow:hidden;background:#fff}
+#blocklyDiv{flex:1;min-height:440px;border-radius:20px;overflow:auto;resize:vertical;background:#fff}
 #prevFrame{width:100%;flex:1;min-height:450px;border:0;border-radius:22px;background:#16121e}
 .ai-box{background:var(--card);border-radius:var(--r-xl);padding:16px;display:flex;flex-direction:column;gap:10px}
 .ai-row{display:flex;gap:8px;flex-wrap:wrap}
@@ -57,16 +63,20 @@ body{overflow:auto;padding:20px 16px 90px}
 
   <div class="my-list" id="myGamesBar"></div>
 
-  <div class="dev-grid">
-    <div class="pane">
-      <div style="display:flex;justify-content:space-between;align-items:center">
+  <div class="dev-grid" id="devGrid">
+    <div class="pane" id="edPane">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <b id="edLabel">Python Editor (Turtle Graphics)</b>
-        <button type="button" class="btn sm" id="btnResetTpl">Starter Template</button>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn sm" id="btnEdWide"><span class="ms" style="font-size:16px">open_in_full</span>Expand</button>
+          <button type="button" class="btn sm" id="btnResetTpl">Starter Template</button>
+        </div>
       </div>
       <textarea id="codeEd" spellcheck="false"></textarea>
       <div id="blocklyDiv" class="hidden"></div>
     </div>
-    <div class="pane">
+    <div class="dev-resizer" id="devResizer" title="Drag to resize coding area"></div>
+    <div class="pane" id="prevPane">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <b>Live Game Preview</b>
         <span style="font-size:12px;color:var(--muted)">Arcade size (400×400+)</span>
