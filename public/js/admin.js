@@ -51,20 +51,20 @@ function userCard(u) {
   return card;
 }
 async function resetPw(u) {
-  const ok = await wtConfirm({
-    title: `Reset password for @${u.username}?`,
-    message: "They will be signed out everywhere and given a temporary password.",
+  const pw = await wtPrompt({
+    title: `Set password for @${u.username}`,
+    message: "Type the new password directly (at least 6 characters). They will be signed out everywhere.",
+    placeholder: "Enter new password…",
     icon: "lock_reset",
-    confirmText: "Reset",
+    confirmText: "Set password",
     danger: true
   });
-  if (!ok) return;
-  const r = await api("/api/admin/reset-password", { userId: u.id });
+  if (pw === null) return;
+  const nextPw = pw.trim();
+  if (nextPw.length < 6) return toast("Password must be at least 6 characters.");
+  const r = await api("/api/admin/set-password", { userId: u.id, password: nextPw });
   if (r.error) return toast(r.error.message);
-  const box = $("result"); box.classList.remove("hidden");
-  box.replaceChildren(h("div", { text: `New temporary password for @${r.data.username} (${r.data.email}). It's shown only once:` }), h("code", { text: r.data.password }),
-    h("div", {}, h("button", { class: "btn", text: "Copy", onclick: () => navigator.clipboard && navigator.clipboard.writeText(r.data.password) }),
-      h("button", { class: "btn", style: "margin-left:8px", text: "Close", onclick: () => box.classList.add("hidden") })));
+  toast(`Password updated for @${r.data.username} (${r.data.email}).`);
 }
 async function setRole(u, role) {
   const ok = await wtConfirm({

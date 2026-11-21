@@ -1,6 +1,7 @@
 /* Web Tok AI (@webtok_ai via NVIDIA NIM) & AI Content Safety Checker (videos + stickers) */
 const path = require("path");
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 
 const AI_ID = "00000000-0000-0000-0000-000000000002";
 const NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
@@ -108,6 +109,21 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
       args: [uid, peerId, peerId, uid]
     });
     return { data: { cleared: true }, error: null };
+  }));
+
+  app.post("/api/admin/set-password", wrap(async req => {
+    if (!req.wt) throw new HttpError(401, "Sign in required");
+    if (!["admin", "owner"].includes(req.wt.role)) throw new HttpError(403, "Admins only");
+    const t = (await run("SELECT u.id, u.email, u.role, p.username FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [String(req.body?.userId || "")]))[0];
+    if (!t) throw new HttpError(404, "User not found");
+    if (t.role === "owner" || t.role === "system" || t.id === req.wt.uid) throw new HttpError(403, "You can't change this account");
+    if (req.wt.role !== "owner" && t.role !== "user") throw new HttpError(403, "Only the owner can change admins");
+    const pw = String(req.body?.password || "");
+    if (pw.length < 6 || pw.length > 128) throw new HttpError(400, "Password must be 6 to 128 characters.");
+    await db.execute({ sql: "UPDATE users SET encrypted_password = ?, sessions_valid_after = ? WHERE id = ?", args: [await bcrypt.hash(pw, 10), nowIso(), t.id] });
+    if (app.locals.forgetUser) app.locals.forgetUser(t.id);
+    await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [req.wt.uid, "reset_password", `@${t.username || "?"} (${t.email})`, nowIso()] });
+    return { data: { username: t.username, email: t.email }, error: null };
   }));
 
   app.post("/api/ai/chat", wrap(async req => {
