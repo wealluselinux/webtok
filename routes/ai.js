@@ -3,7 +3,7 @@ const crypto = require("crypto");
 
 const AI_ID = "00000000-0000-0000-0000-000000000002";
 const NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const CHAT_MODELS = ["meta/llama-3.3-70b-instruct", "google/gemma-4-31b-it"];
+const CHAT_MODELS = ["nvidia/nemotron-3.5-bolt-e4b", "meta/llama-3.1-8b-instruct"];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
 module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 }) {
