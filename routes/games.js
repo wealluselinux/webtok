@@ -1,6 +1,12 @@
 /* Web Tok Mini Games & /developer Studio API (Turso + NVIDIA NIM AI Game Builder) */
 const crypto = require("crypto");
 
+const GAME_MODELS = [
+  "qwen/qwen2.5-coder-32b-instruct",
+  "nvidia/llama-3.3-nemotron-super-49b-v1",
+  "meta/llama-3.3-70b-instruct"
+];
+
 module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, nowIso, aiKey, callNim, CHAT_MODELS }) {
   let ready = false;
   async function ensureGamesTable() {
@@ -86,22 +92,35 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
     if (!prompt) throw new HttpError(400, "Enter a prompt for the AI.");
 
     const langGuide = lang === "python"
-      ? "Write Python 3 code using the built-in `turtle` module (screen size ~400x400, `turtle.Turtle()`, `screen.listen()`, `screen.onkey(...)`, `screen.ontimer(...)`) so it runs in Skulpt in the browser. Do NOT import pygame or external packages."
-      : "Write a complete, self-contained HTML5 document (`<!DOCTYPE html>...`) with inline CSS and `<canvas width=\"400\" height=\"400\">` JavaScript. Support arrow keys/WASD and touch/click, and make it look clean.";
+      ? [
+          "Target runtime: Skulpt (browser Python) using ONLY the built-in `turtle` and `random` modules.",
+          "CRITICAL Skulpt rules (never violate these):",
+          "- NEVER use f-strings (`f\"...\"`); use `\"Score: \" + str(score)`.",
+          "- NEVER call `.shapesize()`, `screen.title()`, `screen.mainloop()`, or import `pygame`/`time`.",
+          "- Use `screen.setup(width=400, height=360)`, `screen.bgcolor(\"#16121e\")`, `screen.tracer(0)`.",
+          "- Keep scoreboard text at `y=145` (font size 16-18), clamp player within `-175..175`, declare `global` vars at the top of functions, and drive the loop with `screen.ontimer(game_loop, 30)` + `screen.update()`."
+        ].join("\n")
+      : [
+          "Target runtime: self-contained HTML5 document (`<!DOCTYPE html>...`) with inline CSS and `<canvas width=\"400\" height=\"400\">` JavaScript.",
+          "Design & gameplay requirements:",
+          "- Dark Material 3 palette (`#16121e` background, `#d0bcff` primary, `#ff7eb6` accent, `#a8dab5` mint).",
+          "- Smooth `requestAnimationFrame` loop, clear HUD (score + best score), polished Game Over screen with click/Space/Enter to restart.",
+          "- Support BOTH keyboard (Arrow keys / WASD / Space) AND mouse/touch controls, and fit cleanly in a 400x400+ iframe with zero scrollbars."
+        ].join("\n");
 
     const fence = lang === "python" ? "python" : "html";
     const sys = mode === "build"
-      ? `You are Web Tok Developer AI. Build a fun, playable mini-game based on the user's request.\n${langGuide}\nPut the ENTIRE complete, runnable code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`). Keep explanation to 1-2 short sentences.`
-      : `You are Web Tok Developer AI, a friendly coding assistant. Help the user fix, improve, or add features to their ${lang} mini-game.\n${langGuide}\nAlways output the ENTIRE updated, runnable game code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`) so it can be automatically applied to their game, plus 1-2 short sentences explaining the change.`;
+      ? `You are an expert Web Tok game developer. Build a fun, complete, bug-free playable mini-game.\n${langGuide}\nPut the ENTIRE complete, runnable code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`). Keep explanation to 1-2 short sentences.`
+      : `You are an expert Web Tok game developer. Fix bugs, polish gameplay, or add requested features to the user's ${lang} mini-game.\n${langGuide}\nAlways output the ENTIRE updated, runnable game code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`) so it can be automatically applied, plus 1-2 short sentences explaining the change.`;
 
     const userMsg = currentCode && mode === "help"
       ? `My current ${lang} code:\n\`\`\`\n${currentCode}\n\`\`\`\n\nRequest: ${prompt}`
       : prompt;
 
-    const reply = await callNim(key, CHAT_MODELS, [
+    const reply = await callNim(key, [...GAME_MODELS, ...CHAT_MODELS], [
       { role: "system", content: sys },
       { role: "user", content: userMsg }
-    ], 1500);
+    ], 2400);
 
     const codeMatch = /```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)```/.exec(reply);
     return {
