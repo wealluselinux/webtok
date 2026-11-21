@@ -1,7 +1,7 @@
 /* Extra server features, mounted from server.js:
    1) Unread messages
    2) Roles, bans, per-user restrictions, forced sign-out, role_since tenure
-   3) Admin panel API (/api/admin/*) + /api/admin/announce + Video Generator 3000
+   3) Admin panel API (/api/admin/*) + /api/admin/announce via @notifications account
    4) Sign-up accepted_terms
    5) Group chats with friend invites & acceptance
    6) Custom user stickers & comment replies
@@ -10,7 +10,6 @@
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
-const { spawn } = require("child_process");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { WebSocketServer } = require("ws");
@@ -514,18 +513,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: row, error: null };
   }));
 
-  /* ---------- Video Generator 3000 (admin-controlled Python worker) ---------- */
-  let vgProc = null;
-  let vgLogs = [];
-  let vgMax = 0;
-  let vgStartedAt = null;
-  const pushVgLog = line => {
-    const s = String(line || "").trim();
-    if (!s) return;
-    vgLogs.push(s);
-    if (vgLogs.length > 80) vgLogs.shift();
-  };
-
   /* ---------- admin API ---------- */
   const needAdmin = req => {
     if (!req.wt) throw new HttpError(401, "Sign in required");
@@ -547,46 +534,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     for (let i = c.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [c[i], c[j]] = [c[j], c[i]]; }
     return c.join("");
   };
-
-  app.get("/api/admin/vg3000", wrap(async req => {
-    needAdmin(req);
-    const usersPath = path.join(__dirname, "..", "tools", "users.txt");
-    let usersText = "";
-    try { usersText = fs.readFileSync(usersPath, "utf8"); } catch {}
-    return { data: { running: !!vgProc, maxVideos: vgMax, startedAt: vgStartedAt, logs: vgLogs.slice(-30), usersText }, error: null };
-  }));
-  app.post("/api/admin/vg3000/start", wrap(async req => {
-    const me = needAdmin(req);
-    if (vgProc) return { data: { running: true, logs: vgLogs.slice(-30) }, error: null };
-    const maxVideos = Math.max(0, Math.min(parseInt(req.body?.maxVideos, 10) || 0, 500));
-    if (typeof req.body?.usersText === "string" && req.body.usersText.trim()) {
-      fs.writeFileSync(path.join(__dirname, "..", "tools", "users.txt"), req.body.usersText.slice(0, 20000), "utf8");
-    }
-    const bot = (await run("SELECT id, email FROM users WHERE email = 'python@code.com' LIMIT 1"))[0]
-      || (await run("SELECT u.id, u.email FROM users u JOIN profiles p ON p.id = u.id WHERE p.username = 'pythonuploader' LIMIT 1"))[0]
-      || (await run("SELECT id, email FROM users WHERE id = ?", [me.uid]))[0];
-    const botToken = jwt.sign({ sub: bot.id, email: bot.email, t: "a" }, SECRET, { expiresIn: "12h" });
-    const port = process.env.PORT || 3000;
-
-    vgLogs = [];
-    vgMax = maxVideos;
-    vgStartedAt = nowIso();
-    const py = spawn("python3", [path.join(__dirname, "..", "tools", "video_generator.py")], {
-      env: { ...process.env, WT_URL: `http://127.0.0.1:${port}`, WT_BOT_TOKEN: botToken, WT_BOT_UID: bot.id, WT_MAX_VIDEOS: String(maxVideos) }
-    });
-    vgProc = py;
-    py.stdout.on("data", d => String(d).split(/\r?\n/).forEach(pushVgLog));
-    py.stderr.on("data", d => String(d).split(/\r?\n/).forEach(pushVgLog));
-    py.on("close", code => { pushVgLog(`[vg3000] Exited with code ${code}`); vgProc = null; });
-    await log(me, "vg3000_start", `max=${maxVideos}`);
-    return { data: { running: true }, error: null };
-  }));
-  app.post("/api/admin/vg3000/stop", wrap(async req => {
-    const me = needAdmin(req);
-    if (vgProc) { vgProc.kill("SIGTERM"); pushVgLog("[vg3000] Stop requested by admin."); }
-    await log(me, "vg3000_stop", "");
-    return { data: { running: !!vgProc }, error: null };
-  }));
 
   app.post("/api/admin/announce", wrap(async req => {
     const me = needAdmin(req);
