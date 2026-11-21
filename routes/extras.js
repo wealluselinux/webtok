@@ -8,7 +8,7 @@
    7) Group Voice Calls, Group Watch, Shared Whiteboard
    8) Security hardening: 20-minute post-login posting cooldown & new-device login alerts
    9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds)
-   10) Account credentials update (/api/account/me, /api/account/credentials) with current-password verification */
+   10) Account credentials update & Web Tok AI / Content Safety Checker (routes/ai.js) */
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -67,7 +67,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     }
     await db.execute("UPDATE users SET role_since = COALESCE(role_since, created_at) WHERE role IN ('owner','admin') AND role_since IS NULL");
 
-    // Ensure @notifications system account exists
     if (!(await run("SELECT 1 FROM profiles WHERE id = ?", [NOTIF_ID])).length) {
       const ts = nowIso();
       const lockedHash = "$2a$10$" + crypto.randomBytes(24).toString("hex");
@@ -149,6 +148,11 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
           return deny(res, 403, `Security cooldown: you can post videos in ${mins} minute${mins === 1 ? "" : "s"} after signing in.`);
         }
       }
+      if (req.method === "POST" && req.path === "/db" && body.table === "videos" && body.op === "insert" && app.locals.checkMediaSafety) {
+        const text = `${body.data?.title || ""} ${(Array.isArray(body.data?.hashtags) ? body.data.hashtags.join(" ") : "")}`.trim();
+        const chk = await app.locals.checkMediaSafety({ text });
+        if (!chk.safe) return deny(res, 403, `Upload blocked by safety filter: ${chk.reason}`);
+      }
       next();
     } catch (e) { next(e); }
   });
@@ -170,6 +174,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     });
     next();
   });
+
+  require("./ai")({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 });
 
   /* ---------- public profile role badge (no sensitive fields) ---------- */
   app.get("/api/profiles/:id/badge", wrap(async req => {
@@ -330,7 +336,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: true, error: null };
   }));
 
-  /* ---------- custom + built-in stickers ---------- */
+  /* ---------- custom + built-in stickers (with AI safety check) ---------- */
   app.get("/api/stickers", async (_req, res) => {
     try {
       await ensure();
@@ -354,6 +360,16 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const url = String(req.body?.url || "").trim();
     if (!url || (R2_PUBLIC_URL && !url.startsWith(R2_PUBLIC_URL + "/avatars/")) || (!R2_PUBLIC_URL && !/^https?:\/\//i.test(url))) {
       throw new HttpError(400, "Invalid sticker URL.");
+    }
+    if (app.locals.checkMediaSafety) {
+      const chk = await app.locals.checkMediaSafety({ text: name, imageUrl: url });
+      if (!chk.safe) {
+        if (R2_PUBLIC_URL && removeFromR2) {
+          const k = url.replace(R2_PUBLIC_URL + "/", "").split("?")[0];
+          if (k.startsWith(`avatars/${uid}/`)) await removeFromR2([k]).catch(() => {});
+        }
+        throw new HttpError(403, `Sticker blocked by safety filter: ${chk.reason}`);
+      }
     }
     const id = crypto.randomUUID(), ts = nowIso();
     await db.execute({ sql: "INSERT INTO user_stickers (id, user_id, name, url, created_at) VALUES (?,?,?,?,?)", args: [id, uid, name, url, ts] });
