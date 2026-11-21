@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+/* Makes an existing account the site owner (full admin powers).
+   TURSO_DATABASE_URL=libsql://... TURSO_AUTH_TOKEN=... node tools/make_owner.js you@example.com */
+const { createClient } = require("@libsql/client");
+const email = (process.argv[2] || "").trim().toLowerCase();
+if (!email || !process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) { console.error("Usage: TURSO_DATABASE_URL=... TURSO_AUTH_TOKEN=... node tools/make_owner.js you@example.com"); process.exit(1); }
+(async () => {
+  const db = createClient({ url: process.env.TURSO_DATABASE_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+  const cols = (await db.execute("PRAGMA table_info(users)")).rows.map(r => r[1]);
+  if (!cols.includes("role")) await db.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'");
+  const r = await db.execute({ sql: "UPDATE users SET role = 'owner' WHERE email = ?", args: [email] });
+  console.log(r.rowsAffected ? `${email} is now the owner.` : "No account with that email.");
+})().catch(e => { console.error(e.message); process.exit(1); });
