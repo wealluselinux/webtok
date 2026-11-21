@@ -3,7 +3,8 @@
    1) Unread messages (dot next to Messages + browser notifications)
    2) Roles (owner / admin / user), bans, per-user restrictions (post / comment / message), forced sign-out
    3) Admin panel API (/api/admin/*) and the pages /admin, /terms, /privacy
-   4) Sign-up must include accepted_terms = true */
+   4) Sign-up must include accepted_terms = true
+   5) Group chats with friend invites & acceptance */
 const path = require("path");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
@@ -28,7 +29,14 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
       ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"]]) {
       if (!ucols.includes(n)) await db.execute(`ALTER TABLE users ADD COLUMN ${n} ${d}`);
     }
-    await db.execute("CREATE TABLE IF NOT EXISTS admin_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL)");
+    await db.batch([
+      "CREATE TABLE IF NOT EXISTS admin_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id TEXT NOT NULL, action TEXT NOT NULL, detail TEXT, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS group_chats (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS group_members (group_id TEXT NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL, invited_by TEXT, created_at TEXT NOT NULL, last_read_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (group_id, user_id))",
+      "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, sender_id TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
+      "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
+    ], "write");
     // The owner is the account whose email is OWNER_EMAIL. Only assigned while nobody is owner yet, and only to an account that already exists.
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
     if (ownerEmail && !(await run("SELECT 1 FROM users WHERE role = 'owner'")).length) {
@@ -114,6 +122,153 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
     if (!from) throw new HttpError(400, "Missing sender");
     await db.execute({ sql: "UPDATE messages SET read_at = ? WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL", args: [nowIso(), uid, from] });
     return { data: true, error: null };
+  }));
+
+  /* ---------- group chats & friend invites ---------- */
+  async function areFriends(a, b) {
+    if (!a || !b || a === b) return false;
+    const r = await run(`SELECT COUNT(*) n FROM follows WHERE (follower_id = ? AND following_id = ?) OR (follower_id = ? AND following_id = ?)`, [a, b, b, a]);
+    return r[0].n >= 2;
+  }
+  async function requireMember(groupId, uid) {
+    const m = (await run(`SELECT status, last_read_id FROM group_members WHERE group_id = ? AND user_id = ?`, [groupId, uid]))[0];
+    if (!m || m.status !== "accepted") throw new HttpError(403, "You are not a member of this group");
+    return m;
+  }
+
+  app.get("/api/groups", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const groups = await run(`
+      SELECT g.id, g.name, g.created_by, g.created_at, gm.last_read_id,
+        (SELECT COUNT(*) FROM group_members m2 WHERE m2.group_id = g.id AND m2.status = 'accepted') AS member_count,
+        (SELECT COUNT(*) FROM group_messages msg WHERE msg.group_id = g.id AND msg.id > gm.last_read_id AND msg.sender_id != ?) AS unread_count
+      FROM group_members gm
+      JOIN group_chats g ON g.id = gm.group_id
+      WHERE gm.user_id = ? AND gm.status = 'accepted'
+      ORDER BY g.created_at DESC LIMIT 100`, [uid, uid]);
+
+    for (const g of groups) {
+      g.members = await run(`
+        SELECT p.id, p.username, p.display_name, p.avatar_url
+        FROM group_members m JOIN profiles p ON p.id = m.user_id
+        WHERE m.group_id = ? AND m.status = 'accepted'
+        ORDER BY m.created_at ASC LIMIT 25`, [g.id]);
+    }
+
+    const invites = await run(`
+      SELECT g.id AS group_id, g.name, gm.invited_by, gm.created_at,
+        p.username AS inviter_username, p.display_name AS inviter_display_name, p.avatar_url AS inviter_avatar_url,
+        (SELECT COUNT(*) FROM group_members m2 WHERE m2.group_id = g.id AND m2.status = 'accepted') AS member_count
+      FROM group_members gm
+      JOIN group_chats g ON g.id = gm.group_id
+      LEFT JOIN profiles p ON p.id = gm.invited_by
+      WHERE gm.user_id = ? AND gm.status = 'pending'
+      ORDER BY gm.created_at DESC LIMIT 50`, [uid]);
+
+    return { data: { groups, invites }, error: null };
+  }));
+
+  app.post("/api/groups", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (req.wt?.restrictions?.includes("message")) throw new HttpError(403, "You aren't allowed to send messages right now.");
+    const name = String(req.body?.name || "").trim();
+    if (name.length < 1 || name.length > 40) throw new HttpError(400, "Group name must be 1 to 40 characters.");
+    const rawIds = Array.isArray(req.body?.memberIds) ? [...new Set(req.body.memberIds.map(x => String(x || "").trim()).filter(Boolean))] : [];
+    const friendIds = rawIds.filter(id => id !== uid).slice(0, 30);
+    if (!friendIds.length) throw new HttpError(400, "Pick at least one friend to invite.");
+    for (const fid of friendIds) {
+      if (!(await areFriends(uid, fid))) throw new HttpError(403, "You can only invite mutual friends to a group.");
+    }
+    const gid = crypto.randomUUID(), ts = nowIso();
+    const stmts = [
+      { sql: "INSERT INTO group_chats (id, name, created_by, created_at) VALUES (?,?,?,?)", args: [gid, name, uid, ts] },
+      { sql: "INSERT INTO group_members (group_id, user_id, status, invited_by, created_at, last_read_id) VALUES (?,?,?,?,?,0)", args: [gid, uid, "accepted", uid, ts] }
+    ];
+    for (const fid of friendIds) {
+      stmts.push({ sql: "INSERT INTO group_members (group_id, user_id, status, invited_by, created_at, last_read_id) VALUES (?,?,?,?,?,0)", args: [gid, fid, "pending", uid, ts] });
+    }
+    await db.batch(stmts, "write");
+    return { data: { id: gid, name, created_by: uid, created_at: ts, invitedCount: friendIds.length }, error: null };
+  }));
+
+  app.post("/api/groups/:id/respond", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    const inv = (await run("SELECT status FROM group_members WHERE group_id = ? AND user_id = ?", [gid, uid]))[0];
+    if (!inv || inv.status !== "pending") throw new HttpError(404, "Invite not found");
+    const accept = req.body?.accept === true;
+    if (accept) {
+      await db.execute({ sql: "UPDATE group_members SET status = 'accepted' WHERE group_id = ? AND user_id = ?", args: [gid, uid] });
+    } else {
+      await db.execute({ sql: "DELETE FROM group_members WHERE group_id = ? AND user_id = ?", args: [gid, uid] });
+    }
+    return { data: { accepted: accept, group_id: gid }, error: null };
+  }));
+
+  app.post("/api/groups/:id/invite", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (req.wt?.restrictions?.includes("message")) throw new HttpError(403, "You aren't allowed to send messages right now.");
+    const gid = String(req.params.id || "");
+    await requireMember(gid, uid);
+    const rawIds = Array.isArray(req.body?.memberIds) ? [...new Set(req.body.memberIds.map(x => String(x || "").trim()).filter(Boolean))] : [];
+    const friendIds = rawIds.filter(id => id !== uid).slice(0, 20);
+    if (!friendIds.length) throw new HttpError(400, "Pick at least one friend to invite.");
+    let added = 0;
+    const ts = nowIso();
+    for (const fid of friendIds) {
+      if (!(await areFriends(uid, fid))) throw new HttpError(403, "You can only invite mutual friends.");
+      const ex = (await run("SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?", [gid, fid]))[0];
+      if (!ex) {
+        await db.execute({ sql: "INSERT INTO group_members (group_id, user_id, status, invited_by, created_at, last_read_id) VALUES (?,?,?,?,?,0)", args: [gid, fid, "pending", uid, ts] });
+        added++;
+      }
+    }
+    return { data: { added }, error: null };
+  }));
+
+  app.post("/api/groups/:id/leave", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    await db.execute({ sql: "DELETE FROM group_members WHERE group_id = ? AND user_id = ?", args: [gid, uid] });
+    return { data: true, error: null };
+  }));
+
+  app.get("/api/groups/:id/messages", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    await requireMember(gid, uid);
+    const after = parseInt(req.query.after, 10) || 0;
+    const rows = await run(`
+      SELECT m.id, m.group_id, m.sender_id, m.body, m.created_at,
+        p.username, p.display_name, p.avatar_url
+      FROM group_messages m
+      LEFT JOIN profiles p ON p.id = m.sender_id
+      WHERE m.group_id = ? ${after > 0 ? "AND m.id > ?" : ""}
+      ORDER BY m.id ASC LIMIT 300`, after > 0 ? [gid, after] : [gid]);
+    if (rows.length) {
+      const maxId = rows[rows.length - 1].id;
+      await db.execute({ sql: "UPDATE group_members SET last_read_id = MAX(last_read_id, ?) WHERE group_id = ? AND user_id = ?", args: [maxId, gid, uid] });
+    }
+    return { data: rows, error: null };
+  }));
+
+  app.post("/api/groups/:id/messages", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (req.wt?.restrictions?.includes("message")) throw new HttpError(403, "You aren't allowed to send messages right now.");
+    const gid = String(req.params.id || "");
+    await requireMember(gid, uid);
+    const body = String(req.body?.body || "").trim();
+    if (!body || body.length > 1000) throw new HttpError(400, "Message must be 1 to 1000 characters.");
+    const ts = nowIso();
+    const rs = await db.execute({ sql: "INSERT INTO group_messages (group_id, sender_id, body, created_at) VALUES (?,?,?,?)", args: [gid, uid, body, ts] });
+    const msgId = Number(rs.lastInsertRowid);
+    await db.execute({ sql: "UPDATE group_members SET last_read_id = MAX(last_read_id, ?) WHERE group_id = ? AND user_id = ?", args: [msgId, gid, uid] });
+    const row = (await run(`
+      SELECT m.id, m.group_id, m.sender_id, m.body, m.created_at,
+        p.username, p.display_name, p.avatar_url
+      FROM group_messages m LEFT JOIN profiles p ON p.id = m.sender_id
+      WHERE m.id = ?`, [msgId]))[0];
+    return { data: row, error: null };
   }));
 
   /* ---------- admin API ---------- */

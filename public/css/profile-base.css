@@ -1,33 +1,43 @@
-/* Profile page: theme variables, buttons, top bar */
+/* Profile page: M3 Expressive theme variables, organic shapes, wavy loaders, top bar */
 :root{
-  --bg:#fff0ee; --surface:#ffe3e8; --card:#fbd5de; --primary:#7b3f8c; --on-primary:#fff;
-  --text:#3b1f2b; --muted:#85626f; --accent:#ffd58a; --mint:#cfe8d5; --ok:#2e7d4f; --bad:#b3261e;
+  --bg:#f6f1fc; --surface:#ede5f7; --card:#e2d4f4; --primary:#6750a4; --on-primary:#fff;
+  --text:#1d192b; --muted:#625b71; --accent:#ffd8e4; --mint:#cfe8d5; --ok:#2e7d4f; --bad:#b3261e;
   --r-xl:32px; --r-lg:24px; --r-md:18px;
+  --spring:cubic-bezier(.2,.9,.3,1.1);
 }
 @media (prefers-color-scheme:dark){
-  :root{--bg:#22141b; --surface:#33202a; --card:#47303c; --primary:#e7b6f2; --on-primary:#3a1745;
-    --text:#f7dde5; --muted:#c3a1ae; --accent:#6b5320; --mint:#2e4a37; --ok:#8fd5a6; --bad:#ffb4ab}
+  :root{--bg:#16121e; --surface:#221c2e; --card:#312842; --primary:#d0bcff; --on-primary:#381e72;
+    --text:#ebe3f7; --muted:#b4abc5; --accent:#633b48; --mint:#2e4a37; --ok:#8fd5a6; --bad:#ffb4ab}
 }
 *{box-sizing:border-box;margin:0}
-body{font-family:"Google Sans","Roboto",system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding:76px 16px 40px;transition:background-color .25s,color .25s}
-#wp-layer{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center;opacity:0;pointer-events:none;transition:opacity .3s}
-#wp-scrim{position:fixed;inset:0;z-index:-1;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .3s}
+body{font-family:"Google Sans","Roboto",system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;padding:78px 16px 40px;transition:background-color .28s,color .28s}
+#wp-layer{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center;opacity:0;pointer-events:none;transition:opacity .35s}
+#wp-scrim{position:fixed;inset:0;z-index:-1;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .35s}
 body.has-wp #wp-layer{opacity:1}
-body.has-wp #wp-scrim{opacity:.76}
+body.has-wp #wp-scrim{opacity:.74}
 button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .hidden{display:none!important}
 
-/* top bar */
-#bar{position:fixed;top:12px;left:12px;right:12px;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:8px;pointer-events:none}
+/* M3 Expressive floating pill bar */
+#bar{position:fixed;top:14px;left:14px;right:14px;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:8px;pointer-events:none}
 #bar>*{pointer-events:auto}
-.chip{padding:9px 16px;border-radius:999px;background:var(--surface);font-weight:600;box-shadow:0 2px 10px #0002;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit}
+.chip{padding:10px 18px;border-radius:999px;background:var(--surface);font-weight:700;box-shadow:0 4px 16px #0002;display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:inherit;transition:transform .18s var(--spring),background .2s}
+.chip:hover{transform:translateY(-1px)}
+.chip:active{transform:scale(.96)}
 .chip.p{background:var(--primary);color:var(--on-primary)}
 
-.btn{padding:12px 22px;border-radius:999px;font-weight:600;background:var(--surface);color:var(--text);transition:transform .15s}
-.btn:active{transform:scale(.97)}
-.btn.primary{background:var(--primary);color:var(--on-primary)}
+/* M3 Expressive buttons */
+.btn{padding:12px 22px;border-radius:999px;font-weight:700;background:var(--surface);color:var(--text);transition:transform .18s var(--spring),border-radius .2s var(--spring),background .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn:active{transform:scale(.96)}
+.btn.primary{background:var(--primary);color:var(--on-primary);box-shadow:0 3px 12px #0002}
 .btn.tonal{background:var(--card);color:var(--text)}
 .btn.danger{background:var(--bad);color:#fff}
 .btn.sm{padding:10px 18px;font-size:14px}
-.btn.icon{width:42px;height:42px;padding:0;display:grid;place-items:center;border-radius:16px;background:var(--surface)}
-.btn:disabled{opacity:.45;cursor:default}
+.btn.icon{width:44px;height:44px;padding:0;display:grid;place-items:center;border-radius:16px;background:var(--surface)}
+.btn.icon:active{border-radius:999px}
+.btn:disabled{opacity:.45;cursor:default;transform:none}
+
+/* M3 Expressive Wavy Loader */
+.empty-box{position:relative;padding:44px 20px;text-align:center;color:var(--muted);font-weight:600}
+@keyframes m3Spin{to{transform:rotate(360deg)}}
