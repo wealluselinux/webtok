@@ -1,23 +1,25 @@
-/* Profile page: full-screen upload dialog */
-/* full-screen upload dialog */
+/* Profile page: M3 Expressive full-screen upload dialog with wavy progress bar */
 #uploadDlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);overflow:hidden}
 #uploadDlg[open]{display:flex;flex-direction:column}
 .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg)}
-.up-top h2{font-size:22px;font-weight:700}
+.up-top h2{font-size:22px;font-weight:700;letter-spacing:-.2px}
 .up-body{flex:1;overflow-y:auto;padding:24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px}
-.up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer}
+.up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:32px 20px;text-align:center;cursor:pointer;transition:transform .2s cubic-bezier(.2,.9,.3,1.1),background .2s}
+.up-drop:hover{transform:translateY(-2px);background:var(--surface)}
 .up-drop b{display:block;font-size:17px;margin-bottom:4px}
 .up-drop span{font-size:13px;color:var(--muted)}
-.up-bar-wrap{background:var(--card);border-radius:var(--r-xl);padding:16px 20px;display:flex;flex-direction:column;gap:10px}
+.up-bar-wrap{background:var(--card);border-radius:var(--r-xl);padding:18px 20px;display:flex;flex-direction:column;gap:12px}
 .up-bar-wrap.hidden{display:none}
-.up-bar-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;gap:10px}
-.up-bar-track{width:100%;height:10px;border-radius:999px;background:var(--surface);overflow:hidden}
-.up-bar-fill{height:100%;width:0%;border-radius:999px;background:var(--primary);transition:width .2s ease}
+.up-bar-head{display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:700;gap:10px}
+.up-bar-track{width:100%;height:14px;border-radius:999px;background:var(--surface);overflow:hidden;position:relative}
+.up-bar-fill{height:100%;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--primary),var(--accent),var(--primary));background-size:200% 100%;animation:m3BarFlow 1.6s linear infinite;transition:width .22s ease}
+@keyframes m3BarFlow{0%{background-position:0% 50%}100%{background-position:200% 50%}}
 .up-list{display:flex;flex-direction:column;gap:12px}
-.up-card{display:flex;gap:16px;background:var(--surface);padding:14px;border-radius:var(--r-xl);align-items:center;flex-wrap:wrap}
-.up-prev{width:76px;height:104px;border-radius:16px;background:#000;object-fit:contain;flex-shrink:0}
+.up-card{display:flex;gap:16px;background:var(--surface);padding:16px;border-radius:var(--r-xl);align-items:center;flex-wrap:wrap}
+.up-prev{width:76px;height:104px;border-radius:20px;background:#000;object-fit:contain;flex-shrink:0}
 .up-fields{flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px}
-.up-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);gap:8px}
+.up-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);gap:8px;font-weight:600}
 .up-orients{display:flex;gap:6px;flex-wrap:wrap}
-.up-or{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);color:var(--text)}
+.up-or{padding:8px 15px;border-radius:999px;font-size:12px;font-weight:700;background:var(--card);color:var(--text);transition:transform .15s,background .15s}
+.up-or:active{transform:scale(.95)}
 .up-or.on{background:var(--primary);color:var(--on-primary)}
