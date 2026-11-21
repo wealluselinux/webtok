@@ -1,4 +1,5 @@
 (function(){
+const M3_COOKIE_7="polygon(94.8% 50.0%,97.1% 53.5%,98.4% 57.3%,98.4% 61.0%,96.8% 64.4%,93.9% 67.2%,90.4% 69.4%,86.7% 71.2%,83.6% 72.9%,81.3% 74.9%,79.8% 77.6%,78.8% 81.1%,77.9% 85.0%,76.6% 89.0%,74.5% 92.4%,71.5% 94.7%,67.9% 95.6%,63.9% 95.1%,60.0% 93.7%,56.3% 91.9%,53.0% 90.5%,50.0% 90.0%,47.0% 90.5%,43.7% 91.9%,40.0% 93.7%,36.1% 95.1%,32.1% 95.6%,28.5% 94.7%,25.5% 92.4%,23.4% 89.0%,22.1% 85.0%,21.2% 81.1%,20.2% 77.6%,18.7% 74.9%,16.4% 72.9%,13.3% 71.2%,9.6% 69.4%,6.1% 67.2%,3.2% 64.4%,1.6% 61.0%,1.6% 57.3%,2.9% 53.5%,5.2% 50.0%,7.7% 46.8%,9.8% 43.9%,11.0% 41.1%,11.2% 38.0%,10.5% 34.5%,9.6% 30.6%,9.1% 26.4%,9.5% 22.4%,11.2% 19.1%,14.1% 16.7%,17.9% 15.4%,22.1% 15.0%,26.1% 15.0%,29.7% 14.8%,32.6% 14.0%,35.2% 12.2%,37.5% 9.5%,40.0% 6.3%,43.0% 3.3%,46.3% 1.2%,50.0% 0.4%,53.7% 1.2%,57.0% 3.3%,60.0% 6.3%,62.5% 9.5%,64.8% 12.2%,67.4% 14.0%,70.3% 14.8%,73.9% 15.0%,77.9% 15.0%,82.1% 15.4%,85.9% 16.7%,88.8% 19.1%,90.5% 22.4%,90.9% 26.4%,90.4% 30.6%,89.5% 34.5%,88.8% 38.0%,89.0% 41.1%,90.2% 43.9%,92.3% 46.8%)";
 const css=`
 @font-face{font-family:"Material Symbols Rounded";font-style:normal;font-weight:400;font-display:block;src:url(/fonts/material-symbols-rounded.woff2) format("woff2")}
 .ms{width:1em;height:1em;overflow:hidden;font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;font-size:24px;line-height:1;display:inline-block;vertical-align:middle;letter-spacing:normal;text-transform:none;white-space:nowrap;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0}
@@ -14,7 +15,7 @@ const css=`
 #sb .srch-res.hidden{display:none}
 #sb .srch-it{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:14px;border:0;background:none;color:var(--text);font:inherit;cursor:pointer;text-align:left;text-decoration:none}
 #sb .srch-it:hover{background:var(--surface)}
-#sb .srch-av{width:30px;height:30px;border-radius:38% 62% 55% 45%;background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-size:13px;font-weight:700;background-size:cover;background-position:center;flex-shrink:0}
+#sb .srch-av{width:32px;height:32px;clip-path:${M3_COOKIE_7};background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-size:13px;font-weight:700;background-size:cover;background-position:center;flex-shrink:0}
 #sb .srch-meta{min-width:0;flex:1}
 #sb .srch-meta b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #sb .srch-meta small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -56,7 +57,7 @@ function mark(){const h=location.hash;let id=(page==="home"||page==="scroll")?(h
 mark();addEventListener("hashchange",mark);
 
 /* Live user search + video search */
-const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let _sbClient=null, _sTimer=null, _sSeq=0;
 function getSb(){
   if(window.sb) return window.sb;
@@ -107,6 +108,3 @@ nav.querySelector('[data-id="upload"]').onclick=()=>{const b=document.getElement
 nav.querySelector("#sbmore").onclick=()=>nav.querySelector("#sbmenu").classList.toggle("open");
 nav.querySelector("#sbout").onclick=async()=>{try{await getSb().auth.signOut()}catch(e){}location.href="/"};
 })();
-
-
-document.body.appendChild(Object.assign(document.createElement("script"),{src:"/js/notify.js"}));

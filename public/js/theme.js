@@ -1,4 +1,4 @@
-/* Material You theme + wallpaper + M3 Expressive dialogs + security alerts + user search + Stories & Sounds bar */
+/* Material You theme + wallpaper + M3 Expressive dialogs & shapes + security alerts + user search + Stories & Sounds bar */
 function hexToHsl(hex) {
   let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -53,6 +53,9 @@ function applyTheme(t) {
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
 
+const M3_COOKIE_7 = "polygon(94.8% 50.0%,97.1% 53.5%,98.4% 57.3%,98.4% 61.0%,96.8% 64.4%,93.9% 67.2%,90.4% 69.4%,86.7% 71.2%,83.6% 72.9%,81.3% 74.9%,79.8% 77.6%,78.8% 81.1%,77.9% 85.0%,76.6% 89.0%,74.5% 92.4%,71.5% 94.7%,67.9% 95.6%,63.9% 95.1%,60.0% 93.7%,56.3% 91.9%,53.0% 90.5%,50.0% 90.0%,47.0% 90.5%,43.7% 91.9%,40.0% 93.7%,36.1% 95.1%,32.1% 95.6%,28.5% 94.7%,25.5% 92.4%,23.4% 89.0%,22.1% 85.0%,21.2% 81.1%,20.2% 77.6%,18.7% 74.9%,16.4% 72.9%,13.3% 71.2%,9.6% 69.4%,6.1% 67.2%,3.2% 64.4%,1.6% 61.0%,1.6% 57.3%,2.9% 53.5%,5.2% 50.0%,7.7% 46.8%,9.8% 43.9%,11.0% 41.1%,11.2% 38.0%,10.5% 34.5%,9.6% 30.6%,9.1% 26.4%,9.5% 22.4%,11.2% 19.1%,14.1% 16.7%,17.9% 15.4%,22.1% 15.0%,26.1% 15.0%,29.7% 14.8%,32.6% 14.0%,35.2% 12.2%,37.5% 9.5%,40.0% 6.3%,43.0% 3.3%,46.3% 1.2%,50.0% 0.4%,53.7% 1.2%,57.0% 3.3%,60.0% 6.3%,62.5% 9.5%,64.8% 12.2%,67.4% 14.0%,70.3% 14.8%,73.9% 15.0%,77.9% 15.0%,82.1% 15.4%,85.9% 16.7%,88.8% 19.1%,90.5% 22.4%,90.9% 26.4%,90.4% 30.6%,89.5% 34.5%,88.8% 38.0%,89.0% 41.1%,90.2% 43.9%,92.3% 46.8%)";
+const M3_COOKIE_4 = "polygon(99.5% 50.0%,98.8% 54.8%,96.8% 59.3%,93.8% 63.3%,90.2% 66.6%,86.3% 69.4%,82.6% 71.8%,79.3% 74.1%,76.5% 76.5%,74.1% 79.3%,71.8% 82.6%,69.4% 86.3%,66.6% 90.2%,63.3% 93.8%,59.3% 96.8%,54.8% 98.8%,50.0% 99.5%,45.2% 98.8%,40.7% 96.8%,36.7% 93.8%,33.4% 90.2%,30.6% 86.3%,28.2% 82.6%,25.9% 79.3%,23.5% 76.5%,20.7% 74.1%,17.4% 71.8%,13.7% 69.4%,9.8% 66.6%,6.2% 63.3%,3.2% 59.3%,1.2% 54.8%,0.5% 50.0%,1.2% 45.2%,3.2% 40.7%,6.2% 36.7%,9.8% 33.4%,13.7% 30.6%,17.4% 28.2%,20.7% 25.9%,23.5% 23.5%,25.9% 20.7%,28.2% 17.4%,30.6% 13.7%,33.4% 9.8%,36.7% 6.2%,40.7% 3.2%,45.2% 1.2%,50.0% 0.5%,54.8% 1.2%,59.3% 3.2%,63.3% 6.2%,66.6% 9.8%,69.4% 13.7%,71.8% 17.4%,74.1% 20.7%,76.5% 23.5%,79.3% 25.9%,82.6% 28.2%,86.3% 30.6%,90.2% 33.4%,93.8% 36.7%,96.8% 40.7%,98.8% 45.2%)";
+
 /* ---------- Custom Material You Dialogs (replaces browser alert / confirm / prompt) ---------- */
 (function initM3Dialogs() {
   if (window.wtConfirm) return;
@@ -62,8 +65,8 @@ applyTheme();
     #wt-m3-dlg::backdrop{background:#0007;backdrop-filter:blur(5px)}
     @keyframes wtDlgIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
     .wt-m3-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-    .wt-m3-ic{width:40px;height:40px;border-radius:14px;background:var(--card);color:var(--primary);display:grid;place-items:center;flex:none}
-    .wt-m3-ic.danger{background:color-mix(in srgb,var(--bad,#b3261e) 16%,transparent);color:var(--bad,#b3261e)}
+    .wt-m3-ic{width:44px;height:44px;clip-path:${M3_COOKIE_4};background:var(--card);color:var(--primary);display:grid;place-items:center;flex:none}
+    .wt-m3-ic.danger{background:color-mix(in srgb,var(--bad,#b3261e) 18%,transparent);color:var(--bad,#b3261e)}
     .wt-m3-title{font-size:19px;font-weight:700;letter-spacing:-.2px;margin:0}
     .wt-m3-msg{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 16px;word-break:break-word}
     .wt-m3-in{width:100%;padding:13px 16px;border-radius:20px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;margin-bottom:16px}
@@ -179,9 +182,9 @@ applyTheme();
     #wt-stories-bar>*{pointer-events:auto}
     #wt-stories-bar::-webkit-scrollbar{display:none}
     .st-pill{display:flex;flex-direction:column;align-items:center;gap:4px;background:none;border:0;color:var(--text);cursor:pointer;flex:none;width:58px}
-    .st-ring{width:48px;height:48px;border-radius:38% 62% 55% 45%;padding:2px;background:linear-gradient(135deg,var(--primary),var(--accent));display:grid;place-items:center;box-shadow:0 4px 12px #0003}
+    .st-ring{width:50px;height:50px;clip-path:${M3_COOKIE_7};padding:3px;background:linear-gradient(135deg,var(--primary),var(--accent));display:grid;place-items:center;filter:drop-shadow(0 4px 10px #0003)}
     .st-ring.add{background:var(--card)}
-    .st-in{width:100%;height:100%;border-radius:inherit;background:var(--surface) center/cover;display:grid;place-items:center;font-weight:700;font-size:16px;color:var(--primary)}
+    .st-in{width:100%;height:100%;clip-path:${M3_COOKIE_7};background:var(--surface) center/cover;display:grid;place-items:center;font-weight:700;font-size:16px;color:var(--primary)}
     .st-lbl{font-size:11px;font-weight:600;max-width:58px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px var(--bg)}
     #wt-search-dlg,#wt-story-dlg{border:0;border-radius:32px;padding:22px;width:min(94vw,420px);background:var(--bg);color:var(--text);margin:auto;box-shadow:0 16px 48px #0005}
     #wt-search-dlg::backdrop,#wt-story-dlg::backdrop{background:#0007;backdrop-filter:blur(4px)}
@@ -234,7 +237,7 @@ applyTheme();
         a.className = "wt-srow";
         a.href = "/profile?u=" + encodeURIComponent(u.username);
         const init = (u.display_name || u.username || "U")[0].toUpperCase();
-        a.innerHTML = `<div class="st-in" style="width:36px;height:36px;border-radius:38% 62% 55% 45%;flex:none;${u.avatar_url ? `background-image:url(${u.avatar_url})` : ""}">${u.avatar_url ? "" : init}</div>
+        a.innerHTML = `<div class="st-in" style="width:38px;height:38px;flex:none;${u.avatar_url ? `background-image:url(${u.avatar_url})` : ""}">${u.avatar_url ? "" : init}</div>
           <div><div style="font-weight:700;font-size:14px">${(u.display_name || u.username).replace(/</g,"&lt;")}</div><div style="font-size:12px;color:var(--muted)">@${u.username.replace(/</g,"&lt;")}</div></div>`;
         resEl.appendChild(a);
       });

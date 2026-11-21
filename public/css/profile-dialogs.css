@@ -1,4 +1,4 @@
-/* Profile page: M3 Expressive dialogs and followers/following list */
+/* Profile page: M3 Expressive dialogs and followers/following list with 7-sided cookie avatars */
 dialog{border:0;border-radius:var(--r-xl);padding:26px;width:min(94vw,460px);background:var(--bg);color:var(--text);margin:auto;box-shadow:0 16px 48px #0004}
 dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 .dlg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
@@ -11,11 +11,11 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .hint.bad{color:var(--bad)}
 .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;margin-top:14px}
 
-/* followers list modal with organic avatars */
+/* followers list modal with 7-sided cookie avatars */
 .u-list{max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 .u-row{display:flex;align-items:center;gap:12px;background:var(--surface);padding:11px 14px;border-radius:var(--r-lg);transition:background .15s}
 .u-row:hover{background:var(--card)}
-.u-av{width:42px;height:42px;border-radius:38% 62% 55% 45%/45% 38% 62% 55%;background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex-shrink:0}
+.u-av{width:44px;height:44px;clip-path:var(--m3-cookie-7);background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex-shrink:0}
 .u-meta{flex:1;min-width:0;text-decoration:none;color:inherit}
 .u-meta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .u-meta small{display:block;font-size:12px;color:var(--muted)}

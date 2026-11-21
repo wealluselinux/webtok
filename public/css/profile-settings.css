@@ -1,4 +1,4 @@
-/* Profile page: Full-screen M3 Expressive sectioned settings, swatches, wallpapers, and account security */
+/* Profile page: Full-screen M3 Expressive sectioned settings, cookie swatches, wallpapers, and account security */
 #settingsDlg{width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text)}
 #settingsDlg[open]{display:flex;flex-direction:column}
 .st-top{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--surface);background:var(--bg);flex:none}
@@ -19,10 +19,10 @@
 .st-verify-title{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;margin-bottom:4px;color:var(--primary)}
 .st-verify-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
 .st-danger{border:2px solid rgba(179,38,30,.28)}
-.swatches{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
-.swatch{width:40px;height:40px;border-radius:14px;border:3px solid transparent;cursor:pointer;transition:transform .2s cubic-bezier(.2,.9,.3,1.1),border-radius .2s}
-.swatch:hover{transform:scale(1.06)}
-.swatch.on{border-color:var(--text);border-radius:50%;transform:scale(1.1)}
+.swatches{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0 14px}
+.swatch{width:44px;height:44px;clip-path:var(--m3-cookie-4);border:0;cursor:pointer;transition:transform .2s cubic-bezier(.2,.9,.3,1.1)}
+.swatch:hover{transform:scale(1.08)}
+.swatch.on{clip-path:var(--m3-cookie-7);transform:scale(1.16);box-shadow:inset 0 0 0 3px var(--text)}
 .wp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0 14px}
 .wp-opt{height:58px;border-radius:18px;border:2px solid transparent;background:var(--surface);background-size:cover;background-position:center;font-size:12px;font-weight:700;display:grid;place-items:center;transition:transform .18s cubic-bezier(.2,.9,.3,1.1),border-color .18s}
 .wp-opt:hover{transform:translateY(-1px)}

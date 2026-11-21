@@ -97,8 +97,8 @@ applyTheme();
     #wt-m3-dlg::backdrop{background:#0007;backdrop-filter:blur(5px)}
     @keyframes wtDlgIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
     .wt-m3-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
-    .wt-m3-ic{width:40px;height:40px;border-radius:14px;background:var(--card);color:var(--primary);display:grid;place-items:center;flex:none}
-    .wt-m3-ic.danger{background:color-mix(in srgb,var(--bad,#b3261e) 16%,transparent);color:var(--bad,#b3261e)}
+    .wt-m3-ic{width:44px;height:44px;clip-path:var(--m3-cookie-4);background:var(--card);color:var(--primary);display:grid;place-items:center;flex:none}
+    .wt-m3-ic.danger{background:color-mix(in srgb,var(--bad,#b3261e) 18%,transparent);color:var(--bad,#b3261e)}
     .wt-m3-title{font-size:19px;font-weight:700;letter-spacing:-.2px;margin:0}
     .wt-m3-msg{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 16px;word-break:break-word}
     .wt-m3-in{width:100%;padding:13px 16px;border-radius:20px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;margin-bottom:16px}
