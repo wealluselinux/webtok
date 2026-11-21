@@ -38,3 +38,5 @@
 @keyframes float{to{transform:translateY(-14px) rotate(-1deg)}}
 @media(max-width:800px){.hero{grid-template-columns:1fr;text-align:center}.copy{text-align:center}.brand-row,.chips,#landing .row{justify-content:center}.art{height:300px}#landing .tag{margin-inline:auto}}
 @media(prefers-reduced-motion:reduce){#landing *{animation:none!important}}
+
+.legal{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:13px;color:var(--muted)}.legal a{color:inherit}
