@@ -229,7 +229,14 @@ function renderAccountTab() {
     const db = tile.querySelector(".vid-del");
     if (db) db.onclick = async e => {
       e.stopPropagation();
-      if (!confirm(`Delete "${v.name}"?`)) return;
+      const ok = await wtConfirm({
+        title: "Delete video?",
+        message: `Permanently delete "${v.name}"?`,
+        icon: "delete",
+        confirmText: "Delete",
+        danger: true
+      });
+      if (!ok) return;
       if (v.storage_path && !v.storage_path.startsWith("cloudinary:")) {
         await sb.storage.from("videos").remove([v.storage_path]);
       }

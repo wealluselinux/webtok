@@ -79,7 +79,7 @@ async function renderStickerPanel() {
     try {
       await createCustomSticker(f, renderStickerPanel);
     } catch (err) {
-      alert(err?.message || "Could not create sticker.");
+      if (window.wtAlert) await wtAlert({ title: "Couldn't create sticker", message: err?.message || "Could not create sticker." });
     } finally {
       addBtn.disabled = false;
       e.target.value = "";

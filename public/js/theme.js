@@ -1,4 +1,4 @@
-/* Material You theme + wallpaper + security alerts + quick user search + Stories & Sounds bar */
+/* Material You theme + wallpaper + M3 Expressive dialogs + security alerts + user search + Stories & Sounds bar */
 function hexToHsl(hex) {
   let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -15,15 +15,11 @@ function hexToHsl(hex) {
 }
 function applyTheme(t) {
   if (!t) { try { t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { t = {}; } }
+  if (!t.color && !t.mode && !t.wallpaper) return;
   const root = document.documentElement;
-  const wp = document.getElementById("wp-layer");
-  if (!t.color && !t.mode && !t.wallpaper) {
-    if (wp) { document.body.classList.remove("has-wp"); wp.style.backgroundImage = ""; }
-    return;
-  }
   const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = t.mode === "dark" ? true : t.mode === "light" ? false : sysDark;
-  const [h, s] = hexToHsl(t.color || "#6750a4");
+  const [h, s] = hexToHsl(t.color || "#7b3f8c");
   const sat = Math.min(Math.max(s, 22), 58);
   if (isDark) {
     root.style.setProperty("--bg", `hsl(${h}, ${Math.round(sat*0.45)}%, 10%)`);
@@ -44,18 +40,130 @@ function applyTheme(t) {
     root.style.setProperty("--muted", `hsl(${h}, 18%, 42%)`);
     root.style.setProperty("--accent", `hsl(${(h+45)%360}, 85%, 78%)`);
   }
-  if (wp) {
-    if (t.wallpaper) {
-      document.body.classList.add("has-wp");
-      wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url("${t.wallpaper}")`;
-    } else {
-      document.body.classList.remove("has-wp");
-      wp.style.backgroundImage = "";
-    }
+  const wp = document.getElementById("wp-layer");
+  if (!wp) return;
+  if (t.wallpaper) {
+    document.body.classList.add("has-wp");
+    wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url("${t.wallpaper}")`;
+  } else {
+    document.body.classList.remove("has-wp");
+    wp.style.backgroundImage = "";
   }
 }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
+
+/* ---------- Custom Material You Dialogs (replaces browser alert / confirm / prompt) ---------- */
+(function initM3Dialogs() {
+  if (window.wtConfirm) return;
+  const st = document.createElement("style");
+  st.textContent = `
+    #wt-m3-dlg{border:0;border-radius:32px;padding:24px;width:min(92vw,410px);background:var(--bg);color:var(--text);margin:auto;box-shadow:0 20px 56px #0006;font-family:inherit;animation:wtDlgIn .18s cubic-bezier(.2,.9,.3,1.1)}
+    #wt-m3-dlg::backdrop{background:#0007;backdrop-filter:blur(5px)}
+    @keyframes wtDlgIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+    .wt-m3-head{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+    .wt-m3-ic{width:40px;height:40px;border-radius:14px;background:var(--card);color:var(--primary);display:grid;place-items:center;flex:none}
+    .wt-m3-ic.danger{background:color-mix(in srgb,var(--bad,#b3261e) 16%,transparent);color:var(--bad,#b3261e)}
+    .wt-m3-title{font-size:19px;font-weight:700;letter-spacing:-.2px;margin:0}
+    .wt-m3-msg{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 16px;word-break:break-word}
+    .wt-m3-in{width:100%;padding:13px 16px;border-radius:20px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;margin-bottom:16px}
+    .wt-m3-in:focus{border-color:var(--primary)}
+    .wt-m3-acts{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+    .wt-m3-btn{padding:10px 20px;border-radius:999px;border:0;font:inherit;font-size:14px;font-weight:700;cursor:pointer;background:var(--surface);color:var(--text);transition:transform .15s}
+    .wt-m3-btn:active{transform:scale(.96)}
+    .wt-m3-btn.p{background:var(--primary);color:var(--on-primary)}
+    .wt-m3-btn.danger{background:var(--bad,#b3261e);color:#fff}
+  `;
+  document.head.appendChild(st);
+
+  function showM3Modal({ title = "Web Tok", message = "", icon = "info", danger = false, mode = "alert", placeholder = "", defaultValue = "", confirmText = "OK", cancelText = "Cancel" }) {
+    return new Promise(resolve => {
+      let dlg = document.getElementById("wt-m3-dlg");
+      if (!dlg) {
+        dlg = document.createElement("dialog");
+        dlg.id = "wt-m3-dlg";
+        document.body.appendChild(dlg);
+      }
+      dlg.innerHTML = "";
+
+      const head = document.createElement("div");
+      head.className = "wt-m3-head";
+      const ic = document.createElement("div");
+      ic.className = "wt-m3-ic" + (danger ? " danger" : "");
+      ic.innerHTML = `<span class="ms" style="font-size:22px">${icon}</span>`;
+      const h3 = document.createElement("h3");
+      h3.className = "wt-m3-title";
+      h3.textContent = title;
+      head.append(ic, h3);
+      dlg.appendChild(head);
+
+      if (message) {
+        const p = document.createElement("p");
+        p.className = "wt-m3-msg";
+        p.textContent = message;
+        dlg.appendChild(p);
+      }
+
+      let inp = null;
+      if (mode === "prompt") {
+        inp = document.createElement("input");
+        inp.type = "text";
+        inp.className = "wt-m3-in";
+        inp.placeholder = placeholder;
+        inp.value = defaultValue;
+        dlg.appendChild(inp);
+      }
+
+      const acts = document.createElement("div");
+      acts.className = "wt-m3-acts";
+      let settled = false;
+      const done = val => {
+        if (settled) return;
+        settled = true;
+        dlg.close();
+        resolve(val);
+      };
+
+      if (mode !== "alert") {
+        const cBtn = document.createElement("button");
+        cBtn.type = "button";
+        cBtn.className = "wt-m3-btn";
+        cBtn.textContent = cancelText;
+        cBtn.onclick = () => done(mode === "prompt" ? null : false);
+        acts.appendChild(cBtn);
+      }
+
+      const okBtn = document.createElement("button");
+      okBtn.type = "button";
+      okBtn.className = "wt-m3-btn " + (danger ? "danger" : "p");
+      okBtn.textContent = confirmText;
+      okBtn.onclick = () => done(mode === "prompt" ? inp.value : mode === "confirm" ? true : undefined);
+      acts.appendChild(okBtn);
+      dlg.appendChild(acts);
+
+      dlg.oncancel = e => {
+        e.preventDefault();
+        done(mode === "prompt" ? null : mode === "confirm" ? false : undefined);
+      };
+      if (inp) {
+        inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); okBtn.click(); } };
+      }
+
+      dlg.showModal();
+      if (inp) { inp.focus(); inp.select(); } else okBtn.focus();
+    });
+  }
+
+  window.wtConfirm = opts => typeof opts === "string"
+    ? showM3Modal({ title: "Confirm", message: opts, icon: "help", mode: "confirm", confirmText: "Confirm" })
+    : showM3Modal({ icon: opts?.danger ? "warning" : "help", confirmText: "Confirm", ...opts, mode: "confirm" });
+  window.wtPrompt = opts => typeof opts === "string"
+    ? showM3Modal({ title: opts, icon: "edit", mode: "prompt", confirmText: "Save" })
+    : showM3Modal({ icon: "edit", confirmText: "Save", ...opts, mode: "prompt" });
+  window.wtAlert = opts => typeof opts === "string"
+    ? showM3Modal({ title: "Notice", message: opts, icon: "info", mode: "alert", confirmText: "OK" })
+    : showM3Modal({ icon: "info", confirmText: "OK", ...opts, mode: "alert" });
+})();
 
 /* ---------- Global User Search + Sounds Link + 24h Stories Strip on Feed ---------- */
 (function initExtrasBar() {
@@ -125,7 +233,6 @@ applyTheme();
         const a = document.createElement("a");
         a.className = "wt-srow";
         a.href = "/profile?u=" + encodeURIComponent(u.username);
-        const av = u.avatar_url ? `style="background-image:url(${u.avatar_url})"` : "";
         const init = (u.display_name || u.username || "U")[0].toUpperCase();
         a.innerHTML = `<div class="st-in" style="width:36px;height:36px;border-radius:38% 62% 55% 45%;flex:none;${u.avatar_url ? `background-image:url(${u.avatar_url})` : ""}">${u.avatar_url ? "" : init}</div>
           <div><div style="font-weight:700;font-size:14px">${(u.display_name || u.username).replace(/</g,"&lt;")}</div><div style="font-size:12px;color:var(--muted)">@${u.username.replace(/</g,"&lt;")}</div></div>`;
@@ -157,13 +264,14 @@ applyTheme();
         const ext = isVid ? "mp4" : "jpg";
         const path = `${sess.user.id}/story-${Date.now()}.${ext}`;
         const up = await sb.storage.from(bucket).upload(path, f, { upsert: true, contentType: f.type });
-        if (up?.error) { alert(up.error.message || "Could not upload story"); return; }
+        if (up?.error) { await wtAlert({ title: "Story upload failed", message: up.error.message || "Could not upload story" }); return; }
         const url = sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
-        const caption = prompt("Story caption (optional):") || "";
+        const cap = await wtPrompt({ title: "Story caption", message: "Add an optional caption for your 24-hour story.", placeholder: "Write something…", confirmText: "Post story" });
+        if (cap === null) return;
         await fetch("/api/stories", {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + sess.access_token },
-          body: JSON.stringify({ media_url: url, media_type: isVid ? "video" : "image", caption })
+          body: JSON.stringify({ media_url: url, media_type: isVid ? "video" : "image", caption: cap })
         });
         loadStories();
       };

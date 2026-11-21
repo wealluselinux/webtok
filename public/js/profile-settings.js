@@ -207,7 +207,14 @@ $("st-reset").onclick = async () => {
 };
 
 $("btn-logout-all").onclick = async () => {
-  if (!confirm("Sign out of all devices and browsers?")) return;
+  const ok = await wtConfirm({
+    title: "Sign out all devices?",
+    message: "You will be signed out on every browser and device where your account is logged in.",
+    icon: "logout",
+    confirmText: "Sign out all",
+    danger: true
+  });
+  if (!ok) return;
   $("btn-logout-all").disabled = true;
   try {
     const { data } = await sb.auth.getSession();
@@ -221,7 +228,14 @@ $("btn-logout-all").onclick = async () => {
 };
 
 $("btn-del-acct").onclick = async () => {
-  if (!confirm("Permanently delete your account and all your videos, likes, and comments? This cannot be undone.")) return;
+  const ok = await wtConfirm({
+    title: "Delete account?",
+    message: "This will permanently delete your account and all your videos, likes, and comments. This cannot be undone.",
+    icon: "delete_forever",
+    confirmText: "Delete account",
+    danger: true
+  });
+  if (!ok) return;
   $("btn-del-acct").disabled = true;
   setDelHint("Deleting account…");
   const { error } = await sb.rpc("delete_my_account");

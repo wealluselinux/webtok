@@ -70,7 +70,14 @@ async function loadSounds() {
         ${me && s.user_id === me ? '<button type="button" class="btn icon" title="Delete sound"><span class="ms" style="font-size:18px">delete</span></button>' : ""}`;
       const del = c.querySelector("button");
       if (del) del.onclick = async () => {
-        if (!confirm(`Delete "${s.title}"?`)) return;
+        const ok = await wtConfirm({
+          title: "Delete sound?",
+          message: `Permanently delete "${s.title}"?`,
+          icon: "delete",
+          confirmText: "Delete",
+          danger: true
+        });
+        if (!ok) return;
         await fetch(`/api/sounds/${encodeURIComponent(s.id)}`, { method: "DELETE", headers: { Authorization: "Bearer " + tok } });
         loadSounds();
       };

@@ -32,7 +32,7 @@ async function loadUsers() {
   r.data.forEach(u => box.append(userCard(u)));
 }
 function userCard(u) {
-  const isOwner = u.role === "owner", isSelf = false;
+  const isOwner = u.role === "owner";
   const canAct = !isOwner && (me === "owner" || u.role === "user");
   const boxes = ["post", "comment", "message"].map(k => h("label", {}, h("input", { type: "checkbox", value: k, checked: u.restrictions.includes(k) || null, disabled: !canAct }), "can't " + k));
   const name = u.display_name || u.username || "(no profile)";
@@ -51,7 +51,14 @@ function userCard(u) {
   return card;
 }
 async function resetPw(u) {
-  if (!confirm(`Reset the password for @${u.username}? They will be signed out everywhere.`)) return;
+  const ok = await wtConfirm({
+    title: `Reset password for @${u.username}?`,
+    message: "They will be signed out everywhere and given a temporary password.",
+    icon: "lock_reset",
+    confirmText: "Reset",
+    danger: true
+  });
+  if (!ok) return;
   const r = await api("/api/admin/reset-password", { userId: u.id });
   if (r.error) return toast(r.error.message);
   const box = $("result"); box.classList.remove("hidden");
@@ -60,12 +67,29 @@ async function resetPw(u) {
       h("button", { class: "btn", style: "margin-left:8px", text: "Close", onclick: () => box.classList.add("hidden") })));
 }
 async function setRole(u, role) {
-  if (!confirm(role === "admin" ? `Make @${u.username} an admin?` : `Remove admin from @${u.username}?`)) return;
+  const ok = await wtConfirm({
+    title: role === "admin" ? `Make @${u.username} an admin?` : `Remove admin from @${u.username}?`,
+    message: role === "admin" ? "They will be able to moderate users and content." : "They will return to a regular user account.",
+    icon: "admin_panel_settings",
+    confirmText: role === "admin" ? "Make admin" : "Remove",
+    danger: role !== "admin"
+  });
+  if (!ok) return;
   const r = await api("/api/admin/set-role", { userId: u.id, role }); if (r.error) toast(r.error.message); loadUsers();
 }
 async function ban(u) {
   let reason = "";
-  if (!u.banned) { reason = prompt(`Suspend @${u.username}? Optional reason (they will see it):`, ""); if (reason === null) return; }
+  if (!u.banned) {
+    reason = await wtPrompt({
+      title: `Suspend @${u.username}?`,
+      message: "Optional reason (they will see it when trying to sign in):",
+      placeholder: "Reason for suspension…",
+      icon: "block",
+      confirmText: "Suspend",
+      danger: true
+    });
+    if (reason === null) return;
+  }
   const r = await api("/api/admin/ban", { userId: u.id, banned: !u.banned, reason }); if (r.error) toast(r.error.message); loadUsers();
 }
 async function saveLimits(u, card) {
@@ -82,7 +106,11 @@ async function loadContent() {
   box.append(h("h2", { text: "Recent videos", style: "margin:8px 0" }));
   r.data.videos.forEach(v => box.append(h("div", { class: "card line" },
     h("div", {}, h("div", { class: "name", text: v.title }), h("div", { class: "sub", text: "@" + (v.username || "?") + " · " + when(v.created_at) }), h("a", { href: v.video_url, target: "_blank", rel: "noopener", text: "Open video" })),
-    h("button", { class: "btn bad", text: "Delete", onclick: async () => { if (!confirm(`Delete the video "${v.title}"?`)) return; const x = await api("/api/admin/delete-video", { videoId: v.id }); if (x.error) toast(x.error.message); loadContent(); } }))));
+    h("button", { class: "btn bad", text: "Delete", onclick: async () => {
+      const ok = await wtConfirm({ title: "Delete video?", message: `Delete the video "${v.title}"?`, icon: "delete", confirmText: "Delete", danger: true });
+      if (!ok) return;
+      const x = await api("/api/admin/delete-video", { videoId: v.id }); if (x.error) toast(x.error.message); loadContent();
+    } }))));
   box.append(h("h2", { text: "Recent comments", style: "margin:16px 0 8px" }));
   r.data.comments.forEach(c => box.append(h("div", { class: "card line" },
     h("div", {}, h("div", { class: "name", text: c.text.length > 140 ? c.text.slice(0, 140) + "…" : c.text }), h("div", { class: "sub", text: "@" + (c.username || "?") + " · " + when(c.created_at) })),
