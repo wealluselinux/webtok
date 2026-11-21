@@ -8,6 +8,16 @@ const CHAT_MODELS = ["nvidia/nemotron-3.5-bolt-e4b", "meta/llama-3.1-8b-instruct
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
 module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 }) {
+  // Remove 20-minute post-login video cooldown while preserving new-device login alerts
+  const origRecordLogin = app.locals.recordLoginDevice;
+  if (origRecordLogin) {
+    app.locals.recordLoginDevice = async (uid, req, isSignup = false) => {
+      await db.execute({ sql: "UPDATE users SET last_login_at = NULL WHERE id = ?", args: [uid] }).catch(() => {});
+      if (app.locals.forgetUser) app.locals.forgetUser(uid);
+      return origRecordLogin(uid, req, isSignup);
+    };
+  }
+
   const aiKey = () => (process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || "").trim();
   const checkerKey = () => (process.env.WEBTOK_CHECKER || process.env.WEB_TALK_CHECKER || "").trim();
 
