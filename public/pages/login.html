@@ -61,9 +61,11 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
  <label>Password</label><input id="pw" type="password" autocomplete="new-password">
  <label>Confirm password</label><input id="pw2" type="password" autocomplete="new-password">
  <label class="chk"><input type="checkbox" class="showpw" data-t="pw,pw2"> Show password</label>
+ <label class="chk" style="color:var(--text)"><input type="checkbox" id="tos"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
  <ul class="rules" id="rules"></ul><div class="hint" id="h-pw"></div>
  <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-pw" disabled>Create account</button></div>
 </section>
+<p style="text-align:center;font-size:12px;color:var(--muted);margin-top:16px"><a href="/terms" style="color:inherit">Terms</a> · <a href="/privacy" style="color:inherit">Privacy</a></p>
 </main>
 
 <script src="/config.js"></script>
@@ -161,13 +163,13 @@ function checkPw(){
   const p=$("pw").value; let all=true;
   $("rules").innerHTML=RULES.map(([t,f])=>{const y=f(p);all=all&&y;return`<li class="${y?"y":""}">${t}</li>`}).join("");
   const m=p&&p===$("pw2").value; say("h-pw",$("pw2").value?(m?"Passwords match":"Passwords don't match"):"",m?"ok":"bad");
-  $("n-pw").disabled=!(all&&m);
+  $("n-pw").disabled=!(all&&m&&$("tos").checked);
 }
-$("pw").oninput=$("pw2").oninput=checkPw; $("pw").onfocus=checkPw;
+$("pw").oninput=$("pw2").oninput=$("tos").onchange=checkPw; $("pw").onfocus=checkPw;
 $("n-pw").onclick=async()=>{
   $("n-pw").disabled=true; say("h-pw","Creating account…");
   const pw=$("pw").value;
-  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
+  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio,accepted_terms:true}}});
   if(error){$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
   if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){$("n-pw").disabled=false;return say("h-pw","That email already has an account. Sign in instead, or use a different email.","bad")}
   try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){}
