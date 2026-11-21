@@ -1,4 +1,5 @@
 /* Web Tok AI (@webtok_ai via NVIDIA NIM) & AI Content Safety Checker (videos + stickers) */
+const path = require("path");
 const crypto = require("crypto");
 
 const AI_ID = "00000000-0000-0000-0000-000000000002";
@@ -154,4 +155,8 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     const aiMsg = (await run("SELECT * FROM messages WHERE id = ?", [Number(aRs.lastInsertRowid)]))[0];
     return { data: { userMsg, aiMsg }, error: null };
   }));
+
+  app.get("/games", (_req, res) => res.sendFile(path.join(__dirname, "../public/pages/games.html")));
+  app.get("/developer", (_req, res) => res.sendFile(path.join(__dirname, "../public/pages/developer.html")));
+  require("./games")({ app, db, run, wrap, uidFrom, HttpError, nowIso, aiKey, callNim, CHAT_MODELS });
 };
