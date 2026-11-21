@@ -144,50 +144,39 @@ def list_user_videos(ytdlp: str, src: str) -> list[dict]:
     return items
 
 
-def download_bytes(url: str, dest_mp4: Path) -> bool:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
-    with urllib.request.urlopen(req, timeout=120) as r2:
-        data = r2.read()
-    if len(data) > 50 * 1024 * 1024 or len(data) < 5000:
-        return False
-    dest_mp4.write_bytes(data)
-    return True
-
-
-def download_via_tikwm(video_url: str, dest_mp4: Path) -> dict | None:
-    body = urllib.parse.urlencode({"url": video_url, "hd": "1"}).encode("utf-8")
-    req = urllib.request.Request(
-        "https://www.tikwm.com/api/",
-        data=body,
-        method="POST",
-        headers={
-            "User-Agent": UA,
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "Origin": "https://www.tikwm.com",
-            "Referer": "https://www.tikwm.com/",
-        },
-    )
-    with urllib.request.urlopen(req, timeout=45) as resp:
-        j = json.loads(resp.read().decode("utf-8"))
-    if j.get("code") != 0 or not j.get("data"):
+def download_via_curl_tikwm(video_url: str, dest_mp4: Path) -> dict | None:
+    if not shutil.which("curl"):
         return None
+    res = subprocess.run(
+        [
+            "curl", "-sS", "-m", "30", "-X", "POST", "https://www.tikwm.com/api/",
+            "-H", f"User-Agent: {UA}",
+            "-H", "Accept: application/json",
+            "-H", "Origin: https://www.tikwm.com",
+            "-H", "Referer: https://www.tikwm.com/",
+            "--data-urlencode", f"url={video_url}",
+            "-d", "hd=1",
+        ],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=35
+    )
+    if not res.stdout or not res.stdout.strip().startswith("{"):
+        raise RuntimeError(f"tikwm non-JSON ({res.stderr.strip()[:80] or res.stdout.strip()[:80]})")
+    j = json.loads(res.stdout)
+    if j.get("code") != 0 or not j.get("data"):
+        raise RuntimeError(j.get("msg") or "tikwm error")
     d = j["data"]
     play_url = d.get("play") or d.get("hdplay") or d.get("wmplay")
-    if not play_url or not download_bytes(play_url, dest_mp4):
+    if not play_url:
+        return None
+    dl = subprocess.run(
+        ["curl", "-sSL", "-m", "90", "-A", UA, "-o", str(dest_mp4), play_url],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=95
+    )
+    if dl.returncode != 0 or not dest_mp4.exists() or dest_mp4.stat().st_size < 5000 or dest_mp4.stat().st_size > 50 * 1024 * 1024:
+        if dest_mp4.exists():
+            dest_mp4.unlink()
         return None
     return {"title": d.get("title") or "Funny Video", "width": int(d.get("width") or 0), "height": int(d.get("height") or 0)}
-
-
-def download_via_tiklydown(video_url: str, dest_mp4: Path) -> dict | None:
-    api_url = "https://api.tiklydown.eu.org/api/download?url=" + urllib.parse.quote(video_url, safe="")
-    req = urllib.request.Request(api_url, headers={"User-Agent": UA, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=45) as resp:
-        j = json.loads(resp.read().decode("utf-8"))
-    play_url = j.get("video", {}).get("noWatermark") or j.get("video", {}).get("watermark")
-    if not play_url or not download_bytes(play_url, dest_mp4):
-        return None
-    return {"title": j.get("title") or "Funny Video", "width": 0, "height": 0}
 
 
 def main():
@@ -243,15 +232,16 @@ def main():
         mp4 = DL_DIR / f"{vid_id}.mp4"
         info = {"title": pick.get("title") or pick.get("description") or "Funny Video", "width": 0, "height": 0}
 
-        # 1) Try yt-dlp with mobile API hostname
         cmd = [
             ytdlp, "--no-warnings", "--max-filesize", "50m",
             "--extractor-args", "tiktok:api_hostname=api22-normal-c-useast2a.tiktokv.com",
             "-f", "b[ext=mp4]/mp4/best[ext=mp4]/best",
             "--write-info-json", "-o", str(DL_DIR / "%(id)s.%(ext)s"), vid_url,
         ]
+        yt_out = ""
         try:
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=90)
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=90)
+            yt_out = res.stdout or ""
         except Exception:
             pass
 
@@ -266,14 +256,15 @@ def main():
                 except Exception:
                     pass
         else:
-            for name, fn in [("tikwm", download_via_tikwm), ("tiklydown", download_via_tiklydown)]:
-                try:
-                    fb = fn(vid_url, mp4)
-                    if fb:
-                        info.update(fb)
-                        break
-                except Exception as e:
-                    log(f"{name} fallback failed: {e}")
+            errs = [ln.strip() for ln in yt_out.splitlines() if "ERROR" in ln]
+            if errs:
+                log(f"yt-dlp: {errs[-1][:160]}")
+            try:
+                fb = download_via_curl_tikwm(vid_url, mp4)
+                if fb:
+                    info.update(fb)
+            except Exception as e:
+                log(f"tikwm fallback failed: {e}")
 
         if not mp4.exists():
             log(f"Could not fetch {vid_id}, trying another...")
