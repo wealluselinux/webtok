@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Web Tok · Developer Studio</title>
+<link rel="icon" href="/images/logo.png">
+<link rel="stylesheet" href="/css/base.css">
+<style>
+body{overflow:auto;padding:20px 16px 90px}
+.wrap{max-width:1160px;margin:0 auto;padding-left:var(--sbw,0px);display:flex;flex-direction:column;gap:14px}
+@media(max-width:800px){.wrap{padding-left:0}}
+.dev-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.dev-top h1{font-size:24px;font-weight:700;display:flex;align-items:center;gap:8px}
+.dev-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;background:var(--card);padding:12px 16px;border-radius:var(--r-xl)}
+.dev-bar input{flex:1;min-width:170px;background:var(--bg);border:0;border-radius:999px;padding:10px 14px;color:var(--text);font:inherit;outline:0}
+.lang-tabs{display:flex;gap:4px;background:var(--surface);padding:4px;border-radius:999px}
+.ltab{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;cursor:pointer}
+.ltab.on{background:var(--primary);color:var(--on-primary)}
+.dev-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:14px;align-items:stretch}
+@media(max-width:960px){.dev-grid{grid-template-columns:1fr}}
+.pane{background:var(--card);border-radius:var(--r-xl);padding:14px;display:flex;flex-direction:column;gap:10px;min-height:460px}
+#codeEd{flex:1;width:100%;min-height:380px;background:var(--bg);color:var(--text);border:0;border-radius:20px;padding:14px;font:13px/1.5 ui-monospace,monospace;resize:vertical;outline:0}
+#blocklyDiv{flex:1;min-height:400px;border-radius:20px;overflow:hidden;background:#fff}
+#prevFrame{width:100%;height:380px;border:0;border-radius:20px;background:#16121e}
+.ai-box{background:var(--card);border-radius:var(--r-xl);padding:16px;display:flex;flex-direction:column;gap:10px}
+.ai-row{display:flex;gap:8px;flex-wrap:wrap}
+.ai-row input{flex:1;min-width:200px;background:var(--bg);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
+#aiOut{font-size:13px;line-height:1.5;color:var(--text);background:var(--surface);padding:12px 14px;border-radius:18px;white-space:pre-wrap;max-height:180px;overflow-y:auto}
+.my-list{display:flex;gap:8px;flex-wrap:wrap}
+.my-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
+.hidden{display:none!important}
+</style>
+</head>
+<body data-page="games">
+<div id="wp-layer"></div>
+<div id="wp-scrim"></div>
+<main class="wrap">
+  <div class="dev-top">
+    <h1><span class="ms fill" style="color:var(--primary)">code</span>Developer Studio</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a class="btn sm" href="/games"><span class="ms" style="font-size:18px">sports_esports</span>Mini Games</a>
+      <button type="button" class="btn sm" id="btnRun"><span class="ms" style="font-size:18px">play_arrow</span>Run</button>
+      <button type="button" class="btn primary sm" id="btnPub"><span class="ms" style="font-size:18px">publish</span>Save &amp; Publish</button>
+    </div>
+  </div>
+
+  <div class="dev-bar">
+    <div class="lang-tabs" id="langTabs">
+      <button type="button" class="ltab on" data-lang="python">Python</button>
+      <button type="button" class="ltab" data-lang="scratch">Scratch Blocks</button>
+      <button type="button" class="ltab" data-lang="html">HTML / JS</button>
+    </div>
+    <input id="gTitle" maxlength="60" placeholder="Game title (e.g. Space Dodger)">
+    <input id="gDesc" maxlength="160" placeholder="Short description (optional)">
+  </div>
+
+  <div class="my-list" id="myGamesBar"></div>
+
+  <div class="dev-grid">
+    <div class="pane">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <b id="edLabel">Python Editor (Turtle Graphics)</b>
+        <button type="button" class="btn sm" id="btnResetTpl">Starter Template</button>
+      </div>
+      <textarea id="codeEd" spellcheck="false"></textarea>
+      <div id="blocklyDiv" class="hidden"></div>
+    </div>
+    <div class="pane">
+      <b>Live Game Preview</b>
+      <iframe id="prevFrame" sandbox="allow-scripts"></iframe>
+    </div>
+  </div>
+
+  <div class="ai-box">
+    <b style="display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">smart_toy</span>AI Game Builder &amp; Coding Helper</b>
+    <div class="ai-row">
+      <input id="aiPrompt" maxlength="600" placeholder="Ask AI to help fix your code, or describe a game for AI to build…">
+      <button type="button" class="btn sm" id="btnAiHelp">Ask AI to Help</button>
+      <button type="button" class="btn primary sm" id="btnAiBuild">Let AI Build Game</button>
+    </div>
+    <div id="aiOut" class="hidden"></div>
+  </div>
+</main>
+
+<script src="/config.js"></script>
+<script src="/js/wt-local.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/core.js"></script>
+<script src="/js/theme.js"></script>
+<script src="/js/m3-dialogs.js"></script>
+<script src="/js/developer-scratch.js"></script>
+<script src="/js/developer.js"></script>
+</body>
+</html>
