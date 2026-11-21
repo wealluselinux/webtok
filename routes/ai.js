@@ -88,6 +88,17 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     return { data: { safe: true }, error: null };
   }));
 
+  app.delete("/api/messages/with/:peerId", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const peerId = String(req.params.peerId || "").trim();
+    if (!peerId) throw new HttpError(400, "Missing peerId");
+    await db.execute({
+      sql: "DELETE FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)",
+      args: [uid, peerId, peerId, uid]
+    });
+    return { data: { cleared: true }, error: null };
+  }));
+
   app.post("/api/ai/chat", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     await ensureAiAccount();
