@@ -1,0 +1,331 @@
+/* Messages: DMs, Group Chats, Stickers, Invites, Sidebar */
+const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
+const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, activeTab="all", groupPoll=null, lastGroupMsgId=0;
+const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
+let lottieP=null;
+function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
+async function lottieIn(el,path){try{(await ensureLottie()).loadAnimation({container:el,renderer:"svg",loop:true,autoplay:true,path})}catch(e){console.warn(e)}}
+const STK=/^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i;
+const STKU=/^\[sticker_url:(https?:\/\/[^\]]+)\]$/i;
+const VSHARE=/^\[video_share:([^|\]]+)\|([^\]]*)\](?:\n([\s\S]*))?$/;
+function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.json$/i.test(file)){const b=document.createElement("div");b.className="stk-box";lottieIn(b,url);return b}const i=document.createElement("img");i.src=url;i.alt="sticker";i.loading="lazy";return i}
+function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error?.message||"Request failed");return j.data})}
+
+function bubble(m, showSender=false){
+  const wrap=document.createElement("div");
+  wrap.className="m-wrap"+(m.sender_id===me?" me":"");
+  if(showSender && m.sender_id!==me){
+    const sn=document.createElement("div");
+    sn.className="m-sender";
+    sn.textContent=m.display_name||("@"+(m.username||"user"));
+    wrap.appendChild(sn);
+  }
+  const d=document.createElement("div");d.className="m";
+  const raw=(m.body||"").trim();
+  const su=STKU.exec(raw), s=STK.exec(raw), vs=VSHARE.exec(raw);
+  if(vs){
+    const card=document.createElement("a");
+    card.className="vid-share-card";
+    card.href="/scroll#v="+encodeURIComponent(vs[1]);
+    card.innerHTML=`<div class="vid-share-ic"><span class="ms">play_arrow</span></div><div><b style="display:block;font-size:13px">${esc(vs[2]||"Shared Web Tok")}</b><small style="opacity:.8;font-size:11px">Tap to watch video</small></div>`;
+    d.appendChild(card);
+    if(vs[3]){const note=document.createElement("div");note.textContent=vs[3];d.appendChild(note);}
+  } else if(su){d.classList.add("stk");const i=document.createElement("img");i.src=su[1];i.alt="sticker";i.loading="lazy";d.appendChild(i)}
+  else if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}
+  else d.textContent=m.body;
+  wrap.appendChild(d);
+  $("msgs").appendChild(wrap);
+  $("msgs").scrollTop=1e9;
+}
+
+function stopGroupPoll(){if(groupPoll){clearInterval(groupPoll);groupPoll=null;}}
+function makeStickerBlob(file){
+  return new Promise((resolve,reject)=>{
+    const u=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(u);const max=256,sc=Math.min(max/img.width,max/img.height,1);const c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.width*sc));c.height=Math.max(1,Math.round(img.height*sc));c.getContext("2d").drawImage(img,0,0,c.width,c.height);c.toBlob(b=>b?resolve(b):reject(new Error("Could not process sticker")),"image/png")};
+    img.onerror=()=>{URL.revokeObjectURL(u);reject(new Error("Could not read image"))};
+    img.src=u;
+  });
+}
+function wireStickerPicker(sendFn){
+  $("stkBtn").onclick=async()=>{
+    const pn=$("stkPanel");pn.classList.toggle("hidden");
+    if(pn.classList.contains("hidden")||pn.dataset.ready)return;
+    await loadStickerGrid(pn,sendFn);
+  };
+}
+async function loadStickerGrid(pn,sendFn){
+  pn.dataset.ready="1";
+  let list=[]; try{list=await (await fetch("/api/stickers")).json()}catch{}
+  pn.innerHTML="";
+  const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="stk-add";
+  addBtn.innerHTML='<span class="ms">add_photo_alternate</span><span>Make</span>';
+  const fin=document.createElement("input"); fin.type="file"; fin.accept="image/png,image/webp,image/jpeg,image/gif"; fin.hidden=true;
+  addBtn.onclick=()=>fin.click();
+  fin.onchange=async e=>{
+    const f=e.target.files?.[0]; if(!f)return;
+    addBtn.disabled=true;
+    try{
+      const blob=await makeStickerBlob(f), path=`${me}/sticker-${crypto.randomUUID()}.png`;
+      const up=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/png"});
+      if(up?.error)throw up.error;
+      const url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+      await api("/api/stickers",{method:"POST",body:JSON.stringify({name:f.name.replace(/\.[^.]+$/,"").slice(0,30)||"Sticker",url})});
+      await loadStickerGrid(pn,sendFn);
+    }catch(err){await wtAlert({title:"Couldn't create sticker",message:err?.message||"Could not create sticker."})}
+    finally{addBtn.disabled=false;e.target.value="";}
+  };
+  pn.appendChild(addBtn); pn.appendChild(fin);
+  if(!list.length){const msg=document.createElement("div");msg.style.cssText="grid-column:span 3;color:var(--muted);padding:8px;font-size:12px;align-self:center";msg.textContent="Tap Make to create a sticker!";pn.appendChild(msg);return}
+  list.forEach(item=>{
+    const b=document.createElement("button"); b.type="button";
+    if(item&&typeof item==="object"&&item.url){
+      b.innerHTML=`<img src="${esc(item.url)}" alt="${esc(item.name||"sticker")}" loading="lazy">`;
+      b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker_url:"+item.url+"]")};
+    }else{
+      const file=String(item);
+      b.appendChild(stickerEl(file));
+      b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker:"+file+"]")};
+    }
+    pn.appendChild(b);
+  });
+}
+
+async function openChat(f){
+  stopGroupPoll();
+  cur=f; curType="dm"; document.body.classList.add("chatting");
+  delete unreadBySender[f.id];
+  renderSidebarList();
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}</div></div></div>
+  <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
+  <div id="stkPanel" class="hidden"></div>
+  <form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
+  const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
+  $("msgs").innerHTML="";
+  (data||[]).forEach(m=>bubble(m,false));
+  if(window.wtMarkRead)wtMarkRead(f.id);
+  async function send(body){const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
+    if(error){await wtAlert({title:"Couldn't send",message:error.message});return false}bubble(m,false);return true}
+  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
+  wireStickerPicker(send);
+  $("txt").focus();
+}
+
+async function openGroupChat(g){
+  stopGroupPoll();
+  cur=g; curType="group"; lastGroupMsgId=0; g.unread_count=0;
+  document.body.classList.add("chatting");
+  renderSidebarList();
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av grp"><span class="ms">groups</span></div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}</div></div><div class="head-actions"><button class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button class="head-chip" id="btnInvMore"><span class="ms" style="font-size:16px">person_add</span>Invite</button><button class="head-chip" id="btnLeaveGrp">Leave</button></div></div>
+  <div id="callBar" class="hidden"></div>
+  <div id="stage" class="hidden"></div>
+  <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
+  <div id="stkPanel" class="hidden"></div>
+  <form id="form"><input id="txt" maxlength="1000" placeholder="Message ${esc(g.name)}…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  $("back").onclick=()=>{stopGroupPoll();document.body.classList.remove("chatting");cur=null;curType=null};
+  $("btnCall").onclick=()=>{if(callGroupId===g.id)leaveCall();else joinCall(g.id);};
+  $("btnLeaveGrp").onclick=async()=>{
+    const ok=await wtConfirm({title:"Leave group?",message:`Are you sure you want to leave "${g.name}"?`,icon:"logout",confirmText:"Leave",danger:true});
+    if(!ok)return;
+    if(callGroupId===g.id) leaveCall();
+    await api(`/api/groups/${encodeURIComponent(g.id)}/leave`,{method:"POST",body:"{}"});
+    stopGroupPoll(); cur=null; curType=null; document.body.classList.remove("chatting");
+    $("chat").innerHTML='<div class="empty">Left group chat.</div>';
+    await loadGroupsAndInvites();
+  };
+  $("btnInvMore").onclick=()=>openInviteMore(g);
+  if(callGroupId!==g.id){
+    try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{}
+  }
+  renderCallUI();
+
+  const msgs=await api(`/api/groups/${encodeURIComponent(g.id)}/messages`);
+  $("msgs").innerHTML="";
+  if(!msgs.length) $("msgs").innerHTML='<div class="empty">No messages yet. Say hi!</div>';
+  msgs.forEach(m=>{bubble(m,true);lastGroupMsgId=Math.max(lastGroupMsgId,m.id)});
+
+  async function send(body){
+    try{
+      const m=await api(`/api/groups/${encodeURIComponent(g.id)}/messages`,{method:"POST",body:JSON.stringify({body})});
+      const em=$("msgs").querySelector(".empty"); if(em) em.remove();
+      if(m.id>lastGroupMsgId){bubble(m,true);lastGroupMsgId=m.id;}
+      return true;
+    }catch(err){await wtAlert({title:"Couldn't send",message:err.message});return false}
+  }
+  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
+  wireStickerPicker(send);
+  $("txt").focus();
+
+  groupPoll=setInterval(async()=>{
+    if(curType!=="group"||!cur||cur.id!==g.id)return;
+    try{
+      const newer=await api(`/api/groups/${encodeURIComponent(g.id)}/messages?after=${lastGroupMsgId}`);
+      if(newer.length){
+        const em=$("msgs").querySelector(".empty"); if(em) em.remove();
+        newer.forEach(m=>{if(m.id>lastGroupMsgId){bubble(m,true);lastGroupMsgId=m.id}});
+      }
+    }catch{}
+  },3000);
+}
+
+function renderSidebarList(){
+  const fl=$("fl"); fl.innerHTML="";
+  const badge=$("invBadge");
+  badge.textContent=invites.length;
+  badge.classList.toggle("hidden",!invites.length);
+
+  const showInvites=activeTab==="invites"||(activeTab==="all"&&invites.length);
+  const showGroups=activeTab==="all"||activeTab==="groups";
+  const showFriends=activeTab==="all"||activeTab==="friends";
+
+  if(showInvites && invites.length){
+    const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Group Invites"; fl.appendChild(lbl);
+    invites.forEach(inv=>{
+      const card=document.createElement("div"); card.className="inv-card";
+      card.innerHTML=`<div class="inv-top"><div class="av grp"><span class="ms">group_add</span></div><div class="fr-meta"><div class="fr-name">${esc(inv.name)}</div><div class="fr-sub">Invited by @${esc(inv.inviter_username||"friend")} · ${inv.member_count||1} in chat</div></div></div>
+      <div class="inv-acts"><button class="pill-btn p">Accept</button><button class="pill-btn t">Decline</button></div>`;
+      const [accBtn,decBtn]=card.querySelectorAll("button");
+      accBtn.onclick=async()=>{
+        accBtn.disabled=true;
+        await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:true})});
+        await loadGroupsAndInvites();
+        const joined=groups.find(g=>g.id===inv.group_id);
+        if(joined) openGroupChat(joined);
+      };
+      decBtn.onclick=async()=>{
+        decBtn.disabled=true;
+        await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:false})});
+        await loadGroupsAndInvites();
+      };
+      fl.appendChild(card);
+    });
+  } else if(activeTab==="invites" && !invites.length){
+    fl.innerHTML='<div class="empty">No pending group invites right now.</div>';
+    return;
+  }
+
+  if(showGroups){
+    if(groups.length){
+      const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Group Chats"; fl.appendChild(lbl);
+      groups.forEach(g=>{
+        const e=document.createElement("div");
+        e.className="fr"+(curType==="group"&&cur?.id===g.id?" on":"");
+        const callTag=g.call_count?` · ${g.call_count} in call`:"";
+        e.innerHTML=`<div class="av grp"><span class="ms">groups</span></div><div class="fr-meta"><div class="fr-name">${esc(g.name)}</div><div class="fr-sub">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}${callTag}</div></div>${g.unread_count?`<span class="u-badge">${g.unread_count}</span>`:""}`;
+        e.onclick=()=>openGroupChat(g);
+        fl.appendChild(e);
+      });
+    } else if(activeTab==="groups"){
+      fl.innerHTML='<div class="empty">No group chats yet. Tap <b>+ Group</b> above to start one with friends!</div>';
+      return;
+    }
+  }
+
+  if(showFriends){
+    if(friends.length){
+      const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Friends"; fl.appendChild(lbl);
+      friends.forEach(f=>{
+        const e=document.createElement("div");
+        e.className="fr"+(curType==="dm"&&cur?.id===f.id?" on":"")+(unreadBySender[f.id]?" unread":"");
+        e.dataset.id=f.id;
+        e.innerHTML=`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div class="fr-meta"><div class="fr-name">${esc(f.display_name||f.username)}</div><div class="fr-sub">@${esc(f.username)}</div></div><i class="dot"></i>`;
+        e.onclick=()=>openChat(f);
+        fl.appendChild(e);
+      });
+    } else if(activeTab==="friends" || (activeTab==="all" && !groups.length && !invites.length)){
+      fl.innerHTML='<div class="empty">No friends yet. Follow someone and have them follow you back.</div>';
+    }
+  }
+}
+
+document.querySelectorAll(".seg-tab").forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll(".seg-tab").forEach(b=>b.classList.toggle("on",b===btn));
+    activeTab=btn.dataset.tab;
+    renderSidebarList();
+  };
+});
+
+$("btnNewGroup").onclick=()=>{
+  $("ngName").value=""; $("ngHint").textContent="";
+  const box=$("ngFriends"); box.innerHTML="";
+  if(!friends.length){box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Follow someone and have them follow you back first.</div>';}
+  friends.forEach(f=>{
+    const row=document.createElement("label"); row.className="pick-row";
+    row.innerHTML=`<input type="checkbox" value="${esc(f.id)}"><div class="av" style="width:34px;height:34px" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><b>${esc(f.display_name||f.username)}</b> <span style="color:var(--muted);font-size:12px">@${esc(f.username)}</span></div>`;
+    box.appendChild(row);
+  });
+  $("newGroupDlg").showModal();
+};
+
+$("ngSubmit").onclick=async()=>{
+  const name=$("ngName").value.trim();
+  const memberIds=[...$("ngFriends").querySelectorAll("input:checked")].map(i=>i.value);
+  if(!name){$("ngHint").textContent="Enter a group name.";return}
+  if(!memberIds.length){$("ngHint").textContent="Pick at least one friend.";return}
+  $("ngSubmit").disabled=true; $("ngHint").textContent="";
+  try{
+    const created=await api("/api/groups",{method:"POST",body:JSON.stringify({name,memberIds})});
+    $("newGroupDlg").close();
+    await loadGroupsAndInvites();
+    const g=groups.find(x=>x.id===created.id);
+    if(g) openGroupChat(g);
+  }catch(err){$("ngHint").textContent=err.message;}
+  finally{$("ngSubmit").disabled=false;}
+};
+
+function openInviteMore(g){
+  $("imHint").textContent="";
+  const inGrp=new Set((g.members||[]).map(m=>m.id));
+  const avail=friends.filter(f=>!inGrp.has(f.id));
+  const box=$("imFriends"); box.innerHTML="";
+  if(!avail.length) box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">All your friends are already in this group.</div>';
+  avail.forEach(f=>{
+    const row=document.createElement("label"); row.className="pick-row";
+    row.innerHTML=`<input type="checkbox" value="${esc(f.id)}"><div class="av" style="width:34px;height:34px" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><b>${esc(f.display_name||f.username)}</b> <span style="color:var(--muted);font-size:12px">@${esc(f.username)}</span></div>`;
+    box.appendChild(row);
+  });
+  $("imSubmit").onclick=async()=>{
+    const memberIds=[...box.querySelectorAll("input:checked")].map(i=>i.value);
+    if(!memberIds.length){$("imHint").textContent="Pick at least one friend.";return}
+    $("imSubmit").disabled=true;
+    try{
+      await api(`/api/groups/${encodeURIComponent(g.id)}/invite`,{method:"POST",body:JSON.stringify({memberIds})});
+      $("invMoreDlg").close();
+    }catch(err){$("imHint").textContent=err.message;}
+    finally{$("imSubmit").disabled=false;}
+  };
+  $("invMoreDlg").showModal();
+}
+
+async function loadGroupsAndInvites(){
+  try{
+    const res=await api("/api/groups");
+    groups=res.groups||[];
+    invites=res.invites||[];
+  }catch{groups=[];invites=[];}
+  renderSidebarList();
+}
+
+(async()=>{
+  const {data}=await sb.auth.getSession(); if(!data.session){location.href="/login";return}
+  me=data.session.user.id; token=data.session.access_token;
+  const [a,b]=await Promise.all([sb.from("follows").select("following_id").eq("follower_id",me),sb.from("follows").select("follower_id").eq("following_id",me)]);
+  const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
+  if(ids.length){
+    const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);
+    friends=ps||[];
+  }
+  try{
+    const r=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+token}});
+    unreadBySender=(await r.json()).data?.bySender||{};
+  }catch{}
+  await loadGroupsAndInvites();
+  setInterval(loadGroupsAndInvites,12000);
+  addEventListener("hashchange",()=>{const f=friends.find(x=>x.id===location.hash.slice(1));if(f)openChat(f)});
+  const want=location.hash.slice(1),wf=friends.find(x=>x.id===want); if(wf) openChat(wf);
+  sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
+    const m=p.new; if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id)} else{unreadBySender[m.sender_id]=1;renderSidebarList()}}).subscribe();
+})();

@@ -21,22 +21,17 @@ body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);
 body.has-wp #wp-layer{opacity:1}
 body.has-wp #wp-scrim{opacity:.74}
 #app{position:fixed;left:var(--sbw);right:0;top:0;bottom:var(--sbh);display:flex}
-
-/* Sidebar list */
 #list{width:320px;border-right:1px solid var(--surface);display:flex;flex-direction:column;background:transparent}
 .list-top{padding:16px 14px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .list-top h2{font-size:22px;font-weight:700;letter-spacing:-.3px}
 .m3-fab{border:0;border-radius:18px;background:var(--primary);color:var(--on-primary);padding:10px 16px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:transform .2s var(--spring),border-radius .2s var(--spring);box-shadow:0 3px 12px #0002}
 .m3-fab:hover{transform:translateY(-1px)}
 .m3-fab:active{transform:scale(.95);border-radius:26px}
-
-/* Segmented Pill Tabs */
 .seg-tabs{display:flex;gap:4px;margin:0 14px 10px;padding:4px;background:var(--surface);border-radius:999px}
 .seg-tab{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:700;padding:8px 6px;border-radius:999px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;transition:background .2s,color .2s}
 .seg-tab.on{background:var(--primary);color:var(--on-primary)}
 .seg-badge{background:var(--accent);color:var(--on-accent);font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px}
 .seg-tab.on .seg-badge{background:var(--on-primary);color:var(--primary)}
-
 #fl{flex:1;overflow-y:auto;padding:4px 10px 16px;display:flex;flex-direction:column;gap:4px}
 .sec-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);padding:10px 12px 4px}
 .fr{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:24px;cursor:pointer;transition:background .18s,transform .18s var(--spring)}
@@ -45,16 +40,12 @@ body.has-wp #wp-scrim{opacity:.74}
 .fr-meta{min-width:0;flex:1}
 .fr-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fr-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* 7-sided cookie & 4-sided cookie Avatars */
 .av{width:46px;height:46px;clip-path:var(--m3-cookie-7);background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex:none;transition:transform .25s var(--spring)}
 .fr:hover .av{transform:scale(1.06)}
 .av.grp{background:var(--accent);color:var(--on-accent);clip-path:var(--m3-cookie-4)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--primary);margin-left:auto;display:none;flex:none}
 .fr.unread .dot{display:block}
 .u-badge{margin-left:auto;background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;flex:none}
-
-/* Invite Card */
 .inv-card{background:var(--surface);border-radius:24px;padding:14px;margin:4px 2px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--card)}
 .inv-top{display:flex;align-items:center;gap:10px}
 .inv-acts{display:flex;gap:8px}
@@ -62,8 +53,6 @@ body.has-wp #wp-scrim{opacity:.74}
 .pill-btn:active{transform:scale(.96)}
 .pill-btn.p{background:var(--primary);color:var(--on-primary)}
 .pill-btn.t{background:var(--card);color:var(--text)}
-
-/* Chat Area */
 #chat{flex:1;display:flex;flex-direction:column;min-width:0}
 #head{padding:12px 18px;font-weight:700;border-bottom:1px solid var(--surface);display:flex;align-items:center;gap:10px;background:transparent;flex-wrap:wrap}
 .head-actions{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -71,14 +60,11 @@ body.has-wp #wp-scrim{opacity:.74}
 .head-chip:hover{background:var(--card)}
 .head-chip.p{background:var(--primary);color:var(--on-primary)}
 .head-chip.bad{background:var(--bad);color:#fff}
-
-/* Discord-style Voice Call Bar & Stage */
 #callBar{background:var(--card);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--surface)}
 .call-peers{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:140px}
 .peer-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:4px 10px 4px 5px;border-radius:999px;font-size:12px;font-weight:700}
 .peer-pill .av{width:26px;height:26px;font-size:11px}
 .call-ctrls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-
 #stage{background:var(--surface);border-bottom:1px solid var(--card);padding:12px 16px;display:flex;flex-direction:column;gap:10px;position:relative}
 .stage-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:700}
 .watch-box{position:relative;background:#000;border-radius:24px;overflow:hidden;max-height:300px;display:grid;place-items:center}
@@ -92,7 +78,6 @@ body.has-wp #wp-scrim{opacity:.74}
 .wb-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .wb-swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .wb-swatch.on{border-color:var(--text);transform:scale(1.15)}
-
 #msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:8px}
 .m-wrap{display:flex;flex-direction:column;max-width:74%;align-self:flex-start;gap:3px}
 .m-wrap.me{align-self:flex-end;align-items:flex-end}
@@ -118,14 +103,10 @@ body.has-wp #wp-scrim{opacity:.74}
 #form #stkBtn{background:var(--surface);color:var(--text)}
 .m.stk{background:none!important;padding:0}.m.stk img,.m.stk .stk-box{width:150px;height:150px;object-fit:contain;display:block;border-radius:16px}
 #back{display:none;background:none;border:0;color:var(--text);cursor:pointer}
-
-/* Wavy Loader */
 .m3-loader{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;margin:auto;padding:24px;color:var(--muted);font-size:13px;font-weight:600}
 .m3-wave{width:160px;height:14px;overflow:hidden}
 .m3-wave svg{width:200%;height:100%;animation:waveMove 1.1s linear infinite}
 @keyframes waveMove{to{transform:translateX(-50%)}}
-
-/* Modals */
 dialog{border:0;border-radius:32px;padding:24px;width:min(94vw,440px);background:var(--bg);color:var(--text);margin:auto;box-shadow:0 16px 48px #0004}
 dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 .dlg-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
@@ -136,7 +117,6 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 .pick-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:18px;background:var(--surface);cursor:pointer}
 .pick-row input{accent-color:var(--primary);width:18px;height:18px}
 .dlg-foot{display:flex;gap:8px;justify-content:flex-end}
-
 @media(max-width:800px){#list{width:100%}#chat{display:none}body.chatting #list{display:none}body.chatting #chat{display:flex}#back{display:block}}
 </style></head>
 <body data-page="messages">
@@ -161,7 +141,6 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
  <section id="chat"><div class="empty" id="ph">Pick a friend or group chat to start messaging. Create a group to start a call, Group Watch, or Whiteboard!</div></section>
 </div>
 
-<!-- New Group Chat Modal -->
 <dialog id="newGroupDlg">
   <div class="dlg-head"><h3>New group chat</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('newGroupDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
   <input class="dlg-in" id="ngName" maxlength="40" placeholder="Group name (e.g. Comedy Squad)">
@@ -174,7 +153,6 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
   </div>
 </dialog>
 
-<!-- Invite More Friends Modal -->
 <dialog id="invMoreDlg">
   <div class="dlg-head"><h3>Invite friends</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('invMoreDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
   <div class="pick-list" id="imFriends"></div>
@@ -185,7 +163,6 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
   </div>
 </dialog>
 
-<!-- Pick Web Tok Video for Group Watch -->
 <dialog id="pickVidDlg">
   <div class="dlg-head"><h3>Pick a Web Tok</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('pickVidDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
   <div class="pick-list" id="pvList"></div>
@@ -197,571 +174,6 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 <script src="/js/wt-local.js"></script>
 <script src="/js/sidebar.js"></script>
 <script src="/js/theme.js"></script>
-<script>
-const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
-const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, activeTab="all", groupPoll=null, lastGroupMsgId=0;
-const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
-let lottieP=null;
-function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
-async function lottieIn(el,path){try{(await ensureLottie()).loadAnimation({container:el,renderer:"svg",loop:true,autoplay:true,path})}catch(e){console.warn(e)}}
-const STK=/^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i;
-const STKU=/^\[sticker_url:(https?:\/\/[^\]]+)\]$/i;
-const VSHARE=/^\[video_share:([^|\]]+)\|([^\]]*)\](?:\n([\s\S]*))?$/;
-function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.json$/i.test(file)){const b=document.createElement("div");b.className="stk-box";lottieIn(b,url);return b}const i=document.createElement("img");i.src=url;i.alt="sticker";i.loading="lazy";return i}
-function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error?.message||"Request failed");return j.data})}
-
-/* ---------- WebRTC Call + Group Watch + Whiteboard State ---------- */
-let ws=null, callGroupId=null, localStream=null, isMuted=false, peers={}, callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};
-let wbColor="#6750a4", wbSize=4, wbDrawing=false, wbLast=null, ignoreSync=false, videoFeedCache=null;
-
-function ensureWs(){
-  if(ws && (ws.readyState===0 || ws.readyState===1)) return Promise.resolve(ws);
-  return new Promise((resolve,reject)=>{
-    const proto=location.protocol==="https:"?"wss:":"ws:";
-    ws=new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
-    ws.onopen=()=>resolve(ws);
-    ws.onerror=()=>reject(new Error("WebSocket failed"));
-    ws.onmessage=e=>{try{handleWs(JSON.parse(e.data))}catch{}};
-    ws.onclose=()=>{if(callGroupId) leaveCall(true);};
-  });
-}
-function wsSend(obj){if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj));}
-
-async function createPeer(remoteUid, initiator){
-  if(peers[remoteUid]) return peers[remoteUid];
-  const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
-  peers[remoteUid]=pc;
-  if(localStream) localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
-  pc.onicecandidate=e=>{if(e.candidate)wsSend({type:"rtc-ice",to:remoteUid,candidate:e.candidate});};
-  pc.ontrack=e=>{
-    let a=document.getElementById("aud-"+remoteUid);
-    if(!a){a=document.createElement("audio");a.id="aud-"+remoteUid;a.autoplay=true;$("audioBin").appendChild(a);}
-    a.srcObject=e.streams[0];
-  };
-  if(initiator){
-    const offer=await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    wsSend({type:"rtc-offer",to:remoteUid,sdp:offer});
-  }
-  return pc;
-}
-
-async function handleWs(m){
-  if(m.type==="joined"){
-    callState={participants:m.participants||[],activity:m.activity||"none",watch:m.watch||{video:null,playing:false,time:0}};
-    renderCallUI();
-    if(m.strokes && m.activity==="whiteboard") replayStrokes(m.strokes);
-    for(const puid of (m.existingPeers||[])) await createPeer(puid,true);
-  } else if(m.type==="call-state"){
-    callState.participants=m.participants||[];
-    if(m.activity) callState.activity=m.activity;
-    if(m.watch) callState.watch=m.watch;
-    renderCallUI();
-  } else if(m.type==="rtc-offer"){
-    const pc=await createPeer(m.from,false);
-    await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
-    const ans=await pc.createAnswer();
-    await pc.setLocalDescription(ans);
-    wsSend({type:"rtc-answer",to:m.from,sdp:ans});
-  } else if(m.type==="rtc-answer"){
-    const pc=peers[m.from]; if(pc) await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
-  } else if(m.type==="rtc-ice"){
-    const pc=peers[m.from]; if(pc&&m.candidate) try{await pc.addIceCandidate(new RTCIceCandidate(m.candidate))}catch{}
-  } else if(m.type==="activity"){
-    callState.activity=m.activity;
-    renderCallUI();
-  } else if(m.type==="watch-sync"){
-    callState.activity="watch";
-    callState.watch={video:m.video,playing:m.playing,time:m.time};
-    renderCallUI(true);
-  } else if(m.type==="watch-react"){
-    spawnReaction(m);
-  } else if(m.type==="wb-stroke"){
-    if(callState.activity!=="whiteboard"){callState.activity="whiteboard";renderCallUI();}
-    drawStroke(m);
-  } else if(m.type==="wb-clear"){
-    const c=$("wbCanvas"); if(c) c.getContext("2d").clearRect(0,0,c.width,c.height);
-  }
-}
-
-async function joinCall(gid){
-  try{
-    localStream=await navigator.mediaDevices.getUserMedia({audio:true});
-  }catch{
-    await wtAlert({title:"Microphone needed",message:"Microphone access is needed for voice calls. Check your browser permissions."});
-    return;
-  }
-  await ensureWs();
-  callGroupId=gid; isMuted=false;
-  wsSend({type:"join-call",groupId:gid});
-}
-function leaveCall(silent=false){
-  if(!silent) wsSend({type:"leave-call"});
-  Object.values(peers).forEach(pc=>pc.close());
-  peers={};
-  if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
-  $("audioBin").innerHTML="";
-  callGroupId=null;
-  callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};
-  renderCallUI();
-}
-function toggleMute(){
-  isMuted=!isMuted;
-  if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
-  wsSend({type:"mute",muted:isMuted});
-}
-
-function spawnReaction(m){
-  const layer=document.getElementById("reactLayer"); if(!layer) return;
-  const el=document.createElement("div"); el.className="react-pop";
-  el.style.left=(12+Math.random()*68)+"%";
-  el.innerHTML=`<span class="ms fill" style="font-size:18px;color:var(--primary)">${esc(m.icon||"favorite")}</span><span>${esc(m.by||"")}</span>`;
-  layer.appendChild(el);
-  setTimeout(()=>el.remove(),2300);
-}
-
-function drawStroke(s){
-  const c=$("wbCanvas"); if(!c) return;
-  const ctx=c.getContext("2d");
-  ctx.strokeStyle=s.color||"#6750a4";
-  ctx.lineWidth=s.size||4;
-  ctx.lineCap="round";
-  ctx.beginPath();
-  ctx.moveTo(s.x0*c.width, s.y0*c.height);
-  ctx.lineTo(s.x1*c.width, s.y1*c.height);
-  ctx.stroke();
-}
-function replayStrokes(list){
-  setTimeout(()=>{(list||[]).forEach(drawStroke);},40);
-}
-
-function renderCallUI(fromWatchSync=false){
-  const callBtn=$("btnCall");
-  const bar=$("callBar");
-  const stage=$("stage");
-  if(!bar || !stage || curType!=="group" || !cur) return;
-  const inThisCall = callGroupId===cur.id;
-  if(callBtn){
-    callBtn.innerHTML=inThisCall?'<span class="ms" style="font-size:16px">call_end</span>Leave call':`<span class="ms" style="font-size:16px">call</span>${callState.participants.length?`Join (${callState.participants.length})`:"Call"}`;
-    callBtn.className="head-chip "+(inThisCall?"bad":"p");
-  }
-  if(!inThisCall){
-    bar.classList.add("hidden"); stage.classList.add("hidden"); return;
-  }
-  bar.classList.remove("hidden");
-  bar.innerHTML=`<div class="call-peers">${callState.participants.map(p=>`<div class="peer-pill"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`).join("")}</div>
-  <div class="call-ctrls">
-    <button class="head-chip" id="btnMute"><span class="ms" style="font-size:16px">${isMuted?"mic_off":"mic"}</span>${isMuted?"Unmute":"Mute"}</button>
-    <button class="head-chip ${callState.activity==="watch"?"p":""}" id="btnWatch"><span class="ms" style="font-size:16px">smart_display</span>Group Watch</button>
-    <button class="head-chip ${callState.activity==="whiteboard"?"p":""}" id="btnBoard"><span class="ms" style="font-size:16px">draw</span>Whiteboard</button>
-  </div>`;
-  $("btnMute").onclick=toggleMute;
-  $("btnWatch").onclick=()=>wsSend({type:"set-activity",activity:callState.activity==="watch"?"none":"watch"});
-  $("btnBoard").onclick=()=>wsSend({type:"set-activity",activity:callState.activity==="whiteboard"?"none":"whiteboard"});
-
-  if(callState.activity==="watch"){
-    stage.classList.remove("hidden");
-    if(!stage.dataset.mode || stage.dataset.mode!=="watch"){
-      stage.dataset.mode="watch";
-      stage.innerHTML=`<div class="stage-head"><span>Group Watch</span><div style="display:flex;gap:6px"><button class="head-chip p" id="btnPickVid"><span class="ms" style="font-size:16px">video_library</span>Pick video</button><button class="head-chip" id="btnCloseStage">Hide</button></div></div>
-      <div class="watch-box"><video id="gwVid" controls playsinline></video><div class="react-float-layer" id="reactLayer"></div></div>
-      <div class="watch-bar">
-        <button class="head-chip" id="rHeart"><span class="ms fill" style="font-size:16px;color:var(--primary)">favorite</span>Like</button>
-        <button class="head-chip" id="rLaugh"><span class="ms" style="font-size:16px;color:var(--primary)">sentiment_very_satisfied</span>Haha</button>
-        <button class="head-chip" id="rFire"><span class="ms fill" style="font-size:16px;color:var(--primary)">local_fire_department</span>Fire</button>
-        <button class="head-chip" id="rWow"><span class="ms" style="font-size:16px;color:var(--primary)">bolt</span>Whoa</button>
-      </div>`;
-      $("btnCloseStage").onclick=()=>wsSend({type:"set-activity",activity:"none"});
-      $("btnPickVid").onclick=openPickVideo;
-      [["rHeart","favorite"],["rLaugh","sentiment_very_satisfied"],["rFire","local_fire_department"],["rWow","bolt"]].forEach(([id,ic])=>{
-        $(id).onclick=()=>wsSend({type:"watch-react",icon:ic});
-      });
-      const v=$("gwVid");
-      v.onplay=()=>{if(!ignoreSync)wsSend({type:"watch-sync",video:callState.watch.video,playing:true,time:v.currentTime})};
-      v.onpause=()=>{if(!ignoreSync)wsSend({type:"watch-sync",video:callState.watch.video,playing:false,time:v.currentTime})};
-      v.onseeked=()=>{if(!ignoreSync)wsSend({type:"watch-sync",video:callState.watch.video,playing:!v.paused,time:v.currentTime})};
-    }
-    const v=$("gwVid"), w=callState.watch;
-    if(v && w?.video){
-      ignoreSync=true;
-      if(v.dataset.vid!==w.video.id){v.dataset.vid=w.video.id;v.src=w.video.video_url;}
-      if(Math.abs(v.currentTime-(w.time||0))>1.2) v.currentTime=w.time||0;
-      if(w.playing && v.paused) v.play().catch(()=>{});
-      if(!w.playing && !v.paused) v.pause();
-      setTimeout(()=>{ignoreSync=false;},250);
-    }
-  } else if(callState.activity==="whiteboard"){
-    stage.classList.remove("hidden");
-    if(!stage.dataset.mode || stage.dataset.mode!=="whiteboard"){
-      stage.dataset.mode="whiteboard";
-      stage.innerHTML=`<div class="stage-head"><span>Shared Whiteboard</span><div style="display:flex;gap:6px"><button class="head-chip" id="wbClear">Clear</button><button class="head-chip" id="btnCloseStage">Hide</button></div></div>
-      <div class="wb-wrap">
-        <canvas id="wbCanvas" width="800" height="400"></canvas>
-        <div class="wb-tools" id="wbTools">
-          ${["#6750a4","#e53935","#1e88e5","#43a047","#fb8c00","#1d192b","#ffffff"].map(c=>`<button type="button" class="wb-swatch ${c===wbColor?"on":""}" data-c="${c}" style="background:${c};${c==="#ffffff"?"border:1px solid var(--muted)":""}" title="${c==="#ffffff"?"Eraser":c}"></button>`).join("")}
-          <button class="head-chip" id="wbThin">Thin</button><button class="head-chip" id="wbThick">Thick</button>
-        </div>
-      </div>`;
-      $("btnCloseStage").onclick=()=>wsSend({type:"set-activity",activity:"none"});
-      $("wbClear").onclick=()=>wsSend({type:"wb-clear"});
-      $("wbTools").querySelectorAll(".wb-swatch").forEach(b=>b.onclick=()=>{
-        wbColor=b.dataset.c;
-        $("wbTools").querySelectorAll(".wb-swatch").forEach(x=>x.classList.toggle("on",x===b));
-      });
-      $("wbThin").onclick=()=>{wbSize=3;};
-      $("wbThick").onclick=()=>{wbSize=10;};
-      const c=$("wbCanvas");
-      const pt=e=>{const r=c.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width,y:(e.clientY-r.top)/r.height};};
-      c.onpointerdown=e=>{wbDrawing=true;wbLast=pt(e);c.setPointerCapture(e.pointerId);};
-      c.onpointermove=e=>{
-        if(!wbDrawing||!wbLast)return;
-        const p=pt(e), st={x0:wbLast.x,y0:wbLast.y,x1:p.x,y1:p.y,color:wbColor,size:wbColor==="#ffffff"?18:wbSize};
-        drawStroke(st); wsSend({type:"wb-stroke",...st}); wbLast=p;
-      };
-      c.onpointerup=()=>{wbDrawing=false;wbLast=null;};
-    }
-  } else {
-    stage.classList.add("hidden"); stage.dataset.mode=""; stage.innerHTML="";
-  }
-}
-
-async function openPickVideo(){
-  const list=$("pvList"); list.innerHTML='<div style="padding:12px;color:var(--muted)">Loading videos…</div>';
-  $("pickVidDlg").showModal();
-  if(!videoFeedCache){
-    const {data}=await sb.from("videos").select("id,title,video_url").order("created_at",{ascending:false}).limit(30);
-    videoFeedCache=data||[];
-  }
-  list.innerHTML="";
-  videoFeedCache.forEach(v=>{
-    const row=document.createElement("div"); row.className="pick-row";
-    row.innerHTML=`<span class="ms" style="color:var(--primary)">play_circle</span><div style="min-width:0;flex:1"><b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.title||"Web Tok")}</b></div>`;
-    row.onclick=()=>{
-      $("pickVidDlg").close();
-      callState.watch={video:v,playing:true,time:0};
-      wsSend({type:"watch-sync",video:v,playing:true,time:0});
-      renderCallUI(true);
-    };
-    list.appendChild(row);
-  });
-}
-
-function bubble(m, showSender=false){
-  const wrap=document.createElement("div");
-  wrap.className="m-wrap"+(m.sender_id===me?" me":"");
-  if(showSender && m.sender_id!==me){
-    const sn=document.createElement("div");
-    sn.className="m-sender";
-    sn.textContent=m.display_name||("@"+(m.username||"user"));
-    wrap.appendChild(sn);
-  }
-  const d=document.createElement("div");d.className="m";
-  const raw=(m.body||"").trim();
-  const su=STKU.exec(raw), s=STK.exec(raw), vs=VSHARE.exec(raw);
-  if(vs){
-    const card=document.createElement("a");
-    card.className="vid-share-card";
-    card.href="/scroll#v="+encodeURIComponent(vs[1]);
-    card.innerHTML=`<div class="vid-share-ic"><span class="ms">play_arrow</span></div><div><b style="display:block;font-size:13px">${esc(vs[2]||"Shared Web Tok")}</b><small style="opacity:.8;font-size:11px">Tap to watch video</small></div>`;
-    d.appendChild(card);
-    if(vs[3]){const note=document.createElement("div");note.textContent=vs[3];d.appendChild(note);}
-  } else if(su){d.classList.add("stk");const i=document.createElement("img");i.src=su[1];i.alt="sticker";i.loading="lazy";d.appendChild(i)}
-  else if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}
-  else d.textContent=m.body;
-  wrap.appendChild(d);
-  $("msgs").appendChild(wrap);
-  $("msgs").scrollTop=1e9;
-}
-
-function stopGroupPoll(){if(groupPoll){clearInterval(groupPoll);groupPoll=null;}}
-function makeStickerBlob(file){
-  return new Promise((resolve,reject)=>{
-    const u=URL.createObjectURL(file), img=new Image();
-    img.onload=()=>{URL.revokeObjectURL(u);const max=256,sc=Math.min(max/img.width,max/img.height,1);const c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.width*sc));c.height=Math.max(1,Math.round(img.height*sc));c.getContext("2d").drawImage(img,0,0,c.width,c.height);c.toBlob(b=>b?resolve(b):reject(new Error("Could not process sticker")),"image/png")};
-    img.onerror=()=>{URL.revokeObjectURL(u);reject(new Error("Could not read image"))};
-    img.src=u;
-  });
-}
-function wireStickerPicker(sendFn){
-  $("stkBtn").onclick=async()=>{
-    const pn=$("stkPanel");pn.classList.toggle("hidden");
-    if(pn.classList.contains("hidden")||pn.dataset.ready)return;
-    await loadStickerGrid(pn,sendFn);
-  };
-}
-async function loadStickerGrid(pn,sendFn){
-  pn.dataset.ready="1";
-  let list=[]; try{list=await (await fetch("/api/stickers")).json()}catch{}
-  pn.innerHTML="";
-  const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="stk-add";
-  addBtn.innerHTML='<span class="ms">add_photo_alternate</span><span>Make</span>';
-  const fin=document.createElement("input"); fin.type="file"; fin.accept="image/png,image/webp,image/jpeg,image/gif"; fin.hidden=true;
-  addBtn.onclick=()=>fin.click();
-  fin.onchange=async e=>{
-    const f=e.target.files?.[0]; if(!f)return;
-    addBtn.disabled=true;
-    try{
-      const blob=await makeStickerBlob(f), path=`${me}/sticker-${crypto.randomUUID()}.png`;
-      const up=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/png"});
-      if(up?.error)throw up.error;
-      const url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
-      await api("/api/stickers",{method:"POST",body:JSON.stringify({name:f.name.replace(/\.[^.]+$/,"").slice(0,30)||"Sticker",url})});
-      await loadStickerGrid(pn,sendFn);
-    }catch(err){await wtAlert({title:"Couldn't create sticker",message:err?.message||"Could not create sticker."})}
-    finally{addBtn.disabled=false;e.target.value="";}
-  };
-  pn.appendChild(addBtn); pn.appendChild(fin);
-  if(!list.length){const msg=document.createElement("div");msg.style.cssText="grid-column:span 3;color:var(--muted);padding:8px;font-size:12px;align-self:center";msg.textContent="Tap Make to create a sticker!";pn.appendChild(msg);return}
-  list.forEach(item=>{
-    const b=document.createElement("button"); b.type="button";
-    if(item&&typeof item==="object"&&item.url){
-      b.innerHTML=`<img src="${esc(item.url)}" alt="${esc(item.name||"sticker")}" loading="lazy">`;
-      b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker_url:"+item.url+"]")};
-    }else{
-      const file=String(item);
-      b.appendChild(stickerEl(file));
-      b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker:"+file+"]")};
-    }
-    pn.appendChild(b);
-  });
-}
-
-async function openChat(f){
-  stopGroupPoll();
-  cur=f; curType="dm"; document.body.classList.add("chatting");
-  delete unreadBySender[f.id];
-  renderSidebarList();
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}</div></div></div>
-  <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
-  <div id="stkPanel" class="hidden"></div>
-  <form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
-  $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
-  const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
-  $("msgs").innerHTML="";
-  (data||[]).forEach(m=>bubble(m,false));
-  if(window.wtMarkRead)wtMarkRead(f.id);
-  async function send(body){const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
-    if(error){await wtAlert({title:"Couldn't send",message:error.message});return false}bubble(m,false);return true}
-  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
-  wireStickerPicker(send);
-  $("txt").focus();
-}
-
-async function openGroupChat(g){
-  stopGroupPoll();
-  cur=g; curType="group"; lastGroupMsgId=0; g.unread_count=0;
-  document.body.classList.add("chatting");
-  renderSidebarList();
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av grp"><span class="ms">groups</span></div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}</div></div><div class="head-actions"><button class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button class="head-chip" id="btnInvMore"><span class="ms" style="font-size:16px">person_add</span>Invite</button><button class="head-chip" id="btnLeaveGrp">Leave</button></div></div>
-  <div id="callBar" class="hidden"></div>
-  <div id="stage" class="hidden"></div>
-  <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
-  <div id="stkPanel" class="hidden"></div>
-  <form id="form"><input id="txt" maxlength="1000" placeholder="Message ${esc(g.name)}…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
-  $("back").onclick=()=>{stopGroupPoll();document.body.classList.remove("chatting");cur=null;curType=null};
-  $("btnCall").onclick=()=>{if(callGroupId===g.id)leaveCall();else joinCall(g.id);};
-  $("btnLeaveGrp").onclick=async()=>{
-    const ok=await wtConfirm({title:"Leave group?",message:`Are you sure you want to leave "${g.name}"?`,icon:"logout",confirmText:"Leave",danger:true});
-    if(!ok)return;
-    if(callGroupId===g.id) leaveCall();
-    await api(`/api/groups/${encodeURIComponent(g.id)}/leave`,{method:"POST",body:"{}"});
-    stopGroupPoll(); cur=null; curType=null; document.body.classList.remove("chatting");
-    $("chat").innerHTML='<div class="empty">Left group chat.</div>';
-    await loadGroupsAndInvites();
-  };
-  $("btnInvMore").onclick=()=>openInviteMore(g);
-  if(callGroupId!==g.id){
-    try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{}
-  }
-  renderCallUI();
-
-  const msgs=await api(`/api/groups/${encodeURIComponent(g.id)}/messages`);
-  $("msgs").innerHTML="";
-  if(!msgs.length) $("msgs").innerHTML='<div class="empty">No messages yet. Say hi!</div>';
-  msgs.forEach(m=>{bubble(m,true);lastGroupMsgId=Math.max(lastGroupMsgId,m.id)});
-
-  async function send(body){
-    try{
-      const m=await api(`/api/groups/${encodeURIComponent(g.id)}/messages`,{method:"POST",body:JSON.stringify({body})});
-      const em=$("msgs").querySelector(".empty"); if(em) em.remove();
-      if(m.id>lastGroupMsgId){bubble(m,true);lastGroupMsgId=m.id;}
-      return true;
-    }catch(err){await wtAlert({title:"Couldn't send",message:err.message});return false}
-  }
-  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
-  wireStickerPicker(send);
-  $("txt").focus();
-
-  groupPoll=setInterval(async()=>{
-    if(curType!=="group"||!cur||cur.id!==g.id)return;
-    try{
-      const newer=await api(`/api/groups/${encodeURIComponent(g.id)}/messages?after=${lastGroupMsgId}`);
-      if(newer.length){
-        const em=$("msgs").querySelector(".empty"); if(em) em.remove();
-        newer.forEach(m=>{if(m.id>lastGroupMsgId){bubble(m,true);lastGroupMsgId=m.id}});
-      }
-    }catch{}
-  },3000);
-}
-
-function renderSidebarList(){
-  const fl=$("fl"); fl.innerHTML="";
-  const badge=$("invBadge");
-  badge.textContent=invites.length;
-  badge.classList.toggle("hidden",!invites.length);
-
-  const showInvites=activeTab==="invites"||(activeTab==="all"&&invites.length);
-  const showGroups=activeTab==="all"||activeTab==="groups";
-  const showFriends=activeTab==="all"||activeTab==="friends";
-
-  if(showInvites && invites.length){
-    const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Group Invites"; fl.appendChild(lbl);
-    invites.forEach(inv=>{
-      const card=document.createElement("div"); card.className="inv-card";
-      card.innerHTML=`<div class="inv-top"><div class="av grp"><span class="ms">group_add</span></div><div class="fr-meta"><div class="fr-name">${esc(inv.name)}</div><div class="fr-sub">Invited by @${esc(inv.inviter_username||"friend")} · ${inv.member_count||1} in chat</div></div></div>
-      <div class="inv-acts"><button class="pill-btn p">Accept</button><button class="pill-btn t">Decline</button></div>`;
-      const [accBtn,decBtn]=card.querySelectorAll("button");
-      accBtn.onclick=async()=>{
-        accBtn.disabled=true;
-        await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:true})});
-        await loadGroupsAndInvites();
-        const joined=groups.find(g=>g.id===inv.group_id);
-        if(joined) openGroupChat(joined);
-      };
-      decBtn.onclick=async()=>{
-        decBtn.disabled=true;
-        await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:false})});
-        await loadGroupsAndInvites();
-      };
-      fl.appendChild(card);
-    });
-  } else if(activeTab==="invites" && !invites.length){
-    fl.innerHTML='<div class="empty">No pending group invites right now.</div>';
-    return;
-  }
-
-  if(showGroups){
-    if(groups.length){
-      const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Group Chats"; fl.appendChild(lbl);
-      groups.forEach(g=>{
-        const e=document.createElement("div");
-        e.className="fr"+(curType==="group"&&cur?.id===g.id?" on":"");
-        const callTag=g.call_count?` · ${g.call_count} in call`:"";
-        e.innerHTML=`<div class="av grp"><span class="ms">groups</span></div><div class="fr-meta"><div class="fr-name">${esc(g.name)}</div><div class="fr-sub">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}${callTag}</div></div>${g.unread_count?`<span class="u-badge">${g.unread_count}</span>`:""}`;
-        e.onclick=()=>openGroupChat(g);
-        fl.appendChild(e);
-      });
-    } else if(activeTab==="groups"){
-      fl.innerHTML='<div class="empty">No group chats yet. Tap <b>+ Group</b> above to start one with friends!</div>';
-      return;
-    }
-  }
-
-  if(showFriends){
-    if(friends.length){
-      const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Friends"; fl.appendChild(lbl);
-      friends.forEach(f=>{
-        const e=document.createElement("div");
-        e.className="fr"+(curType==="dm"&&cur?.id===f.id?" on":"")+(unreadBySender[f.id]?" unread":"");
-        e.dataset.id=f.id;
-        e.innerHTML=`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div class="fr-meta"><div class="fr-name">${esc(f.display_name||f.username)}</div><div class="fr-sub">@${esc(f.username)}</div></div><i class="dot"></i>`;
-        e.onclick=()=>openChat(f);
-        fl.appendChild(e);
-      });
-    } else if(activeTab==="friends" || (activeTab==="all" && !groups.length && !invites.length)){
-      fl.innerHTML='<div class="empty">No friends yet. Follow someone and have them follow you back.</div>';
-    }
-  }
-}
-
-document.querySelectorAll(".seg-tab").forEach(btn=>{
-  btn.onclick=()=>{
-    document.querySelectorAll(".seg-tab").forEach(b=>b.classList.toggle("on",b===btn));
-    activeTab=btn.dataset.tab;
-    renderSidebarList();
-  };
-});
-
-$("btnNewGroup").onclick=()=>{
-  $("ngName").value=""; $("ngHint").textContent="";
-  const box=$("ngFriends"); box.innerHTML="";
-  if(!friends.length){box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Follow someone and have them follow you back first.</div>';}
-  friends.forEach(f=>{
-    const row=document.createElement("label"); row.className="pick-row";
-    row.innerHTML=`<input type="checkbox" value="${esc(f.id)}"><div class="av" style="width:34px;height:34px" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><b>${esc(f.display_name||f.username)}</b> <span style="color:var(--muted);font-size:12px">@${esc(f.username)}</span></div>`;
-    box.appendChild(row);
-  });
-  $("newGroupDlg").showModal();
-};
-
-$("ngSubmit").onclick=async()=>{
-  const name=$("ngName").value.trim();
-  const memberIds=[...$("ngFriends").querySelectorAll("input:checked")].map(i=>i.value);
-  if(!name){$("ngHint").textContent="Enter a group name.";return}
-  if(!memberIds.length){$("ngHint").textContent="Pick at least one friend.";return}
-  $("ngSubmit").disabled=true; $("ngHint").textContent="";
-  try{
-    const created=await api("/api/groups",{method:"POST",body:JSON.stringify({name,memberIds})});
-    $("newGroupDlg").close();
-    await loadGroupsAndInvites();
-    const g=groups.find(x=>x.id===created.id);
-    if(g) openGroupChat(g);
-  }catch(err){$("ngHint").textContent=err.message;}
-  finally{$("ngSubmit").disabled=false;}
-};
-
-function openInviteMore(g){
-  $("imHint").textContent="";
-  const inGrp=new Set((g.members||[]).map(m=>m.id));
-  const avail=friends.filter(f=>!inGrp.has(f.id));
-  const box=$("imFriends"); box.innerHTML="";
-  if(!avail.length) box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">All your friends are already in this group.</div>';
-  avail.forEach(f=>{
-    const row=document.createElement("label"); row.className="pick-row";
-    row.innerHTML=`<input type="checkbox" value="${esc(f.id)}"><div class="av" style="width:34px;height:34px" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><b>${esc(f.display_name||f.username)}</b> <span style="color:var(--muted);font-size:12px">@${esc(f.username)}</span></div>`;
-    box.appendChild(row);
-  });
-  $("imSubmit").onclick=async()=>{
-    const memberIds=[...box.querySelectorAll("input:checked")].map(i=>i.value);
-    if(!memberIds.length){$("imHint").textContent="Pick at least one friend.";return}
-    $("imSubmit").disabled=true;
-    try{
-      await api(`/api/groups/${encodeURIComponent(g.id)}/invite`,{method:"POST",body:JSON.stringify({memberIds})});
-      $("invMoreDlg").close();
-    }catch(err){$("imHint").textContent=err.message;}
-    finally{$("imSubmit").disabled=false;}
-  };
-  $("invMoreDlg").showModal();
-}
-
-async function loadGroupsAndInvites(){
-  try{
-    const res=await api("/api/groups");
-    groups=res.groups||[];
-    invites=res.invites||[];
-  }catch{groups=[];invites=[];}
-  renderSidebarList();
-}
-
-(async()=>{
-  const {data}=await sb.auth.getSession(); if(!data.session){location.href="/login";return}
-  me=data.session.user.id; token=data.session.access_token;
-  const [a,b]=await Promise.all([sb.from("follows").select("following_id").eq("follower_id",me),sb.from("follows").select("follower_id").eq("following_id",me)]);
-  const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
-  if(ids.length){
-    const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);
-    friends=ps||[];
-  }
-  try{
-    const r=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+token}});
-    unreadBySender=(await r.json()).data?.bySender||{};
-  }catch{}
-  await loadGroupsAndInvites();
-  setInterval(loadGroupsAndInvites,12000);
-  addEventListener("hashchange",()=>{const f=friends.find(x=>x.id===location.hash.slice(1));if(f)openChat(f)});
-  const want=location.hash.slice(1),wf=friends.find(x=>x.id===want); if(wf) openChat(wf);
-  sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
-    const m=p.new; if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id)} else{unreadBySender[m.sender_id]=1;renderSidebarList()}}).subscribe();
-})();
-</script></body></html>
+<script src="/js/messages-call.js"></script>
+<script src="/js/messages-app.js"></script>
+</body></html>
