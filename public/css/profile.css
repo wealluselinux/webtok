@@ -1,12 +1,13 @@
-/* Profile page: M3 Expressive header card, segmented tabs, video grid, comment cards */
+/* Profile page: M3 Expressive header card, admin/owner badge, tabs, video grid, comment cards */
 .acct-wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
 .profile-card{background:var(--card);border-radius:var(--r-xl);padding:26px;display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;box-shadow:0 6px 24px #0002}
 .pfp{width:106px;height:106px;border-radius:38% 62% 55% 45%/45% 38% 62% 55%;background:var(--surface) center/cover;display:grid;place-items:center;font-size:38px;font-weight:700;color:var(--primary);flex-shrink:0;box-shadow:0 6px 16px #0002;transition:border-radius .25s cubic-bezier(.2,.9,.3,1.1)}
 .pfp:hover{border-radius:50% 42% 48% 52%}
 .p-info{flex:1;min-width:240px}
-.p-names{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.p-names{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .p-names h1{font-size:25px;font-weight:700;letter-spacing:-.3px}
 .p-names span{color:var(--muted);font-size:15px}
+.role-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:999px;background:var(--primary);color:var(--on-primary)!important;font-size:12px!important;font-weight:700;letter-spacing:.1px}
 .p-stats{display:flex;gap:16px;flex-wrap:wrap;margin:10px 0 14px;font-size:14px}
 .p-stats button,.p-stats span{color:var(--muted);padding:0;font-size:14px}
 .p-stats button:hover{text-decoration:underline;color:var(--text)}

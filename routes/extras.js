@@ -1,7 +1,7 @@
 /* Extra server features, mounted from server.js:
    1) Unread messages
-   2) Roles, bans, per-user restrictions, forced sign-out
-   3) Admin panel API (/api/admin/*) and /admin, /terms, /privacy
+   2) Roles, bans, per-user restrictions, forced sign-out, role_since tenure
+   3) Admin panel API (/api/admin/*) + /api/admin/announce via @notifications account
    4) Sign-up accepted_terms
    5) Group chats with friend invites & acceptance
    6) Custom user stickers & comment replies
@@ -13,6 +13,8 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const { WebSocketServer } = require("ws");
+
+const NOTIF_ID = "00000000-0000-0000-0000-000000000001";
 
 module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 }) {
   const SECRET = process.env.JWT_SECRET;
@@ -36,7 +38,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     }
     const ucols = (await db.execute("PRAGMA table_info(users)")).rows.map(r => r[1]);
     for (const [n, d] of [["role", "TEXT NOT NULL DEFAULT 'user'"], ["restrictions", "TEXT NOT NULL DEFAULT '[]'"], ["banned", "INTEGER NOT NULL DEFAULT 0"],
-      ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"], ["last_login_at", "TEXT"]]) {
+      ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"], ["last_login_at", "TEXT"], ["role_since", "TEXT"]]) {
       if (!ucols.includes(n)) await db.execute(`ALTER TABLE users ADD COLUMN ${n} ${d}`);
     }
     await db.batch([
@@ -52,9 +54,21 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_alerts_user ON login_alerts(user_id, seen, created_at DESC)",
     ], "write");
+
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
     if (ownerEmail && !(await run("SELECT 1 FROM users WHERE role = 'owner'")).length) {
-      await db.execute({ sql: "UPDATE users SET role = 'owner' WHERE email = ?", args: [ownerEmail] });
+      await db.execute({ sql: "UPDATE users SET role = 'owner', role_since = COALESCE(role_since, created_at) WHERE email = ?", args: [ownerEmail] });
+    }
+    await db.execute("UPDATE users SET role_since = COALESCE(role_since, created_at) WHERE role IN ('owner','admin') AND role_since IS NULL");
+
+    // Ensure @notifications system account exists
+    if (!(await run("SELECT 1 FROM profiles WHERE id = ?", [NOTIF_ID])).length) {
+      const ts = nowIso();
+      const lockedHash = "$2a$10$" + crypto.randomBytes(24).toString("hex");
+      await db.batch([
+        { sql: "INSERT OR IGNORE INTO users (id, email, encrypted_password, raw_user_meta_data, role, created_at) VALUES (?,?,?,?,?,?)", args: [NOTIF_ID, "notifications@webtok.system", lockedHash, JSON.stringify({ username: "notifications", display_name: "Notifications" }), "system", ts] },
+        { sql: "INSERT OR IGNORE INTO profiles (id, username, display_name, bio, avatar_url, theme, created_at) VALUES (?,?,?,?,NULL,'{}',?)", args: [NOTIF_ID, "notifications", "Notifications", "Official Web Tok announcements", ts] }
+      ], "write");
     }
   })().catch(e => { ready = null; throw e; }));
   ensure().catch(e => console.warn("extras setup:", e.message));
@@ -150,6 +164,14 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     });
     next();
   });
+
+  /* ---------- public profile role badge (no sensitive fields) ---------- */
+  app.get("/api/profiles/:id/badge", wrap(async req => {
+    const id = String(req.params.id || "");
+    const u = (await run("SELECT role, role_since, created_at FROM users WHERE id = ?", [id]))[0];
+    if (!u || !["owner", "admin"].includes(u.role)) return { data: { role: "user", role_since: null }, error: null };
+    return { data: { role: u.role, role_since: u.role_since || u.created_at || null }, error: null };
+  }));
 
   /* ---------- security alerts API ---------- */
   app.get("/api/security/alerts", wrap(async req => {
@@ -504,7 +526,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     if (!t) throw new HttpError(404, "User not found");
     return t;
   }
-  const mayAct = (me, t) => { if (t.role === "owner" || t.id === me.uid) throw new HttpError(403, "You can't change this account"); if (me.role !== "owner" && t.role !== "user") throw new HttpError(403, "Only the owner can change admins"); };
+  const mayAct = (me, t) => { if (t.role === "owner" || t.role === "system" || t.id === me.uid) throw new HttpError(403, "You can't change this account"); if (me.role !== "owner" && t.role !== "user") throw new HttpError(403, "Only the owner can change admins"); };
   const label = t => `@${t.username || "?"} (${t.email})`;
   const makePassword = () => {
     const pick = s => s[crypto.randomInt(s.length)];
@@ -513,6 +535,23 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     for (let i = c.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [c[i], c[j]] = [c[j], c[i]]; }
     return c.join("");
   };
+
+  app.post("/api/admin/announce", wrap(async req => {
+    const me = needAdmin(req);
+    const message = String(req.body?.message || "").trim();
+    if (!message || message.length > 1000) throw new HttpError(400, "Announcement must be 1 to 1000 characters.");
+    const recipients = await run("SELECT id FROM users WHERE id != ? AND banned = 0 AND role != 'system'", [NOTIF_ID]);
+    const ts = nowIso();
+    const stmts = recipients.map(r => ({
+      sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
+      args: [NOTIF_ID, r.id, message, ts]
+    }));
+    for (let i = 0; i < stmts.length; i += 50) {
+      await db.batch(stmts.slice(i, i + 50), "write");
+    }
+    await log(me, "announce", `Sent to ${recipients.length} user(s): ${message.slice(0, 80)}`);
+    return { data: { sentCount: recipients.length }, error: null };
+  }));
 
   app.get("/api/admin/me", wrap(async req => {
     if (!req.wt) throw new HttpError(401, "Sign in required");
@@ -523,7 +562,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const q = String(req.query.q || "").trim().slice(0, 60), like = `%${q}%`;
     const rows = await run(`SELECT u.id, u.email, u.role, u.banned, u.ban_reason, u.restrictions, u.created_at, u.tos_accepted_at, p.username, p.display_name
       FROM users u LEFT JOIN profiles p ON p.id = u.id
-      ${q ? "WHERE u.email LIKE ? OR p.username LIKE ? OR p.display_name LIKE ?" : ""} ORDER BY u.created_at DESC LIMIT 60`, q ? [like, like, like] : []);
+      WHERE u.role != 'system' ${q ? "AND (u.email LIKE ? OR p.username LIKE ? OR p.display_name LIKE ?)" : ""} ORDER BY u.created_at DESC LIMIT 60`, q ? [like, like, like] : []);
     return { data: rows.map(r => ({ ...r, banned: !!r.banned, restrictions: safeArr(r.restrictions) })), error: null };
   }));
   app.post("/api/admin/reset-password", limit(30, 600000), wrap(async req => {
@@ -537,7 +576,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const me = needAdmin(req); if (me.role !== "owner") throw new HttpError(403, "Only the owner can make or remove admins");
     const t = await targetOf(req.body?.userId); mayAct(me, t);
     const role = req.body?.role === "admin" ? "admin" : "user";
-    await db.execute({ sql: "UPDATE users SET role = ? WHERE id = ?", args: [role, t.id] });
+    await db.execute({ sql: "UPDATE users SET role = ?, role_since = ? WHERE id = ?", args: [role, role === "admin" ? nowIso() : null, t.id] });
     forget(t.id); await log(me, role === "admin" ? "make_admin" : "remove_admin", label(t));
     return { data: true, error: null };
   }));

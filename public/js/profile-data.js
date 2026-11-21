@@ -1,5 +1,4 @@
-/* Profile page: load profile, follow button, tabs (videos / liked / comments) */
-/* ---------- Load Profile & Account Data ---------- */
+/* Profile page: load profile, role/tenure badge, follow button, tabs (videos / liked / comments) */
 async function loadMyFollows() {
   myFollowing = new Set(); myFollowers = new Set();
   if (!user) return;
@@ -9,6 +8,20 @@ async function loadMyFollows() {
   ]);
   (a.data || []).forEach(r => myFollowing.add(r.following_id));
   (b.data || []).forEach(r => myFollowers.add(r.follower_id));
+}
+
+function formatTenure(iso) {
+  if (!iso) return "";
+  const ms = Math.max(0, Date.now() - Date.parse(iso));
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${Math.max(1, mins)}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d`;
+  const mos = Math.floor(days / 30);
+  if (mos < 12) return `${mos}mo`;
+  return `${Math.floor(mos / 12)}y`;
 }
 
 async function resolveTargetAndLoad() {
@@ -40,12 +53,20 @@ async function resolveTargetAndLoad() {
   targetId = row?.id || user.id;
   isMe = !!(user && targetId === user.id);
   const meta = isMe ? (user.user_metadata || {}) : {};
+  let badge = { role: "user", role_since: null };
+  try {
+    const br = await fetch(`/api/profiles/${encodeURIComponent(targetId)}/badge`);
+    badge = (await br.json()).data || badge;
+  } catch {}
+
   profile = {
     id: targetId,
     username: row?.username || meta.username || (isMe ? (user.email || "user").split("@")[0] : "user"),
     display_name: row?.display_name || meta.display_name || row?.username || "Web Tok User",
     bio: row?.bio ?? meta.bio ?? "",
-    avatar_url: row?.avatar_url || null
+    avatar_url: row?.avatar_url || null,
+    role: badge.role,
+    role_since: badge.role_since
   };
 
   let rowTheme = row?.theme;
@@ -102,6 +123,19 @@ function paintProfileHeader() {
   $("p-display").textContent = profile.display_name;
   $("p-user").textContent = "@" + profile.username;
   $("p-bio").textContent = profile.bio || "No bio yet.";
+
+  let rb = document.getElementById("p-role-badge");
+  if (rb) rb.remove();
+  if (profile.role === "owner" || profile.role === "admin") {
+    rb = document.createElement("span");
+    rb.id = "p-role-badge";
+    rb.className = "role-badge";
+    const label = profile.role === "owner" ? "Owner" : "Admin";
+    const ten = formatTenure(profile.role_since);
+    rb.title = profile.role_since ? `${label} since ${new Date(profile.role_since).toLocaleDateString()}` : label;
+    rb.innerHTML = `<span class="ms fill" style="font-size:15px">verified_user</span>${label}${ten ? " · " + ten : ""}`;
+    $("p-display").parentNode.appendChild(rb);
+  }
 }
 
 async function loadAccountData() {
