@@ -2,11 +2,9 @@
 const crypto = require("crypto");
 
 const GAME_MODELS = [
-  "mistralai/mistral-large-4-1t-a52b",
-  "mistralai/devstral-2-123b-instruct-2512",
-  "mistralai/mistral-small-4-119b-2603",
   "qwen/qwen2.5-coder-32b-instruct",
-  "meta/llama-3.3-70b-instruct"
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "meta/llama-3.1-8b-instruct"
 ];
 
 const HTML_GRAPHICS_KIT = `Use or adapt these graphics & game-loop helpers so the game looks sharp and plays smoothly:
@@ -152,7 +150,7 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
     const reply = await callNim(key, [...GAME_MODELS, ...CHAT_MODELS], [
       { role: "system", content: sys },
       { role: "user", content: userMsg }
-    ], 3500);
+    ], 2800);
 
     const codeMatch = /```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)```/.exec(reply);
     return {

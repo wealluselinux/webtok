@@ -46,7 +46,8 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
         const r = await fetch(NIM_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-          body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.4, stream: false })
+          body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.4, stream: false }),
+          signal: AbortSignal.timeout(25000)
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) { lastErr = new Error(j?.error?.message || j?.detail || `NIM HTTP ${r.status}`); continue; }
