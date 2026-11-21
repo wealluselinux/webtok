@@ -67,7 +67,8 @@ body{overflow:auto;padding:20px 16px 90px}
     <div class="pane" id="edPane">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
         <b id="edLabel">Python Editor (Turtle Graphics)</b>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="btn sm" onclick="openNpcDrawer()"><span class="ms" style="font-size:16px">brush</span>Draw NPC</button>
           <button type="button" class="btn sm" id="btnEdWide"><span class="ms" style="font-size:16px">open_in_full</span>Expand</button>
           <button type="button" class="btn sm" id="btnResetTpl">Starter Template</button>
         </div>
@@ -102,6 +103,7 @@ body{overflow:auto;padding:20px 16px 90px}
 <script src="/js/core.js"></script>
 <script src="/js/theme.js"></script>
 <script src="/js/m3-dialogs.js"></script>
+<script src="/js/developer-npc.js"></script>
 <script src="/js/developer-scratch.js"></script>
 <script src="/js/developer.js"></script>
 </body>
