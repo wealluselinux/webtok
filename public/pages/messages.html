@@ -14,10 +14,14 @@
 }}
 *{box-sizing:border-box;margin:0}
 body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);height:100dvh;overflow:hidden}
+#wp-layer{position:fixed;inset:0;z-index:-2;background-size:cover;background-position:center;opacity:0;pointer-events:none;transition:opacity .35s}
+#wp-scrim{position:fixed;inset:0;z-index:-1;background:var(--bg);opacity:0;pointer-events:none;transition:opacity .35s}
+body.has-wp #wp-layer{opacity:1}
+body.has-wp #wp-scrim{opacity:.74}
 #app{position:fixed;left:var(--sbw);right:0;top:0;bottom:var(--sbh);display:flex}
 
 /* Sidebar list */
-#list{width:320px;border-right:1px solid var(--surface);display:flex;flex-direction:column;background:var(--bg)}
+#list{width:320px;border-right:1px solid var(--surface);display:flex;flex-direction:column;background:transparent}
 .list-top{padding:16px 14px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .list-top h2{font-size:22px;font-weight:700;letter-spacing:-.3px}
 .m3-fab{border:0;border-radius:18px;background:var(--primary);color:var(--on-primary);padding:10px 16px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:transform .2s var(--spring),border-radius .2s var(--spring);box-shadow:0 3px 12px #0002}
@@ -59,7 +63,7 @@ body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);
 
 /* Chat Area */
 #chat{flex:1;display:flex;flex-direction:column;min-width:0}
-#head{padding:14px 20px;font-weight:700;border-bottom:1px solid var(--surface);display:flex;align-items:center;gap:12px;background:var(--bg)}
+#head{padding:14px 20px;font-weight:700;border-bottom:1px solid var(--surface);display:flex;align-items:center;gap:12px;background:transparent}
 .head-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
 .head-chip{border:0;border-radius:999px;background:var(--surface);color:var(--text);padding:7px 14px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
 .head-chip:hover{background:var(--card)}
@@ -69,7 +73,7 @@ body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);
 .m-sender{font-size:11px;font-weight:700;color:var(--muted);padding:0 10px}
 .m{padding:11px 16px;border-radius:22px 22px 22px 6px;background:var(--surface);word-break:break-word;line-height:1.4}
 .m-wrap.me .m{background:var(--primary);color:var(--on-primary);border-radius:22px 22px 6px 22px}
-#form{display:flex;gap:10px;padding:12px 16px;background:var(--bg)}
+#form{display:flex;gap:10px;padding:12px 16px;background:transparent}
 #form input{flex:1;padding:14px 20px;border-radius:999px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;transition:border-color .15s}
 #form input:focus{border-color:var(--primary)}
 #form button{border:0;border-radius:18px;background:var(--primary);color:var(--on-primary);width:50px;height:50px;cursor:pointer;display:grid;place-items:center;transition:border-radius .2s var(--spring),transform .15s}
@@ -105,6 +109,8 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 @media(max-width:800px){#list{width:100%}#chat{display:none}body.chatting #list{display:none}body.chatting #chat{display:flex}#back{display:block}}
 </style></head>
 <body data-page="messages">
+<div id="wp-layer"></div>
+<div id="wp-scrim"></div>
 <div id="app">
  <aside id="list">
   <div class="list-top">
@@ -151,6 +157,7 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 <script src="/config.js"></script>
 <script src="/js/wt-local.js"></script>
 <script src="/js/sidebar.js"></script>
+<script src="/js/theme.js"></script>
 <script>
 const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
 const esc=s=>String(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));

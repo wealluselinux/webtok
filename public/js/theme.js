@@ -16,11 +16,15 @@ function hexToHsl(hex) {
 }
 function applyTheme(t) {
   if (!t) { try { t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { t = {}; } }
-  if (!t.color && !t.mode && !t.wallpaper) return;
   const root = document.documentElement;
+  const wp = document.getElementById("wp-layer");
+  if (!t.color && !t.mode && !t.wallpaper) {
+    if (wp) { document.body.classList.remove("has-wp"); wp.style.backgroundImage = ""; }
+    return;
+  }
   const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = t.mode === "dark" ? true : t.mode === "light" ? false : sysDark;
-  const [h, s] = hexToHsl(t.color || "#7b3f8c");
+  const [h, s] = hexToHsl(t.color || "#6750a4");
   const sat = Math.min(Math.max(s, 22), 58);
   if (isDark) {
     root.style.setProperty("--bg", `hsl(${h}, ${Math.round(sat*0.45)}%, 10%)`);
@@ -41,14 +45,32 @@ function applyTheme(t) {
     root.style.setProperty("--muted", `hsl(${h}, 18%, 42%)`);
     root.style.setProperty("--accent", `hsl(${(h+45)%360}, 85%, 78%)`);
   }
-  const wp = $("wp-layer");
-  if (t.wallpaper) {
-    document.body.classList.add("has-wp");
-    wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url(${t.wallpaper})`;
-  } else {
-    document.body.classList.remove("has-wp");
-    wp.style.backgroundImage = "";
+  if (wp) {
+    if (t.wallpaper) {
+      document.body.classList.add("has-wp");
+      wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url("${t.wallpaper}")`;
+    } else {
+      document.body.classList.remove("has-wp");
+      wp.style.backgroundImage = "";
+    }
   }
 }
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
-
+(async () => {
+  try {
+    if (typeof sb !== "undefined" && sb?.auth?.getSession) {
+      const { data } = await sb.auth.getSession();
+      const uid = data?.session?.user?.id;
+      if (uid) {
+        const { data: prof } = await sb.from("profiles").select("theme").eq("id", uid).maybeSingle();
+        let rowTheme = prof?.theme;
+        if (typeof rowTheme === "string") { try { rowTheme = JSON.parse(rowTheme); } catch { rowTheme = null; } }
+        if (rowTheme && (rowTheme.color || rowTheme.mode || rowTheme.wallpaper)) {
+          try { localStorage.setItem("wt_theme", JSON.stringify(rowTheme)); } catch {}
+          applyTheme(rowTheme);
+        }
+      }
+    }
+  } catch {}
+})();

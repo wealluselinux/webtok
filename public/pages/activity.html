@@ -10,14 +10,15 @@
 body{overflow:auto;padding:24px 16px 80px}
 .wrap{max-width:720px;margin:0 auto;padding-left:var(--sbw,0px);display:flex;flex-direction:column;gap:14px}
 @media(max-width:800px){.wrap{padding-left:0}}
-h1{font-size:28px;font-weight:700;margin-bottom:4px}
-.act-card{display:flex;align-items:center;gap:14px;background:var(--card);padding:14px 18px;border-radius:var(--r-xl);box-shadow:0 2px 12px #0001}
-.act-av{width:46px;height:46px;border-radius:38% 62% 55% 45%;background:var(--surface) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex-shrink:0}
+h1{font-size:28px;font-weight:700;margin-bottom:4px;letter-spacing:-.3px}
+.act-card{display:flex;align-items:center;gap:14px;background:var(--card);padding:16px 18px;border-radius:var(--r-xl);box-shadow:0 4px 16px #0001;transition:transform .18s var(--spring)}
+.act-card:hover{transform:translateY(-1px)}
+.act-av{width:46px;height:46px;border-radius:38% 62% 55% 45%/45% 38% 62% 55%;background:var(--surface) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex-shrink:0}
 .act-body{flex:1;min-width:0;font-size:14px;line-height:1.4}
 .act-body a{color:inherit;font-weight:700;text-decoration:none}
 .act-body a:hover{text-decoration:underline}
 .act-body small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
-.empty-box{background:var(--surface);border-radius:var(--r-xl);padding:36px 20px;text-align:center;color:var(--muted)}
+.empty-box{background:var(--surface);border-radius:var(--r-xl);padding:36px 20px;text-align:center;color:var(--muted);font-weight:600}
 </style>
 </head>
 <body data-page="activity">
@@ -25,7 +26,12 @@ h1{font-size:28px;font-weight:700;margin-bottom:4px}
 <div id="wp-scrim"></div>
 <main class="wrap">
   <h1>Activity</h1>
-  <div id="act-list"><div class="empty-box">Loading activity…</div></div>
+  <div id="act-list">
+    <div class="empty-box m3-loader">
+      <div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div>
+      <span>Loading activity…</span>
+    </div>
+  </div>
 </main>
 <script src="/config.js"></script>
 <script src="/js/wt-local.js"></script>
@@ -121,4 +127,3 @@ function timeAgo(iso) {
 </script>
 </body>
 </html>
-
