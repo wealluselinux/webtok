@@ -14,8 +14,10 @@ function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.j
 function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error?.message||"Request failed");return j.data})}
 
 function bubble(m, showSender=false){
+  if(m.id!=null && $("msgs")?.querySelector(`[data-mid="${CSS.escape(String(m.id))}"]`)) return null;
   const wrap=document.createElement("div");
   wrap.className="m-wrap"+(m.sender_id===me?" me":"");
+  if(m.id!=null) wrap.dataset.mid=String(m.id);
   if(showSender && m.sender_id!==me){
     const sn=document.createElement("div");
     sn.className="m-sender";
@@ -100,11 +102,21 @@ async function openChat(f){
   delete unreadBySender[f.id];
   renderSidebarList();
   const avHtml=f.isAi?'<div class="av ai"><span class="ms">smart_toy</span></div>':`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":""}</div></div></div>
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":""}</div></div><div class="head-actions"><button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
   <div id="stkPanel" class="hidden"></div>
   <form id="form"><input id="txt" maxlength="1000" placeholder="${f.isAi?"Ask Web Tok AI anything or share a video…":"Message…"}" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
   $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
+  $("btnClearChat").onclick=async()=>{
+    const ok=await wtConfirm({title:"Clear chat?",message:`Delete all messages with ${f.display_name||"@"+f.username}? This can't be undone.`,icon:"delete_sweep",confirmText:"Clear",danger:true});
+    if(!ok)return;
+    try{
+      await api(`/api/messages/with/${encodeURIComponent(f.id)}`,{method:"DELETE"});
+      $("msgs").innerHTML=f.isAi
+        ?'<div class="empty">Hi! Ask me anything or share a Web Tok video to ask what it\'s about.</div>'
+        :'<div class="empty">Chat cleared. Say hi!</div>';
+    }catch(err){await wtAlert({title:"Couldn't clear chat",message:err.message});}
+  };
   const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
   $("msgs").innerHTML="";
   if(f.isAi && !(data||[]).length){
@@ -121,6 +133,7 @@ async function openChat(f){
       try{
         const res=await api("/api/ai/chat",{method:"POST",body:JSON.stringify({body})});
         typing.remove();
+        if(res?.userMsg?.id) myWrap.dataset.mid=String(res.userMsg.id);
         if(res?.aiMsg) bubble(res.aiMsg,false);
         return true;
       }catch(err){
