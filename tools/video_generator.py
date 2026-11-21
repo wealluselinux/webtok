@@ -164,20 +164,25 @@ def main():
             "--max-downloads", "1",
             "--download-archive", str(ARCHIVE_FILE),
             "--max-filesize", "50m",
-            "-f", "mp4[vcodec^=avc1]/mp4/best[ext=mp4]/best",
-            "--merge-output-format", "mp4",
+            "-f", "b[ext=mp4]/mp4/best[ext=mp4]/best",
             "--write-info-json",
             "-o", str(DL_DIR / "%(id)s.%(ext)s"),
             src,
         ]
+        yt_out = ""
         try:
-            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=180)
+            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=180)
+            yt_out = res.stdout or ""
         except Exception as e:
             log(f"yt-dlp error: {e}")
 
-        mp4s = list(DL_DIR.glob("*.mp4"))
+        mp4s = list(DL_DIR.glob("*.mp4")) or [p for p in DL_DIR.glob("*") if p.suffix.lower() in (".mp4", ".webm", ".mov") and not p.name.endswith(".part")]
         if not mp4s:
-            log(f"No new video downloaded from {src}, trying another...")
+            err_lines = [ln.strip() for ln in yt_out.splitlines() if "ERROR" in ln or "Sign in" in ln or "blocked" in ln.lower()]
+            if err_lines:
+                log(f"yt-dlp: {err_lines[-1][:180]}")
+            else:
+                log(f"No new video downloaded from {src}, trying another...")
             time.sleep(2)
             continue
 
