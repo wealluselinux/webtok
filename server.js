@@ -25,7 +25,7 @@ const TABLES = {
   profiles:    { cols: ["id", "username", "display_name", "bio", "avatar_url", "theme", "created_at"], pk: ["id"], json: ["theme"] },
   videos:      { cols: ["id", "user_id", "title", "video_url", "storage_path", "orientation", "created_at", "hashtags"], pk: ["id"], json: ["hashtags"] },
   likes:       { cols: ["video_id", "user_id", "created_at"], pk: ["video_id", "user_id"] },
-  comments:    { cols: ["id", "video_id", "user_id", "text", "created_at"], pk: ["id"] },
+  comments:    { cols: ["id", "video_id", "user_id", "text", "parent_id", "created_at"], pk: ["id"] },
   follows:     { cols: ["follower_id", "following_id", "created_at"], pk: ["follower_id", "following_id"] },
   messages:    { cols: ["id", "sender_id", "recipient_id", "body", "created_at"], pk: ["id"] },
   video_views: { cols: ["user_id", "video_id", "liked", "created_at"], pk: ["user_id", "video_id"], bool: ["liked"] },
@@ -44,6 +44,8 @@ const TEXT_ID = new Set(["videos", "comments"]);
 async function migrate() {
   const cols = (await db.execute("PRAGMA table_info(videos)")).rows.map(r => r[1]);
   if (!cols.includes("hashtags")) await db.execute("ALTER TABLE videos ADD COLUMN hashtags TEXT NOT NULL DEFAULT '[]'");
+  const ccols = (await db.execute("PRAGMA table_info(comments)")).rows.map(r => r[1]);
+  if (!ccols.includes("parent_id")) await db.execute("ALTER TABLE comments ADD COLUMN parent_id TEXT");
   await db.batch([
     "CREATE TABLE IF NOT EXISTS video_views (user_id TEXT NOT NULL, video_id TEXT NOT NULL, liked INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, PRIMARY KEY (user_id, video_id))",
     "CREATE INDEX IF NOT EXISTS idx_videos_user ON videos(user_id, created_at)",
@@ -146,6 +148,7 @@ async function prepareRow(t, raw, uid, op) {
   if (t === "comments") {
     str(row.text, 1, 500, "comment");
     if (!(await run("SELECT 1 FROM videos WHERE id = ?", [row.video_id])).length) throw new HttpError(404, "Video not found");
+    row.parent_id = row.parent_id ? String(row.parent_id) : null;
   }
   if (t === "likes" && !(await run("SELECT 1 FROM videos WHERE id = ?", [row.video_id])).length) throw new HttpError(404, "Video not found");
   if (t === "follows") {
@@ -253,7 +256,7 @@ function r2() {
   }
   return { s3, S3 };
 }
-const BUCKETS = { videos: /^video\/(mp4|webm|quicktime|x-m4v)$/, avatars: /^image\/(jpeg|png|webp)$/ };
+const BUCKETS = { videos: /^video\/(mp4|webm|quicktime|x-m4v)$/, avatars: /^image\/(jpeg|png|webp|gif)$/ };
 const SAFE_PATH = /^[A-Za-z0-9-]{8,64}\/[A-Za-z0-9._-]{1,120}$/;
 async function removeFromR2(keys) {
   if (!keys.length || !process.env.R2_ACCESS_KEY_ID) return;

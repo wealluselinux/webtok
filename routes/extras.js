@@ -4,14 +4,17 @@
    2) Roles (owner / admin / user), bans, per-user restrictions (post / comment / message), forced sign-out
    3) Admin panel API (/api/admin/*) and the pages /admin, /terms, /privacy
    4) Sign-up must include accepted_terms = true
-   5) Group chats with friend invites & acceptance */
+   5) Group chats with friend invites & acceptance
+   6) Custom user stickers & comment replies */
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 
 module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 }) {
   const SECRET = process.env.JWT_SECRET;
+  const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
   const TOS_VERSION = "2026-11-20";
   const RESTRICTIONS = ["post", "comment", "message"];
   const safeArr = s => { try { const a = JSON.parse(s || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
@@ -24,6 +27,10 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
       await db.execute("ALTER TABLE messages ADD COLUMN read_at TEXT");
       await db.execute("UPDATE messages SET read_at = created_at WHERE read_at IS NULL");   // old messages count as read
     }
+    const ccols = (await db.execute("PRAGMA table_info(comments)")).rows.map(r => r[1]);
+    if (!ccols.includes("parent_id")) {
+      await db.execute("ALTER TABLE comments ADD COLUMN parent_id TEXT");
+    }
     const ucols = (await db.execute("PRAGMA table_info(users)")).rows.map(r => r[1]);
     for (const [n, d] of [["role", "TEXT NOT NULL DEFAULT 'user'"], ["restrictions", "TEXT NOT NULL DEFAULT '[]'"], ["banned", "INTEGER NOT NULL DEFAULT 0"],
       ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"]]) {
@@ -34,10 +41,11 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
       "CREATE TABLE IF NOT EXISTS group_chats (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS group_members (group_id TEXT NOT NULL, user_id TEXT NOT NULL, status TEXT NOT NULL, invited_by TEXT, created_at TEXT NOT NULL, last_read_id INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (group_id, user_id))",
       "CREATE TABLE IF NOT EXISTS group_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, group_id TEXT NOT NULL, sender_id TEXT NOT NULL, body TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS user_stickers (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
+      "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
     ], "write");
-    // The owner is the account whose email is OWNER_EMAIL. Only assigned while nobody is owner yet, and only to an account that already exists.
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
     if (ownerEmail && !(await run("SELECT 1 FROM users WHERE role = 'owner'")).length) {
       const r = await db.execute({ sql: "UPDATE users SET role = 'owner' WHERE email = ?", args: [ownerEmail] });
@@ -81,7 +89,7 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
       next();
     } catch (e) { next(e); }
   });
-  app.use("/api/auth/login", async (req, res, next) => {          // banned people can't sign in at all
+  app.use("/api/auth/login", async (req, res, next) => {
     try {
       if (req.method !== "POST") return next();
       await ensure();
@@ -90,7 +98,7 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
       next();
     } catch (e) { next(e); }
   });
-  app.use("/api/auth/signup", (req, res, next) => {               // must accept the Terms and Privacy Policy
+  app.use("/api/auth/signup", (req, res, next) => {
     if (req.method !== "POST") return next();
     if (!(req.body && req.body.data && req.body.data.accepted_terms === true)) return deny(res, 400, "You must accept the Terms of Service and Privacy Policy.");
     const email = String(req.body.email || "").trim().toLowerCase();
@@ -105,6 +113,42 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
   app.get("/admin", page("admin.html"));
   app.get("/terms", page("terms.html"));
   app.get("/privacy", page("privacy.html"));
+
+  /* ---------- custom + built-in stickers ---------- */
+  app.get("/api/stickers", async (_req, res) => {
+    try {
+      await ensure();
+      const builtIn = await new Promise(resolve => {
+        fs.readdir(path.join(__dirname, "..", "public", "stickers"), (err, files) => {
+          resolve(err ? [] : files.filter(f => /\.(png|gif|webp|jpe?g|svg|json)$/i.test(f)).sort());
+        });
+      });
+      const custom = await run("SELECT id, user_id, name, url, created_at FROM user_stickers ORDER BY created_at DESC LIMIT 100");
+      res.set("Cache-Control", "no-store").json([
+        ...custom.map(c => ({ id: c.id, user_id: c.user_id, name: c.name, url: c.url, custom: true })),
+        ...builtIn
+      ]);
+    } catch {
+      res.set("Cache-Control", "no-store").json([]);
+    }
+  });
+  app.post("/api/stickers", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const name = String(req.body?.name || "Sticker").trim().slice(0, 30) || "Sticker";
+    const url = String(req.body?.url || "").trim();
+    if (!url || (R2_PUBLIC_URL && !url.startsWith(R2_PUBLIC_URL + "/avatars/")) || (!R2_PUBLIC_URL && !/^https?:\/\//i.test(url))) {
+      throw new HttpError(400, "Invalid sticker URL.");
+    }
+    const id = crypto.randomUUID(), ts = nowIso();
+    await db.execute({ sql: "INSERT INTO user_stickers (id, user_id, name, url, created_at) VALUES (?,?,?,?,?)", args: [id, uid, name, url, ts] });
+    return { data: { id, user_id: uid, name, url, custom: true, created_at: ts }, error: null };
+  }));
+  app.delete("/api/stickers/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const id = String(req.params.id || "");
+    await db.execute({ sql: "DELETE FROM user_stickers WHERE id = ? AND user_id = ?", args: [id, uid] });
+    return { data: true, error: null };
+  }));
 
   /* ---------- unread messages ---------- */
   app.get("/api/messages/unread", wrap(async req => {
@@ -283,7 +327,6 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
     if (!t) throw new HttpError(404, "User not found");
     return t;
   }
-  // Owners can act on admins and users; admins only on regular users; nobody acts on the owner or on themselves
   const mayAct = (me, t) => { if (t.role === "owner" || t.id === me.uid) throw new HttpError(403, "You can't change this account"); if (me.role !== "owner" && t.role !== "user") throw new HttpError(403, "Only the owner can change admins"); };
   const label = t => `@${t.username || "?"} (${t.email})`;
   const makePassword = () => {

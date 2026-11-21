@@ -7,8 +7,8 @@ $("btn-edit-prof").onclick = () => {
   $("ep-user").value = profile.username || "";
   $("ep-bio").value = profile.bio || "";
   $("ep-hint").textContent = ""; $("ep-hint").className = "hint";
-  if (profile.avatar_url) { $("ep-av").style.backgroundImage = `url(${profile.avatar_url})`; $("ep-av").textContent = ""; }
-  else { $("ep-av").style.backgroundImage = ""; $("ep-av").textContent = "📷"; }
+  if (profile.avatar_url) { $("ep-av").style.backgroundImage = `url(${profile.avatar_url})`; $("ep-av").innerHTML = ""; }
+  else { $("ep-av").style.backgroundImage = ""; $("ep-av").innerHTML = '<span class="ms" style="font-size:32px">photo_camera</span>'; }
   $("editProfDlg").showModal();
 };
 $("ep-av").onclick = () => $("ep-file").click();
@@ -20,7 +20,7 @@ $("ep-file").onchange = e => {
     const s = Math.min(img.width, img.height);
     c.getContext("2d").drawImage(img, (img.width-s)/2, (img.height-s)/2, s, s, 0, 0, 256, 256);
     editAvatarData = c.toDataURL("image/jpeg", .85);
-    $("ep-av").style.backgroundImage = `url(${editAvatarData})`; $("ep-av").textContent = "";
+    $("ep-av").style.backgroundImage = `url(${editAvatarData})`; $("ep-av").innerHTML = "";
   };
   img.src = URL.createObjectURL(f);
 };

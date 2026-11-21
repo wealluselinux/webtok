@@ -182,9 +182,9 @@ function renderAccountTab() {
   vids.forEach(v => {
     const tile = document.createElement("div");
     tile.className = "vid-tile";
-    const delBtn = (isMe && acctTab === "posted") ? `<button type="button" class="vid-del" title="Delete video">🗑</button>` : "";
+    const delBtn = (isMe && acctTab === "posted") ? `<button type="button" class="vid-del" title="Delete video" aria-label="Delete video"><span class="ms" style="font-size:18px">delete</span></button>` : "";
     tile.innerHTML = `${delBtn}<video data-src="${v.src}" muted playsinline preload="none"></video>
-      <div class="v-ov"><b>${escapeHtml(v.name)}</b><span>♥ ${v.likesCount} · 💬 ${v.commentsCount}</span></div>`;
+      <div class="v-ov"><b>${escapeHtml(v.name)}</b><span><span class="ms fill" style="font-size:13px">favorite</span> ${v.likesCount} · <span class="ms" style="font-size:13px">chat_bubble</span> ${v.commentsCount}</span></div>`;
     const db = tile.querySelector(".vid-del");
     if (db) db.onclick = async e => {
       e.stopPropagation();

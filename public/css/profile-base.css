@@ -1,4 +1,7 @@
-/* Profile page: M3 Expressive theme variables, organic shapes, wavy loaders, top bar */
+/* Profile page: M3 Expressive theme variables, Material Symbols font, organic shapes, top bar */
+@font-face{font-family:"Material Symbols Rounded";font-style:normal;font-weight:400;font-display:block;src:url(/fonts/material-symbols-rounded.woff2) format("woff2")}
+.ms{width:1em;height:1em;overflow:hidden;font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;font-size:20px;line-height:1;display:inline-block;vertical-align:middle;letter-spacing:normal;text-transform:none;white-space:nowrap;font-feature-settings:'liga';-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0}
+.ms.fill{font-variation-settings:'FILL' 1}
 :root{
   --bg:#f6f1fc; --surface:#ede5f7; --card:#e2d4f4; --primary:#6750a4; --on-primary:#fff;
   --text:#1d192b; --muted:#625b71; --accent:#ffd8e4; --mint:#cfe8d5; --ok:#2e7d4f; --bad:#b3261e;
@@ -27,7 +30,7 @@ button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .chip.p{background:var(--primary);color:var(--on-primary)}
 
 /* M3 Expressive buttons */
-.btn{padding:12px 22px;border-radius:999px;font-weight:700;background:var(--surface);color:var(--text);transition:transform .18s var(--spring),border-radius .2s var(--spring),background .2s}
+.btn{padding:12px 22px;border-radius:999px;font-weight:700;background:var(--surface);color:var(--text);transition:transform .18s var(--spring),border-radius .2s var(--spring),background .2s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .btn:hover{transform:translateY(-1px)}
 .btn:active{transform:scale(.96)}
 .btn.primary{background:var(--primary);color:var(--on-primary);box-shadow:0 3px 12px #0002}
@@ -38,6 +41,4 @@ button{font:inherit;cursor:pointer;border:0;color:inherit;background:none}
 .btn.icon:active{border-radius:999px}
 .btn:disabled{opacity:.45;cursor:default;transform:none}
 
-/* M3 Expressive Wavy Loader */
 .empty-box{position:relative;padding:44px 20px;text-align:center;color:var(--muted);font-weight:600}
-@keyframes m3Spin{to{transform:rotate(360deg)}}

@@ -83,9 +83,10 @@ body.has-wp #wp-scrim{opacity:.74}
 #stkPanel{max-height:200px;overflow-y:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px 16px;background:var(--surface);border-radius:24px 24px 0 0;margin:0 16px}
 #stkPanel button{background:none!important;border:0;cursor:pointer;border-radius:16px;padding:4px;width:auto!important;height:auto!important}
 #stkPanel button:hover{background:var(--card)!important}
-#stkPanel img,#stkPanel .stk-box{width:100%;aspect-ratio:1;object-fit:contain;display:block}
+#stkPanel button.stk-add{background:var(--card)!important;color:var(--primary);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;aspect-ratio:1;font-size:11px;font-weight:700}
+#stkPanel img,#stkPanel .stk-box{width:100%;aspect-ratio:1;object-fit:contain;display:block;border-radius:12px}
 #form #stkBtn{background:var(--surface);color:var(--text)}
-.m.stk{background:none!important;padding:0}.m.stk img,.m.stk .stk-box{width:150px;height:150px;object-fit:contain;display:block}
+.m.stk{background:none!important;padding:0}.m.stk img,.m.stk .stk-box{width:150px;height:150px;object-fit:contain;display:block;border-radius:16px}
 #back{display:none;background:none;border:0;color:var(--text);cursor:pointer}
 
 /* M3 Expressive Wavy Loader */
@@ -132,7 +133,7 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 
 <!-- New Group Chat Modal -->
 <dialog id="newGroupDlg">
-  <div class="dlg-head"><h3>New group chat</h3><button class="head-chip" onclick="document.getElementById('newGroupDlg').close()">✕</button></div>
+  <div class="dlg-head"><h3>New group chat</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('newGroupDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
   <input class="dlg-in" id="ngName" maxlength="40" placeholder="Group name (e.g. Comedy Squad)">
   <div style="font-size:12px;color:var(--muted);margin:0 4px 8px">Select friends to send an invite:</div>
   <div class="pick-list" id="ngFriends"></div>
@@ -145,7 +146,7 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 
 <!-- Invite More Friends to Existing Group Modal -->
 <dialog id="invMoreDlg">
-  <div class="dlg-head"><h3>Invite friends</h3><button class="head-chip" onclick="document.getElementById('invMoreDlg').close()">✕</button></div>
+  <div class="dlg-head"><h3>Invite friends</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('invMoreDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
   <div class="pick-list" id="imFriends"></div>
   <div id="imHint" style="font-size:12px;color:#b3261e;min-height:16px;margin-bottom:8px"></div>
   <div class="dlg-foot">
@@ -167,6 +168,7 @@ let lottieP=null;
 function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
 async function lottieIn(el,path){try{(await ensureLottie()).loadAnimation({container:el,renderer:"svg",loop:true,autoplay:true,path})}catch(e){console.warn(e)}}
 const STK=/^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i;
+const STKU=/^\[sticker_url:(https?:\/\/[^\]]+)\]$/i;
 function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.json$/i.test(file)){const b=document.createElement("div");b.className="stk-box";lottieIn(b,url);return b}const i=document.createElement("img");i.src=url;i.alt="sticker";i.loading="lazy";return i}
 function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error?.message||"Request failed");return j.data})}
 
@@ -180,23 +182,67 @@ function bubble(m, showSender=false){
     wrap.appendChild(sn);
   }
   const d=document.createElement("div");d.className="m";
-  const s=STK.exec((m.body||"").trim());
-  if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}else d.textContent=m.body;
+  const raw=(m.body||"").trim();
+  const su=STKU.exec(raw), s=STK.exec(raw);
+  if(su){d.classList.add("stk");const i=document.createElement("img");i.src=su[1];i.alt="sticker";i.loading="lazy";d.appendChild(i)}
+  else if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}
+  else d.textContent=m.body;
   wrap.appendChild(d);
   $("msgs").appendChild(wrap);
   $("msgs").scrollTop=1e9;
 }
 
 function stopGroupPoll(){if(groupPoll){clearInterval(groupPoll);groupPoll=null;}}
-let stickerList=null;
+function makeStickerBlob(file){
+  return new Promise((resolve,reject)=>{
+    const u=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{URL.revokeObjectURL(u);const max=256,sc=Math.min(max/img.width,max/img.height,1);const c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.width*sc));c.height=Math.max(1,Math.round(img.height*sc));c.getContext("2d").drawImage(img,0,0,c.width,c.height);c.toBlob(b=>b?resolve(b):reject(new Error("Could not process sticker")),"image/png")};
+    img.onerror=()=>{URL.revokeObjectURL(u);reject(new Error("Could not read image"))};
+    img.src=u;
+  });
+}
 function wireStickerPicker(sendFn){
   $("stkBtn").onclick=async()=>{
     const pn=$("stkPanel");pn.classList.toggle("hidden");
-    if(pn.classList.contains("hidden")||pn.dataset.ready)return;pn.dataset.ready="1";
-    try{stickerList=stickerList||await (await fetch("/api/stickers")).json()}catch{stickerList=[]}
-    pn.innerHTML=stickerList.length?"":'<div style="grid-column:1/-1;color:var(--muted);padding:8px">No stickers yet.</div>';
-    stickerList.forEach(file=>{const b=document.createElement("button");b.type="button";b.appendChild(stickerEl(file));b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker:"+file+"]")};pn.appendChild(b)})
+    if(pn.classList.contains("hidden")||pn.dataset.ready)return;
+    await loadStickerGrid(pn,sendFn);
   };
+}
+async function loadStickerGrid(pn,sendFn){
+  pn.dataset.ready="1";
+  let list=[]; try{list=await (await fetch("/api/stickers")).json()}catch{}
+  pn.innerHTML="";
+  const addBtn=document.createElement("button"); addBtn.type="button"; addBtn.className="stk-add";
+  addBtn.innerHTML='<span class="ms">add_photo_alternate</span><span>Make</span>';
+  const fin=document.createElement("input"); fin.type="file"; fin.accept="image/png,image/webp,image/jpeg,image/gif"; fin.hidden=true;
+  addBtn.onclick=()=>fin.click();
+  fin.onchange=async e=>{
+    const f=e.target.files?.[0]; if(!f)return;
+    addBtn.disabled=true;
+    try{
+      const blob=await makeStickerBlob(f), path=`${me}/sticker-${crypto.randomUUID()}.png`;
+      const up=await sb.storage.from("avatars").upload(path,blob,{upsert:true,contentType:"image/png"});
+      if(up?.error)throw up.error;
+      const url=sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+      await api("/api/stickers",{method:"POST",body:JSON.stringify({name:f.name.replace(/\.[^.]+$/,"").slice(0,30)||"Sticker",url})});
+      await loadStickerGrid(pn,sendFn);
+    }catch(err){alert(err?.message||"Could not create sticker.")}
+    finally{addBtn.disabled=false;e.target.value="";}
+  };
+  pn.appendChild(addBtn); pn.appendChild(fin);
+  if(!list.length){const msg=document.createElement("div");msg.style.cssText="grid-column:span 3;color:var(--muted);padding:8px;font-size:12px;align-self:center";msg.textContent="Tap Make to create a sticker!";pn.appendChild(msg);return}
+  list.forEach(item=>{
+    const b=document.createElement("button"); b.type="button";
+    if(item&&typeof item==="object"&&item.url){
+      b.innerHTML=`<img src="${esc(item.url)}" alt="${esc(item.name||"sticker")}" loading="lazy">`;
+      b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker_url:"+item.url+"]")};
+    }else{
+      const file=String(item);
+      b.appendChild(stickerEl(file));
+      b.onclick=()=>{pn.classList.add("hidden");sendFn("[sticker:"+file+"]")};
+    }
+    pn.appendChild(b);
+  });
 }
 
 async function openChat(f){

@@ -16,8 +16,8 @@
 <div id="wp-scrim"></div>
 
 <div id="bar">
-  <a class="chip" href="/scroll">← Feed</a>
-  <button class="chip p hidden" id="openUpload">+ Upload</button>
+  <a class="chip" href="/scroll"><span class="ms">arrow_back</span>Feed</a>
+  <button class="chip p hidden" id="openUpload"><span class="ms">add</span>Upload</button>
 </div>
 
 <main class="acct-wrap">
@@ -35,9 +35,9 @@
         <span><b id="st-comments">0</b> Comments</span>
       </div>
       <div class="p-actions" id="p-actions-me">
-        <button class="btn primary sm" id="btn-edit-prof">Edit profile</button>
-        <button class="btn tonal sm" id="btn-upload-acct">+ Upload videos</button>
-        <button class="btn icon" id="btn-settings" title="Theme & Settings">⚙</button>
+        <button class="btn primary sm" id="btn-edit-prof"><span class="ms" style="font-size:18px">edit</span>Edit profile</button>
+        <button class="btn tonal sm" id="btn-upload-acct"><span class="ms" style="font-size:18px">upload</span>Upload videos</button>
+        <button class="btn icon" id="btn-settings" title="Theme & Settings" aria-label="Theme & Settings"><span class="ms">settings</span></button>
         <button class="btn sm" id="btn-switch-acct">Switch account</button>
         <button class="btn sm" id="btn-signout">Sign out</button>
       </div>
@@ -62,12 +62,12 @@
 <dialog id="switchDlg">
   <div class="dlg-head">
     <h2>Switch account</h2>
-    <button class="btn icon" onclick="document.getElementById('switchDlg').close()">✕</button>
+    <button class="btn icon" aria-label="Close" onclick="document.getElementById('switchDlg').close()"><span class="ms">close</span></button>
   </div>
   <div class="u-list" id="sw-list"></div>
   <div class="hint" id="sw-hint"></div>
   <div class="row" style="justify-content:space-between">
-    <a class="btn tonal sm" href="/login?add=1" style="text-decoration:none">+ Add account</a>
+    <a class="btn tonal sm" href="/login?add=1" style="text-decoration:none"><span class="ms" style="font-size:18px">person_add</span>Add account</a>
     <button class="btn sm" onclick="document.getElementById('switchDlg').close()">Close</button>
   </div>
 </dialog>
@@ -76,7 +76,7 @@
 <dialog id="followListDlg">
   <div class="dlg-head">
     <h2 id="fl-title">Followers</h2>
-    <button class="btn icon" onclick="document.getElementById('followListDlg').close()">✕</button>
+    <button class="btn icon" aria-label="Close" onclick="document.getElementById('followListDlg').close()"><span class="ms">close</span></button>
   </div>
   <div class="u-list" id="fl-list"></div>
 </dialog>
@@ -85,7 +85,7 @@
 <dialog id="uploadDlg">
   <div class="up-top">
     <div style="display:flex;align-items:center;gap:12px">
-      <button type="button" class="btn icon" onclick="document.getElementById('uploadDlg').close()">✕</button>
+      <button type="button" class="btn icon" aria-label="Close" onclick="document.getElementById('uploadDlg').close()"><span class="ms">close</span></button>
       <h2>Upload videos</h2>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
@@ -114,9 +114,9 @@
 <dialog id="editProfDlg">
   <div class="dlg-head">
     <h2>Edit profile</h2>
-    <button class="btn icon" onclick="document.getElementById('editProfDlg').close()">✕</button>
+    <button class="btn icon" aria-label="Close" onclick="document.getElementById('editProfDlg').close()"><span class="ms">close</span></button>
   </div>
-  <div class="pfp" id="ep-av" style="margin:0 auto 10px;cursor:pointer;width:88px;height:88px" title="Change avatar">📷</div>
+  <div class="pfp" id="ep-av" style="margin:0 auto 10px;cursor:pointer;width:88px;height:88px" title="Change avatar"><span class="ms" style="font-size:32px">photo_camera</span></div>
   <input type="file" id="ep-file" accept="image/*" hidden>
   <label class="fld">Display name</label>
   <input type="text" id="ep-display" maxlength="40">
@@ -135,7 +135,7 @@
 <dialog id="settingsDlg">
   <div class="dlg-head">
     <h2>Material You Settings</h2>
-    <button class="btn icon" onclick="document.getElementById('settingsDlg').close()">✕</button>
+    <button class="btn icon" aria-label="Close" onclick="document.getElementById('settingsDlg').close()"><span class="ms">close</span></button>
   </div>
   <label class="fld">Appearance</label>
   <select id="st-mode">
@@ -147,14 +147,14 @@
   <label class="fld">Color palette</label>
   <div class="swatches" id="st-swatches"></div>
   <div class="color-row">
-    <input type="color" id="st-custom-color" value="#7b3f8c">
+    <input type="color" id="st-custom-color" value="#6750a4">
     <span style="font-size:14px">Custom accent color</span>
   </div>
 
   <label class="fld" style="margin-top:14px">Wallpaper</label>
   <div class="wp-grid" id="st-wps"></div>
   <div class="row" style="justify-content:space-between">
-    <button class="btn sm" id="st-wp-upload">Upload wallpaper</button>
+    <button class="btn sm" id="st-wp-upload"><span class="ms" style="font-size:18px">wallpaper</span>Upload wallpaper</button>
     <button class="btn sm" id="st-reset">Reset default</button>
   </div>
   <input type="file" id="st-wp-file" accept="image/*" hidden>
@@ -170,7 +170,6 @@
 <script src="/js/profile-theme.js"></script>
 <script src="/js/profile-data.js"></script>
 <script src="/js/profile-follows.js"></script>
-<script src="/js/tags.js"></script>
 <script src="/js/profile-upload.js"></script>
 <script src="/js/profile-edit.js"></script>
 <script src="/js/profile-settings.js"></script>
