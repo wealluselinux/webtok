@@ -68,6 +68,21 @@
     check();
   };
 
+  // "More" menu: Terms, Privacy, and the Admin panel link for admins
+  async function menuExtras() {
+    const menu = document.getElementById("sbmenu"); if (!menu || menu.dataset.extras) return;
+    menu.dataset.extras = "1";
+    const add = (href, icon, text) => { const a = document.createElement("a"); a.className = "it"; a.href = href; a.innerHTML = `<span class="ms">${icon}</span>${text}`; menu.insertBefore(a, menu.querySelector("#sbout")); return a; };
+    add("/terms", "description", "Terms of Service"); add("/privacy", "policy", "Privacy Policy");
+    try {
+      const { data } = await sbc.auth.getSession(); if (!data.session) return;
+      const r = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + data.session.access_token } });
+      const role = r.ok ? (await r.json()).data.role : "user";
+      if (role === "admin" || role === "owner") add("/admin", "admin_panel_settings", "Admin panel");
+    } catch {}
+  }
+  setTimeout(menuExtras, 600);
+
   check();
   setInterval(check, 12000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
