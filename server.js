@@ -275,6 +275,8 @@ const wrap = fn => async (req, res) => {
   }
 };
 
+require("./routes/extras")({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 });
+
 app.get("/config.js", (_q, res) => res.set("Cache-Control", "no-store").type("js")
   .send("window.WT_CONFIG=" + JSON.stringify({ SUPABASE_URL: "local", SUPABASE_ANON_KEY: "local", R2_PUBLIC_URL }) + ";"));
 app.get("/health", (_q, res) => res.json({ ok: true }));
@@ -370,7 +372,6 @@ app.get("/messages", page("messages.html"));
 app.get("/activity", page("activity.html"));
 app.get(["/login", "/sign-in", "/signin"], page("login.html"));
 app.get(["/profile", "/account"], page("profile.html"));
-require("./routes/extras")({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso });
 app.use(express.static(path.join(__dirname, "public")));
 
 if (require.main === module) {
