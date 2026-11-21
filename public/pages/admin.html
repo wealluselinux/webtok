@@ -18,7 +18,7 @@ h1{font-size:28px;letter-spacing:-.3px}a{color:var(--primary);font-weight:700;te
 .btn:hover{transform:translateY(-1px)}
 .btn:active{transform:scale(.96)}
 .btn.p,.btn.on{background:var(--primary);color:var(--on-primary)}.btn.bad{background:var(--bad);color:#fff}.btn:disabled{opacity:.4;cursor:default;transform:none}
-input[type=text],input[type=search],textarea{width:100%;padding:14px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;margin-bottom:12px}
+input[type=text],input[type=search],input[type=number],textarea{width:100%;padding:14px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;margin-bottom:12px}
 input:focus,textarea:focus{outline:0;border-color:var(--primary)}
 .card{background:var(--card);border-radius:28px;padding:18px 20px;margin-bottom:12px;box-shadow:0 4px 16px #0001}
 .line{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
@@ -29,6 +29,7 @@ input:focus,textarea:focus{outline:0;border-color:var(--primary)}
 .acts label{font-size:14px;display:flex;gap:4px;align-items:center}
 #result{position:sticky;top:8px;z-index:5;background:var(--primary);color:var(--on-primary);border-radius:28px;padding:18px 20px;margin-bottom:14px;box-shadow:0 8px 24px #0003}
 #result code{display:block;font-size:20px;margin:8px 0;word-break:break-all;background:#0003;border-radius:14px;padding:10px}
+.vg-log{background:var(--surface);border-radius:18px;padding:12px;font-family:monospace;font-size:12px;max-height:180px;overflow-y:auto;white-space:pre-wrap;margin-top:10px}
 .hidden{display:none!important}.msg{color:var(--muted);padding:10px 4px}
 </style></head><body>
 <div id="wp-layer"></div>
@@ -38,6 +39,20 @@ input:focus,textarea:focus{outline:0;border-color:var(--primary)}
   <div id="result" class="hidden"></div>
   <div id="denied" class="hidden card">You don't have access to this page. <a href="/">Go home</a></div>
   <div id="app" class="hidden">
+    <div class="card">
+      <div class="line" style="margin-bottom:8px">
+        <div class="name">Video Generator 3000 <span id="vgStatus" class="badge">Stopped</span></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="vgMax" type="number" min="0" max="500" value="5" style="width:90px;margin:0;padding:8px 12px" title="Max videos (0 = loop forever)">
+          <button class="btn p" id="vgStart">Start</button>
+          <button class="btn bad hidden" id="vgStop">Stop</button>
+        </div>
+      </div>
+      <textarea id="vgUsers" rows="3" placeholder="@usernames (one per line)"></textarea>
+      <div class="sub">Runs <code>tools/video_generator.py</code> on the server using the curated TikTok list above (0 = loop continuously).</div>
+      <div id="vgLog" class="vg-log hidden"></div>
+    </div>
+
     <div class="card">
       <div class="name" style="margin-bottom:8px">Send Announcement to Everyone (via @notifications)</div>
       <textarea id="annText" rows="2" maxlength="1000" placeholder="Write an announcement that @notifications will message to every user…"></textarea>
@@ -57,6 +72,9 @@ input:focus,textarea:focus{outline:0;border-color:var(--primary)}
 <script src="/js/theme.js"></script>
 <script src="/js/admin.js"></script>
 <script>
+const adminClient = supabase.createClient(WT_CONFIG.SUPABASE_URL, WT_CONFIG.SUPABASE_ANON_KEY);
+async function adminTok() { return (await adminClient.auth.getSession()).data?.session?.access_token; }
+
 document.getElementById("annSend").onclick = async () => {
   const tx = document.getElementById("annText").value.trim();
   const hint = document.getElementById("annHint");
@@ -64,10 +82,9 @@ document.getElementById("annSend").onclick = async () => {
   if (!tx) { hint.textContent = "Write a message first."; return; }
   btn.disabled = true; hint.textContent = "Sending…";
   try {
-    const { data } = await supabase.createClient(WT_CONFIG.SUPABASE_URL, WT_CONFIG.SUPABASE_ANON_KEY).auth.getSession();
     const r = await fetch("/api/admin/announce", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + data.session.access_token },
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await adminTok()) },
       body: JSON.stringify({ message: tx })
     });
     const j = await r.json();
@@ -77,5 +94,50 @@ document.getElementById("annSend").onclick = async () => {
   } catch (e) { hint.textContent = e.message; }
   finally { btn.disabled = false; }
 };
+
+let vgUsersLoaded = false;
+async function refreshVg() {
+  try {
+    const tok = await adminTok(); if (!tok) return;
+    const r = await fetch("/api/admin/vg3000", { headers: { Authorization: "Bearer " + tok } });
+    const j = await r.json(); if (!r.ok || !j.data) return;
+    const d = j.data;
+    const st = document.getElementById("vgStatus");
+    st.textContent = d.running ? "Running" : "Stopped";
+    st.className = "badge " + (d.running ? "role" : "");
+    document.getElementById("vgStart").classList.toggle("hidden", d.running);
+    document.getElementById("vgStop").classList.toggle("hidden", !d.running);
+    if (!vgUsersLoaded && d.usersText) {
+      document.getElementById("vgUsers").value = d.usersText;
+      vgUsersLoaded = true;
+    }
+    const logEl = document.getElementById("vgLog");
+    if (d.logs && d.logs.length) {
+      logEl.classList.remove("hidden");
+      logEl.textContent = d.logs.join("\n");
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+  } catch {}
+}
+document.getElementById("vgStart").onclick = async () => {
+  await fetch("/api/admin/vg3000/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + (await adminTok()) },
+    body: JSON.stringify({
+      maxVideos: Number(document.getElementById("vgMax").value) || 0,
+      usersText: document.getElementById("vgUsers").value
+    })
+  });
+  refreshVg();
+};
+document.getElementById("vgStop").onclick = async () => {
+  await fetch("/api/admin/vg3000/stop", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + (await adminTok()) }
+  });
+  refreshVg();
+};
+refreshVg();
+setInterval(refreshVg, 3000);
 </script>
 </body></html>
