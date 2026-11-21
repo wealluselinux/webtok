@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -70,16 +71,24 @@ def load_sources() -> list[str]:
     return out
 
 
+def load_archive() -> set[str]:
+    if not ARCHIVE_FILE.exists():
+        return set()
+    return {line.strip().split()[-1] for line in ARCHIVE_FILE.read_text(encoding="utf-8", errors="ignore").splitlines() if line.strip()}
+
+
+def mark_archive(vid_id: str):
+    with ARCHIVE_FILE.open("a", encoding="utf-8") as f:
+        f.write(f"tiktok {vid_id}\n")
+
+
 def api_json(method: str, path: str, payload: dict):
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         f"{BASE_URL}{path}",
         data=data,
         method=method,
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {TOKEN}",
-        },
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {TOKEN}"},
     )
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
@@ -91,21 +100,15 @@ def api_json(method: str, path: str, payload: dict):
 
 def upload_r2(upload_url: str, mp4_path: Path):
     data = mp4_path.read_bytes()
-    req = urllib.request.Request(
-        upload_url,
-        data=data,
-        method="PUT",
-        headers={"Content-Type": "video/mp4"},
-    )
+    req = urllib.request.Request(upload_url, data=data, method="PUT", headers={"Content-Type": "video/mp4"})
     with urllib.request.urlopen(req, timeout=180) as resp:
         if resp.status not in (200, 201, 204):
             raise RuntimeError(f"R2 PUT returned {resp.status}")
 
 
-def clean_tags(info: dict) -> list[str]:
+def clean_tags(desc: str) -> list[str]:
     tags = ["funny"]
-    desc = f"{info.get('title', '')} {info.get('description', '')}"
-    for m in re.findall(r"#([a-zA-Z0-9_]{1,30})", desc):
+    for m in re.findall(r"#([a-zA-Z0-9_]{1,30})", desc or ""):
         t = m.lower()
         if t not in tags:
             tags.append(t)
@@ -114,15 +117,55 @@ def clean_tags(info: dict) -> list[str]:
     return tags[:5]
 
 
-def detect_orientation(info: dict) -> str:
-    w = info.get("width") or 0
-    h = info.get("height") or 0
+def detect_orientation(w: int, h: int) -> str:
     if w and h:
         if w > h * 1.15:
             return "landscape"
         if abs(w - h) <= max(w, h) * 0.15:
             return "square"
     return "portrait"
+
+
+def list_user_videos(ytdlp: str, src: str) -> list[dict]:
+    cmd = [ytdlp, "--no-warnings", "--ignore-errors", "--flat-playlist", "--playlist-end", "15", "--dump-json", src]
+    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=60)
+    items = []
+    for line in (res.stdout or "").splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+            if obj.get("id"):
+                items.append(obj)
+        except Exception:
+            pass
+    return items
+
+
+def download_via_tikwm(video_url: str, dest_mp4: Path) -> dict | None:
+    api_url = "https://www.tikwm.com/api/?url=" + urllib.parse.quote(video_url, safe="")
+    req = urllib.request.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=45) as resp:
+        j = json.loads(resp.read().decode("utf-8"))
+    if j.get("code") != 0 or not j.get("data"):
+        return None
+    d = j["data"]
+    play_url = d.get("play") or d.get("wmplay")
+    if not play_url:
+        return None
+    req2 = urllib.request.Request(play_url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req2, timeout=120) as r2:
+        data = r2.read()
+    if len(data) > 50 * 1024 * 1024:
+        log("Skipped: video over 50 MB.")
+        return None
+    dest_mp4.write_bytes(data)
+    return {
+        "title": d.get("title") or "Funny Video",
+        "width": int(d.get("width") or 0),
+        "height": int(d.get("height") or 0),
+    }
 
 
 def main():
@@ -143,11 +186,12 @@ def main():
     log(f"Started with {len(sources)} source(s). Max videos: {MAX_VIDEOS or 'unlimited'}")
     uploaded = 0
     round_num = 0
+    seen = load_archive()
 
     while RUNNING and (MAX_VIDEOS == 0 or uploaded < MAX_VIDEOS):
         round_num += 1
         src = random.choice(sources)
-        log(f"Round {round_num} · Picking random video from {src}")
+        log(f"Round {round_num} · Checking {src}")
 
         for f in DL_DIR.glob("*"):
             try:
@@ -155,80 +199,85 @@ def main():
             except OSError:
                 pass
 
-        cmd = [
-            ytdlp,
-            "--no-warnings",
-            "--ignore-errors",
-            "--playlist-random",
-            "--playlist-end", "15",
-            "--max-downloads", "1",
-            "--download-archive", str(ARCHIVE_FILE),
-            "--max-filesize", "50m",
-            "-f", "b[ext=mp4]/mp4/best[ext=mp4]/best",
-            "--write-info-json",
-            "-o", str(DL_DIR / "%(id)s.%(ext)s"),
-            src,
-        ]
-        yt_out = ""
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=180)
-            yt_out = res.stdout or ""
+            items = list_user_videos(ytdlp, src)
         except Exception as e:
-            log(f"yt-dlp error: {e}")
-
-        mp4s = list(DL_DIR.glob("*.mp4")) or [p for p in DL_DIR.glob("*") if p.suffix.lower() in (".mp4", ".webm", ".mov") and not p.name.endswith(".part")]
-        if not mp4s:
-            err_lines = [ln.strip() for ln in yt_out.splitlines() if "ERROR" in ln or "Sign in" in ln or "blocked" in ln.lower()]
-            if err_lines:
-                log(f"yt-dlp: {err_lines[-1][:180]}")
-            else:
-                log(f"No new video downloaded from {src}, trying another...")
+            log(f"Playlist check failed: {e}")
             time.sleep(2)
             continue
 
-        mp4 = mp4s[0]
-        info_path = mp4.with_suffix(".info.json")
-        info = {}
-        if info_path.exists():
-            try:
-                info = json.loads(info_path.read_text(encoding="utf-8", errors="ignore"))
-            except Exception:
-                pass
+        unseen = [it for it in items if str(it.get("id")) not in seen]
+        if not unseen:
+            log(f"No unseen videos from {src}, trying another...")
+            time.sleep(2)
+            continue
 
-        raw_title = (info.get("title") or info.get("description") or "Funny Video").strip()
+        pick = random.choice(unseen)
+        vid_id = str(pick["id"])
+        vid_url = pick.get("webpage_url") or pick.get("url") or f"{src}/video/{vid_id}"
+        if not vid_url.startswith("http"):
+            vid_url = f"{src}/video/{vid_id}"
+
+        mp4 = DL_DIR / f"{vid_id}.mp4"
+        info = {"title": pick.get("title") or pick.get("description") or "Funny Video", "width": 0, "height": 0}
+
+        # Try yt-dlp first, then fall back to tikwm if TikTok blocks Render's datacenter IP
+        cmd = [ytdlp, "--no-warnings", "--max-filesize", "50m", "-f", "b[ext=mp4]/mp4/best[ext=mp4]/best", "--write-info-json", "-o", str(DL_DIR / "%(id)s.%(ext)s"), vid_url]
+        try:
+            subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=90)
+        except Exception:
+            pass
+
+        if not mp4.exists():
+            log(f"Direct yt-dlp blocked on Render, using fallback for {vid_id}...")
+            try:
+                fb = download_via_tikwm(vid_url, mp4)
+                if fb:
+                    info.update(fb)
+            except Exception as e:
+                log(f"Fallback failed: {e}")
+        else:
+            ip = mp4.with_suffix(".info.json")
+            if ip.exists():
+                try:
+                    j = json.loads(ip.read_text(encoding="utf-8", errors="ignore"))
+                    info["title"] = j.get("title") or j.get("description") or info["title"]
+                    info["width"] = int(j.get("width") or 0)
+                    info["height"] = int(j.get("height") or 0)
+                except Exception:
+                    pass
+
+        if not mp4.exists():
+            log(f"Could not fetch {vid_id}, trying another...")
+            time.sleep(2)
+            continue
+
+        raw_title = (info.get("title") or "Funny Video").strip()
         title = re.sub(r"\s+", " ", raw_title)[:100] or "Funny Video"
-        tags = clean_tags(info)
-        orient = detect_orientation(info)
+        tags = clean_tags(raw_title)
+        orient = detect_orientation(info.get("width", 0), info.get("height", 0))
         rand_name = f"{int(time.time() * 1000)}_{random.randint(10000000, 99999999)}.mp4"
         storage_path = f"{UID}/{rand_name}"
 
         try:
-            presign = api_json("POST", "/api/storage/presign", {
-                "bucket": "videos",
-                "path": storage_path,
-                "contentType": "video/mp4",
-            })
+            presign = api_json("POST", "/api/storage/presign", {"bucket": "videos", "path": storage_path, "contentType": "video/mp4"})
             upload_r2(presign["uploadUrl"], mp4)
             api_json("POST", "/api/db", {
                 "table": "videos",
                 "op": "insert",
                 "returning": True,
-                "data": {
-                    "title": title,
-                    "storage_path": storage_path,
-                    "orientation": orient,
-                    "hashtags": tags,
-                },
+                "data": {"title": title, "storage_path": storage_path, "orientation": orient, "hashtags": tags},
             })
+            mark_archive(vid_id)
+            seen.add(vid_id)
             uploaded += 1
             log(f"Uploaded #{uploaded}: {title[:60]} ({orient}, #{', #'.join(tags)})")
         except Exception as e:
             log(f"Upload failed: {e}")
         finally:
-            for f in (mp4, info_path):
+            for f in DL_DIR.glob("*"):
                 try:
-                    if f.exists():
-                        f.unlink()
+                    f.unlink()
                 except OSError:
                     pass
 
