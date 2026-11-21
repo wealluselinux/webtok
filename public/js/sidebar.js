@@ -22,7 +22,7 @@ const css=`
 #sb .it{display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:999px;color:var(--text);text-decoration:none;font-weight:600;background:none;border:0;font:inherit;cursor:pointer;width:100%;text-align:left}
 #sb .it:hover{background:var(--surface)}#sb .it.act{color:var(--primary);background:var(--surface)}
 #sb .it.act .ms{font-variation-settings:'FILL' 1}
-#sb .menu{position:absolute;bottom:70px;left:16px;right:16px;background:var(--card);border-radius:24px;padding:8px;box-shadow:0 8px 30px #0004;display:none}
+#sb .menu{position:absolute;bottom:70px;left:16px;right:16px;background:var(--card);border-radius:24px;padding:8px;box-shadow:0 8px 30px #0004;display:none;z-index:45}
 #sb .menu.open{display:block}
 body.has-sb #feed,body.has-sb #landing{left:var(--sbw);bottom:var(--sbh)}
 body.has-sb #bar{display:none!important}
@@ -49,7 +49,13 @@ nav.innerHTML=`<a class="brand" href="/"><img src="/images/logo.png" alt=""><spa
 </div>`+
 items.map(([id,ic,l,h])=>h?`<a class="it" data-id="${id}" href="${h}"><span class="ms">${ic}</span><span class="lbl">${l}</span></a>`:`<button class="it" data-id="${id}"><span class="ms">${ic}</span><span class="lbl">${l}</span></button>`).join("")+
 `<button class="it" id="sbmore"><span class="ms">more_horiz</span><span class="lbl">More</span></button>
-<div class="menu" id="sbmenu"><a class="it" href="/profile"><span class="ms">palette</span>Theme &amp; settings</a><button class="it" id="sbout"><span class="ms">logout</span>Sign out</button></div>`;
+<div class="menu" id="sbmenu">
+  <a class="it" href="/profile"><span class="ms">palette</span>Theme &amp; settings</a>
+  <a class="it" href="/admin"><span class="ms">admin_panel_settings</span>Admin panel</a>
+  <a class="it" href="/privacy"><span class="ms">privacy_tip</span>Privacy Policy</a>
+  <a class="it" href="/terms"><span class="ms">description</span>Terms of Service</a>
+  <button class="it" id="sbout"><span class="ms">logout</span>Sign out</button>
+</div>`;
 document.body.appendChild(nav);document.body.classList.add("has-sb");
 
 function mark(){const h=location.hash;let id=(page==="home"||page==="scroll")?(h==="#fyp"?"fyp":h==="#following"?"following":h==="#friends"?"friends":"explore"):page;
@@ -101,10 +107,13 @@ sInput.addEventListener("input",()=>{
     sRes.classList.remove("hidden");
   },250);
 });
-document.addEventListener("click",e=>{if(!nav.querySelector(".srch-wrap").contains(e.target)) sRes.classList.add("hidden");});
+document.addEventListener("click",e=>{
+  if(!nav.querySelector(".srch-wrap").contains(e.target)) sRes.classList.add("hidden");
+  if(!nav.querySelector("#sbmenu").contains(e.target)&&e.target!==nav.querySelector("#sbmore")&&!nav.querySelector("#sbmore").contains(e.target)) nav.querySelector("#sbmenu").classList.remove("open");
+});
 nav.querySelector("#sbq").onsubmit=e=>{e.preventDefault();const q=sInput.value.trim();sRes.classList.add("hidden");if(q)location.href="/scroll#search="+encodeURIComponent(q)};
 
 nav.querySelector('[data-id="upload"]').onclick=()=>{const b=document.getElementById("openUpload");if(b&&!b.classList.contains("hidden"))b.click();else location.href="/scroll"};
-nav.querySelector("#sbmore").onclick=()=>nav.querySelector("#sbmenu").classList.toggle("open");
+nav.querySelector("#sbmore").onclick=e=>{e.stopPropagation();nav.querySelector("#sbmenu").classList.toggle("open");};
 nav.querySelector("#sbout").onclick=async()=>{try{await getSb().auth.signOut()}catch(e){}location.href="/"};
 })();
