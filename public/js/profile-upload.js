@@ -1,5 +1,4 @@
-/* Profile page: full-screen batch upload (Supabase Storage, 50 MB, progress + ETA) */
-/* ---------- Full-Screen Batch Upload (Supabase Storage 50 MB + status bar + ETA) ---------- */
+/* Profile page: full-screen batch upload (R2 Storage, 50 MB, progress + ETA, AI safety check) */
 let upQueue = [];
 function fmtEta(sec) {
   if (!isFinite(sec) || sec <= 0) return "almost done";
@@ -19,8 +18,31 @@ function hideStatusBar() {
   const wrap = $("upBarWrap");
   if (wrap) wrap.classList.add("hidden");
 }
+function captureVideoFrame(url) {
+  return new Promise(resolve => {
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.preload = "metadata"; v.src = url;
+    const done = out => { v.src = ""; resolve(out); };
+    v.onloadeddata = () => {
+      try {
+        v.currentTime = Math.min(0.5, (v.duration || 1) / 2);
+      } catch { done(""); }
+    };
+    v.onseeked = () => {
+      try {
+        const c = document.createElement("canvas");
+        const sc = Math.min(360 / (v.videoWidth || 360), 360 / (v.videoHeight || 360), 1);
+        c.width = Math.max(1, Math.round((v.videoWidth || 360) * sc));
+        c.height = Math.max(1, Math.round((v.videoHeight || 360) * sc));
+        c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+        done(c.toDataURL("image/jpeg", 0.7));
+      } catch { done(""); }
+    };
+    v.onerror = () => done("");
+    setTimeout(() => done(""), 3000);
+  });
+}
 async function uploadToSupabaseStorage(file, path, token, onProgress) {
-  // (name kept so callers don't change) Uploads straight from the browser to Cloudflare R2 using a link from our server
   const ct = file.type || "video/mp4";
   const pre = await fetch("/api/storage/presign", {
     method: "POST",
@@ -139,13 +161,22 @@ $("upSubmit").onclick = async () => {
         setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
         const ext = (item.file.name.split(".").pop() || "mp4").toLowerCase();
         const path = `${user.id}/${Date.now()}_${i}.${ext}`;
+        const title = item.title.trim() || item.file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+        const frame = await captureVideoFrame(item.url);
         const { url, storagePath } = await uploadToSupabaseStorage(item.file, path, session.access_token, (pct, eta) => {
           setSt(`Uploading ${pct}%`);
           setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, pct, eta);
         });
+        setSt("Checking safety…");
+        setStatusBar(`Checking safety (${i + 1} of ${upQueue.length})…`, 100, "");
+        const chkR = await fetch("/api/ai/check-media", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ title, hashtags: tags, frame, storage_path: storagePath })
+        });
+        const chkJ = await chkR.json().catch(() => ({}));
+        if (!chkR.ok || chkJ.error) throw new Error(chkJ.error?.message || "Blocked by safety filter.");
         setSt("Saving…");
-        setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
-        const title = item.title.trim() || item.file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
         let { error: dbErr } = await sb.from("videos").insert({
           user_id: user.id, title, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
         });

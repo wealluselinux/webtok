@@ -1,5 +1,6 @@
-/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, share to friends & groups */
+/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, share to Web Tok AI / friends / groups */
 let obs, muted = true;
+const AI_BOT_ID = "00000000-0000-0000-0000-000000000002";
 
 function fmtVidTime(sec) {
   if (!isFinite(sec) || sec < 0) return "0:00";
@@ -75,8 +76,8 @@ async function openShareVideo(v) {
     }
     dlg.innerHTML = `<div class="dlg-head"><h2>Share video</h2><button type="button" class="btn icon" aria-label="Close" onclick="document.getElementById('wt-share-dlg').close()"><span class="ms">close</span></button></div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(v.name || "Web Tok")}</div>
-      <input type="text" id="shNote" placeholder="Add a message (optional)…" maxlength="200">
-      <div class="sh-list" id="shList"><div style="color:var(--muted);padding:12px;text-align:center">Loading friends &amp; groups…</div></div>
+      <input type="text" id="shNote" placeholder="Add a message or ask Web Tok AI…" maxlength="200">
+      <div class="sh-list" id="shList"><div style="color:var(--muted);padding:12px;text-align:center">Loading…</div></div>
       <div class="row" style="justify-content:space-between;margin-top:14px">
         <button type="button" class="btn sm" id="shCopy"><span class="ms" style="font-size:18px">link</span>Copy link</button>
         <button type="button" class="btn sm" onclick="document.getElementById('wt-share-dlg').close()">Done</button>
@@ -103,17 +104,35 @@ async function openShareVideo(v) {
       const friends = friendIds.length ? (await sb.from("profiles").select("id,username,display_name,avatar_url").in("id", friendIds)).data || [] : [];
       const groups = grpRes?.data?.groups || [];
 
-      listEl.innerHTML = "";
-      if (!friends.length && !groups.length) {
-        listEl.innerHTML = '<div style="color:var(--muted);padding:14px;text-align:center;font-size:13px">No friends or group chats yet. Follow someone and have them follow you back!</div>';
-        return;
-      }
-
-      const buildPayload = () => {
-        const note = ($("shNote").value || "").trim();
+      const buildPayload = (defNote = "") => {
+        const note = ($("shNote").value || "").trim() || defNote;
         const tag = `[video_share:${v.id}|${String(v.name || "Web Tok").replace(/[\r\n\]|]/g, " ").slice(0, 80)}]`;
         return note ? `${tag}\n${note}` : tag;
       };
+
+      listEl.innerHTML = "";
+      const aiLbl = document.createElement("div"); aiLbl.className = "sh-sec"; aiLbl.textContent = "Assistant"; listEl.appendChild(aiLbl);
+      const aiRow = document.createElement("div"); aiRow.className = "sh-row";
+      aiRow.innerHTML = `<div class="sh-av grp" style="background:var(--primary);color:var(--on-primary)"><span class="ms" style="font-size:20px">smart_toy</span></div>
+        <div class="sh-meta"><b>Web Tok AI</b><small>Ask what this video is about</small></div>
+        <button type="button" class="btn primary sm">Ask AI</button>`;
+      const aiBtn = aiRow.querySelector("button");
+      aiBtn.onclick = async () => {
+        aiBtn.disabled = true; aiBtn.textContent = "Sending…";
+        try {
+          const r = await fetch("/api/ai/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
+            body: JSON.stringify({ body: buildPayload("What is this video about?") })
+          });
+          if (!r.ok) throw new Error();
+          dlg.close();
+          location.href = "/messages#" + AI_BOT_ID;
+        } catch {
+          aiBtn.disabled = false; aiBtn.textContent = "Retry";
+        }
+      };
+      listEl.appendChild(aiRow);
 
       if (groups.length) {
         const lbl = document.createElement("div"); lbl.className = "sh-sec"; lbl.textContent = "Group Chats"; listEl.appendChild(lbl);
@@ -133,8 +152,7 @@ async function openShareVideo(v) {
               });
               const j = await r.json().catch(() => ({}));
               if (!r.ok || j.error) throw new Error(j.error?.message || "Failed");
-              btn.textContent = "Sent";
-              btn.className = "btn sm";
+              btn.textContent = "Sent"; btn.className = "btn sm";
             } catch {
               btn.disabled = false; btn.textContent = "Retry";
             }
@@ -157,8 +175,7 @@ async function openShareVideo(v) {
             btn.disabled = true; btn.textContent = "Sending…";
             const { error } = await sb.from("messages").insert({ sender_id: user.id, recipient_id: f.id, body: buildPayload() });
             if (error) { btn.disabled = false; btn.textContent = "Retry"; return; }
-            btn.textContent = "Sent";
-            btn.className = "btn sm";
+            btn.textContent = "Sent"; btn.className = "btn sm";
           };
           listEl.appendChild(row);
         });
@@ -226,9 +243,7 @@ function slide(v) {
     s.querySelector(".cap").appendChild(tg);
   }
   vid.onclick = () => vid.paused ? vid.play() : vid.pause();
-  s.querySelector(".sound-left").onclick = e => {
-    if (e.target.closest("button")) toggleFeedSound();
-  };
+  s.querySelector(".sound-left").onclick = e => { if (e.target.closest("button")) toggleFeedSound(); };
   s.querySelector(".rail").onclick = e => {
     const b = e.target.closest("button");
     if (!b) return;

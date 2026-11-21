@@ -1,6 +1,7 @@
-/* Messages: DMs, Group Chats, Stickers, Invites, Sidebar */
+/* Messages: DMs, Web Tok AI (@webtok_ai), Group Chats, Stickers, Invites, Sidebar */
 const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
 const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const AI_BOT={id:"00000000-0000-0000-0000-000000000002",username:"webtok_ai",display_name:"Web Tok AI",isAi:true};
 let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, activeTab="all", groupPoll=null, lastGroupMsgId=0;
 const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
 let lottieP=null;
@@ -37,6 +38,7 @@ function bubble(m, showSender=false){
   wrap.appendChild(d);
   $("msgs").appendChild(wrap);
   $("msgs").scrollTop=1e9;
+  return wrap;
 }
 
 function stopGroupPoll(){if(groupPoll){clearInterval(groupPoll);groupPoll=null;}}
@@ -97,17 +99,40 @@ async function openChat(f){
   cur=f; curType="dm"; document.body.classList.add("chatting");
   delete unreadBySender[f.id];
   renderSidebarList();
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}</div></div></div>
+  const avHtml=f.isAi?'<div class="av ai"><span class="ms">smart_toy</span></div>':`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":""}</div></div></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
   <div id="stkPanel" class="hidden"></div>
-  <form id="form"><input id="txt" maxlength="1000" placeholder="Message…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  <form id="form"><input id="txt" maxlength="1000" placeholder="${f.isAi?"Ask Web Tok AI anything or share a video…":"Message…"}" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
   $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
   const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
   $("msgs").innerHTML="";
+  if(f.isAi && !(data||[]).length){
+    $("msgs").innerHTML='<div class="empty">Hi! Ask me anything or share a Web Tok video to ask what it\'s about.</div>';
+  }
   (data||[]).forEach(m=>bubble(m,false));
   if(window.wtMarkRead)wtMarkRead(f.id);
-  async function send(body){const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
-    if(error){await wtAlert({title:"Couldn't send",message:error.message});return false}bubble(m,false);return true}
+
+  async function send(body){
+    if(f.isAi){
+      const em=$("msgs").querySelector(".empty"); if(em) em.remove();
+      const myWrap=bubble({sender_id:me,body},false);
+      const typing=bubble({sender_id:f.id,body:"Thinking…"},false);
+      try{
+        const res=await api("/api/ai/chat",{method:"POST",body:JSON.stringify({body})});
+        typing.remove();
+        if(res?.aiMsg) bubble(res.aiMsg,false);
+        return true;
+      }catch(err){
+        typing.remove(); myWrap.remove();
+        await wtAlert({title:"Web Tok AI",message:err.message});
+        return false;
+      }
+    }
+    const {data:m,error}=await sb.from("messages").insert({sender_id:me,recipient_id:f.id,body}).select().single();
+    if(error){await wtAlert({title:"Couldn't send",message:error.message});return false}
+    bubble(m,false);return true;
+  }
   $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
   wireStickerPicker(send);
   $("txt").focus();
@@ -120,7 +145,6 @@ async function openGroupChat(g){
   renderSidebarList();
   $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av grp"><span class="ms">groups</span></div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}</div></div><div class="head-actions"><button class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button class="head-chip" id="btnInvMore"><span class="ms" style="font-size:16px">person_add</span>Invite</button><button class="head-chip" id="btnLeaveGrp">Leave</button></div></div>
   <div id="callBar" class="hidden"></div>
-  <div id="stage" class="hidden"></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
   <div id="stkPanel" class="hidden"></div>
   <form id="form"><input id="txt" maxlength="1000" placeholder="Message ${esc(g.name)}…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
@@ -136,9 +160,7 @@ async function openGroupChat(g){
     await loadGroupsAndInvites();
   };
   $("btnInvMore").onclick=()=>openInviteMore(g);
-  if(callGroupId!==g.id){
-    try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{}
-  }
+  if(callGroupId!==g.id){ try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{} }
   renderCallUI();
 
   const msgs=await api(`/api/groups/${encodeURIComponent(g.id)}/messages`);
@@ -176,6 +198,15 @@ function renderSidebarList(){
   badge.textContent=invites.length;
   badge.classList.toggle("hidden",!invites.length);
 
+  if(activeTab==="all"){
+    const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Assistant"; fl.appendChild(lbl);
+    const aiRow=document.createElement("div");
+    aiRow.className="fr"+(curType==="dm"&&cur?.id===AI_BOT.id?" on":"");
+    aiRow.innerHTML=`<div class="av ai"><span class="ms">smart_toy</span></div><div class="fr-meta"><div class="fr-name">Web Tok AI</div><div class="fr-sub">Ask anything or share videos</div></div>`;
+    aiRow.onclick=()=>openChat(AI_BOT);
+    fl.appendChild(aiRow);
+  }
+
   const showInvites=activeTab==="invites"||(activeTab==="all"&&invites.length);
   const showGroups=activeTab==="all"||activeTab==="groups";
   const showFriends=activeTab==="all"||activeTab==="friends";
@@ -187,18 +218,8 @@ function renderSidebarList(){
       card.innerHTML=`<div class="inv-top"><div class="av grp"><span class="ms">group_add</span></div><div class="fr-meta"><div class="fr-name">${esc(inv.name)}</div><div class="fr-sub">Invited by @${esc(inv.inviter_username||"friend")} · ${inv.member_count||1} in chat</div></div></div>
       <div class="inv-acts"><button class="pill-btn p">Accept</button><button class="pill-btn t">Decline</button></div>`;
       const [accBtn,decBtn]=card.querySelectorAll("button");
-      accBtn.onclick=async()=>{
-        accBtn.disabled=true;
-        await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:true})});
-        await loadGroupsAndInvites();
-        const joined=groups.find(g=>g.id===inv.group_id);
-        if(joined) openGroupChat(joined);
-      };
-      decBtn.onclick=async()=>{
-        decBtn.disabled=true;
-        await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:false})});
-        await loadGroupsAndInvites();
-      };
+      accBtn.onclick=async()=>{accBtn.disabled=true;await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:true})});await loadGroupsAndInvites();const joined=groups.find(g=>g.id===inv.group_id);if(joined) openGroupChat(joined);};
+      decBtn.onclick=async()=>{decBtn.disabled=true;await api(`/api/groups/${encodeURIComponent(inv.group_id)}/respond`,{method:"POST",body:JSON.stringify({accept:false})});await loadGroupsAndInvites();};
       fl.appendChild(card);
     });
   } else if(activeTab==="invites" && !invites.length){
@@ -234,24 +255,20 @@ function renderSidebarList(){
         e.onclick=()=>openChat(f);
         fl.appendChild(e);
       });
-    } else if(activeTab==="friends" || (activeTab==="all" && !groups.length && !invites.length)){
+    } else if(activeTab==="friends"){
       fl.innerHTML='<div class="empty">No friends yet. Follow someone and have them follow you back.</div>';
     }
   }
 }
 
 document.querySelectorAll(".seg-tab").forEach(btn=>{
-  btn.onclick=()=>{
-    document.querySelectorAll(".seg-tab").forEach(b=>b.classList.toggle("on",b===btn));
-    activeTab=btn.dataset.tab;
-    renderSidebarList();
-  };
+  btn.onclick=()=>{document.querySelectorAll(".seg-tab").forEach(b=>b.classList.toggle("on",b===btn));activeTab=btn.dataset.tab;renderSidebarList();};
 });
 
 $("btnNewGroup").onclick=()=>{
   $("ngName").value=""; $("ngHint").textContent="";
   const box=$("ngFriends"); box.innerHTML="";
-  if(!friends.length){box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Follow someone and have them follow you back first.</div>';}
+  if(!friends.length) box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">Follow someone and have them follow you back first.</div>';
   friends.forEach(f=>{
     const row=document.createElement("label"); row.className="pick-row";
     row.innerHTML=`<input type="checkbox" value="${esc(f.id)}"><div class="av" style="width:34px;height:34px" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div><b>${esc(f.display_name||f.username)}</b> <span style="color:var(--muted);font-size:12px">@${esc(f.username)}</span></div>`;
@@ -266,20 +283,14 @@ $("ngSubmit").onclick=async()=>{
   if(!name){$("ngHint").textContent="Enter a group name.";return}
   if(!memberIds.length){$("ngHint").textContent="Pick at least one friend.";return}
   $("ngSubmit").disabled=true; $("ngHint").textContent="";
-  try{
-    const created=await api("/api/groups",{method:"POST",body:JSON.stringify({name,memberIds})});
-    $("newGroupDlg").close();
-    await loadGroupsAndInvites();
-    const g=groups.find(x=>x.id===created.id);
-    if(g) openGroupChat(g);
-  }catch(err){$("ngHint").textContent=err.message;}
+  try{const created=await api("/api/groups",{method:"POST",body:JSON.stringify({name,memberIds})});$("newGroupDlg").close();await loadGroupsAndInvites();const g=groups.find(x=>x.id===created.id);if(g)openGroupChat(g);}
+  catch(err){$("ngHint").textContent=err.message;}
   finally{$("ngSubmit").disabled=false;}
 };
 
 function openInviteMore(g){
   $("imHint").textContent="";
-  const inGrp=new Set((g.members||[]).map(m=>m.id));
-  const avail=friends.filter(f=>!inGrp.has(f.id));
+  const inGrp=new Set((g.members||[]).map(m=>m.id)), avail=friends.filter(f=>!inGrp.has(f.id));
   const box=$("imFriends"); box.innerHTML="";
   if(!avail.length) box.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px">All your friends are already in this group.</div>';
   avail.forEach(f=>{
@@ -291,21 +302,15 @@ function openInviteMore(g){
     const memberIds=[...box.querySelectorAll("input:checked")].map(i=>i.value);
     if(!memberIds.length){$("imHint").textContent="Pick at least one friend.";return}
     $("imSubmit").disabled=true;
-    try{
-      await api(`/api/groups/${encodeURIComponent(g.id)}/invite`,{method:"POST",body:JSON.stringify({memberIds})});
-      $("invMoreDlg").close();
-    }catch(err){$("imHint").textContent=err.message;}
+    try{await api(`/api/groups/${encodeURIComponent(g.id)}/invite`,{method:"POST",body:JSON.stringify({memberIds})});$("invMoreDlg").close();}
+    catch(err){$("imHint").textContent=err.message;}
     finally{$("imSubmit").disabled=false;}
   };
   $("invMoreDlg").showModal();
 }
 
 async function loadGroupsAndInvites(){
-  try{
-    const res=await api("/api/groups");
-    groups=res.groups||[];
-    invites=res.invites||[];
-  }catch{groups=[];invites=[];}
+  try{const res=await api("/api/groups");groups=res.groups||[];invites=res.invites||[];}catch{groups=[];invites=[];}
   renderSidebarList();
 }
 
@@ -314,18 +319,14 @@ async function loadGroupsAndInvites(){
   me=data.session.user.id; token=data.session.access_token;
   const [a,b]=await Promise.all([sb.from("follows").select("following_id").eq("follower_id",me),sb.from("follows").select("follower_id").eq("following_id",me)]);
   const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
-  if(ids.length){
-    const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);
-    friends=ps||[];
-  }
-  try{
-    const r=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+token}});
-    unreadBySender=(await r.json()).data?.bySender||{};
-  }catch{}
+  if(ids.length){const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);friends=ps||[];}
+  try{const r=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+token}});unreadBySender=(await r.json()).data?.bySender||{};}catch{}
   await loadGroupsAndInvites();
   setInterval(loadGroupsAndInvites,12000);
   addEventListener("hashchange",()=>{const f=friends.find(x=>x.id===location.hash.slice(1));if(f)openChat(f)});
-  const want=location.hash.slice(1),wf=friends.find(x=>x.id===want); if(wf) openChat(wf);
+  const want=location.hash.slice(1);
+  if(want===AI_BOT.id) openChat(AI_BOT);
+  else {const wf=friends.find(x=>x.id===want);if(wf)openChat(wf);}
   sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
     const m=p.new; if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id)} else{unreadBySender[m.sender_id]=1;renderSidebarList()}}).subscribe();
 })();

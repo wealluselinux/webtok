@@ -43,6 +43,7 @@ body.has-wp #wp-scrim{opacity:.74}
 .av{width:46px;height:46px;clip-path:var(--m3-cookie-7);background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex:none;transition:transform .25s var(--spring)}
 .fr:hover .av{transform:scale(1.06)}
 .av.grp{background:var(--accent);color:var(--on-accent);clip-path:var(--m3-cookie-4)}
+.av.ai{background:var(--primary);color:var(--on-primary);clip-path:var(--m3-cookie-4)}
 .dot{width:10px;height:10px;border-radius:50%;background:var(--primary);margin-left:auto;display:none;flex:none}
 .fr.unread .dot{display:block}
 .u-badge{margin-left:auto;background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;flex:none}
@@ -65,33 +66,46 @@ body.has-wp #wp-scrim{opacity:.74}
 .peer-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:4px 10px 4px 5px;border-radius:999px;font-size:12px;font-weight:700}
 .peer-pill .av{width:26px;height:26px;font-size:11px}
 .call-ctrls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-#stage{background:var(--surface);border-bottom:1px solid var(--card);padding:12px 16px;display:flex;flex-direction:column;gap:10px;position:relative}
-.stage-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;font-weight:700}
-.watch-box{position:relative;background:#000;border-radius:24px;overflow:hidden;max-height:300px;display:grid;place-items:center}
-.watch-box video{max-height:300px;max-width:100%;width:auto;display:block}
-.react-float-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.react-pop{position:absolute;bottom:14px;display:flex;align-items:center;gap:4px;background:var(--surface);color:var(--text);padding:5px 10px;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 4px 14px #0004;animation:reactUp 2.2s ease-out forwards}
-@keyframes reactUp{0%{opacity:0;transform:translateY(10px) scale(.8)}15%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-150px) scale(1.05)}}
-.watch-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.wb-wrap{display:flex;flex-direction:column;gap:8px}
-#wbCanvas{width:100%;height:260px;background:#fff;border-radius:20px;cursor:crosshair;touch-action:none;box-shadow:inset 0 0 0 1px var(--card)}
+
+/* Full-screen Call + Web Tok Group Watch + Chat Sidebar */
+#callScreen{position:fixed;inset:0;z-index:60;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+.cs-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--surface);flex-wrap:wrap;flex:none}
+.cs-body{flex:1;min-height:0;display:flex}
+.cs-stage{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--bg)}
+.cs-chat{width:340px;flex:none;border-left:1px solid var(--surface);display:flex;flex-direction:column;background:var(--bg);min-height:0}
+.cs-grid{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,200px));gap:16px;place-content:center;padding:24px}
+.cs-tile{background:var(--card);border-radius:28px;padding:22px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 6px 20px #0002}
+.cs-tile .av{width:76px;height:76px;font-size:28px}
+.gw-feed{flex:1;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;position:relative}
+.gw-feed::-webkit-scrollbar{display:none}
+.gw-slide{height:100%;scroll-snap-align:start;scroll-snap-stop:always;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px;position:relative}
+.gw-player{position:relative;flex:1;min-height:0;height:100%;aspect-ratio:9/16;max-width:100%;border-radius:28px;overflow:hidden;background:#000;box-shadow:0 12px 36px #0005}
+.gw-player video{width:100%;height:100%;object-fit:cover;display:block}
+.gw-cap{position:absolute;left:0;right:0;bottom:0;padding:32px 14px 14px;background:linear-gradient(transparent,#000b);color:#fff;font-size:13px;pointer-events:none}
+.gw-react-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.react-float-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:5}
+.react-pop{position:absolute;bottom:24px;display:flex;align-items:center;gap:4px;background:var(--surface);color:var(--text);padding:6px 12px;border-radius:999px;font-size:13px;font-weight:700;box-shadow:0 4px 14px #0004;animation:reactUp 2.2s ease-out forwards}
+@keyframes reactUp{0%{opacity:0;transform:translateY(10px) scale(.8)}15%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-160px) scale(1.05)}}
+.wb-wrap{flex:1;display:flex;flex-direction:column;gap:10px;padding:16px}
+#wbCanvas{flex:1;width:100%;background:#fff;border-radius:24px;cursor:crosshair;touch-action:none;box-shadow:inset 0 0 0 1px var(--card)}
 .wb-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wb-swatch{width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+.wb-swatch{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .wb-swatch.on{border-color:var(--text);transform:scale(1.15)}
+
 #msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:8px}
-.m-wrap{display:flex;flex-direction:column;max-width:74%;align-self:flex-start;gap:3px}
+.m-wrap{display:flex;flex-direction:column;max-width:78%;align-self:flex-start;gap:3px}
 .m-wrap.me{align-self:flex-end;align-items:flex-end}
 .m-sender{font-size:11px;font-weight:700;color:var(--muted);padding:0 10px}
-.m{padding:11px 16px;border-radius:22px 22px 22px 6px;background:var(--surface);word-break:break-word;line-height:1.4}
+.m{padding:11px 16px;border-radius:22px 22px 22px 6px;background:var(--surface);word-break:break-word;line-height:1.4;white-space:pre-wrap}
 .m-wrap.me .m{background:var(--primary);color:var(--on-primary);border-radius:22px 22px 6px 22px}
 .vid-share-card{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:18px;background:var(--card);color:var(--text);text-decoration:none;margin-bottom:4px}
 .m-wrap.me .vid-share-card{background:#fff2;color:var(--on-primary)}
 .vid-share-ic{width:38px;height:38px;clip-path:var(--m3-cookie-4);background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
 .m-wrap.me .vid-share-ic{background:var(--on-primary);color:var(--primary)}
 #form{display:flex;gap:10px;padding:12px 16px;background:transparent}
-#form input{flex:1;padding:14px 20px;border-radius:999px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;transition:border-color .15s}
+#form input{flex:1;min-width:0;padding:14px 20px;border-radius:999px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;transition:border-color .15s}
 #form input:focus{border-color:var(--primary)}
-#form button{border:0;border-radius:18px;background:var(--primary);color:var(--on-primary);width:50px;height:50px;cursor:pointer;display:grid;place-items:center;transition:border-radius .2s var(--spring),transform .15s}
+#form button{border:0;border-radius:18px;background:var(--primary);color:var(--on-primary);width:50px;height:50px;cursor:pointer;display:grid;place-items:center;flex:none;transition:border-radius .2s var(--spring),transform .15s}
 #form button:active{border-radius:999px;transform:scale(.95)}
 .empty{margin:auto;color:var(--muted);text-align:center;padding:30px;max-width:34ch;line-height:1.5}
 .hidden{display:none!important}
@@ -117,7 +131,10 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 .pick-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:18px;background:var(--surface);cursor:pointer}
 .pick-row input{accent-color:var(--primary);width:18px;height:18px}
 .dlg-foot{display:flex;gap:8px;justify-content:flex-end}
-@media(max-width:800px){#list{width:100%}#chat{display:none}body.chatting #list{display:none}body.chatting #chat{display:flex}#back{display:block}}
+@media(max-width:800px){
+  #list{width:100%}#chat{display:none}body.chatting #list{display:none}body.chatting #chat{display:flex}#back{display:block}
+  .cs-body{flex-direction:column}.cs-chat{width:100%;height:42dvh;border-left:0;border-top:1px solid var(--surface)}
+}
 </style></head>
 <body data-page="messages">
 <div id="wp-layer"></div>
@@ -138,7 +155,15 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
     <div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div><span>Loading chats…</span></div>
   </div>
  </aside>
- <section id="chat"><div class="empty" id="ph">Pick a friend or group chat to start messaging. Create a group to start a call, Group Watch, or Whiteboard!</div></section>
+ <section id="chat"><div class="empty" id="ph">Pick a friend, group chat, or Web Tok AI to start messaging!</div></section>
+</div>
+
+<div id="callScreen" class="hidden">
+  <div class="cs-top" id="csTop"></div>
+  <div class="cs-body">
+    <div class="cs-stage" id="csStage"></div>
+    <div class="cs-chat" id="csChat"></div>
+  </div>
 </div>
 
 <dialog id="newGroupDlg">
@@ -161,11 +186,6 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
     <button class="pill-btn t" style="flex:0" onclick="document.getElementById('invMoreDlg').close()">Cancel</button>
     <button class="pill-btn p" style="flex:0;white-space:nowrap" id="imSubmit">Send invites</button>
   </div>
-</dialog>
-
-<dialog id="pickVidDlg">
-  <div class="dlg-head"><h3>Pick a Web Tok</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('pickVidDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
-  <div class="pick-list" id="pvList"></div>
 </dialog>
 
 <div id="audioBin" class="hidden"></div>
