@@ -2,10 +2,42 @@
 const crypto = require("crypto");
 
 const GAME_MODELS = [
+  "mistralai/mistral-large-4-1t-a52b",
+  "mistralai/devstral-2-123b-instruct-2512",
+  "mistralai/mistral-small-4-119b-2603",
   "qwen/qwen2.5-coder-32b-instruct",
-  "nvidia/llama-3.3-nemotron-super-49b-v1",
   "meta/llama-3.3-70b-instruct"
 ];
+
+const HTML_GRAPHICS_KIT = `Use or adapt these graphics & game-loop helpers so the game looks sharp and plays smoothly:
+\`\`\`js
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+const keys={}, ptr={x:200,y:200,down:false};
+addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();keys[e.key]=true;});
+addEventListener("keyup",e=>{keys[e.key]=false;});
+c.addEventListener("pointermove",e=>{const r=c.getBoundingClientRect();ptr.x=(e.clientX-r.left)/r.width*c.width;ptr.y=(e.clientY-r.top)/r.height*c.height;});
+c.addEventListener("pointerdown",e=>{ptr.down=true;const r=c.getBoundingClientRect();ptr.x=(e.clientX-r.left)/r.width*c.width;ptr.y=(e.clientY-r.top)/r.height*c.height;});
+addEventListener("pointerup",()=>{ptr.down=false;});
+
+// Graphics helpers: glowing circles, rounded cards, particle bursts, starfield
+const particles=[];
+function burst(x,y,col,n=14){for(let i=0;i<n;i++){const a=Math.random()*6.28,sp=50+Math.random()*140;particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.4,max:0.9,col,r:2+Math.random()*3});}}
+function drawParticles(dt){for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;if(p.life<=0){particles.splice(i,1);continue;}ctx.globalAlpha=Math.max(0,p.life/p.max);ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.28);ctx.fill();}ctx.globalAlpha=1;}
+function glowCircle(x,y,r,col){ctx.save();ctx.shadowBlur=16;ctx.shadowColor=col;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,6.28);ctx.fill();ctx.restore();}
+function roundBox(x,y,w,h,r,col){ctx.fillStyle=col;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();}
+\`\`\``;
+
+const PY_GRAPHICS_KIT = `Use this verified Skulpt-safe Python turtle pattern (draw rich backgrounds/borders with a static pen, use tracer(0)+update() for smooth motion):
+\`\`\`python
+import turtle, random
+screen = turtle.Screen()
+screen.setup(width=400, height=360)
+screen.bgcolor("#16121e")
+screen.tracer(0)
+# Static background/stars drawn once with bg_pen = turtle.Turtle(); bg_pen.hideturtle()
+# Scoreboard at y=145 using "Score: " + str(score) (NEVER f-strings)
+# Update loop via screen.ontimer(game_loop, 30) and screen.update()
+\`\`\``;
 
 module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, nowIso, aiKey, callNim, CHAT_MODELS }) {
   let ready = false;
@@ -93,25 +125,25 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
 
     const langGuide = lang === "python"
       ? [
-          "Target runtime: Skulpt (browser Python) using ONLY the built-in `turtle` and `random` modules.",
-          "CRITICAL Skulpt rules (never violate these):",
+          "Target runtime: Skulpt (browser Python) using ONLY `turtle` and `random`.",
+          "CRITICAL Skulpt rules (never violate):",
           "- NEVER use f-strings (`f\"...\"`); use `\"Score: \" + str(score)`.",
           "- NEVER call `.shapesize()`, `screen.title()`, `screen.mainloop()`, or import `pygame`/`time`.",
-          "- Use `screen.setup(width=400, height=360)`, `screen.bgcolor(\"#16121e\")`, `screen.tracer(0)`.",
-          "- Keep scoreboard text at `y=145` (font size 16-18), clamp player within `-175..175`, declare `global` vars at the top of functions, and drive the loop with `screen.ontimer(game_loop, 30)` + `screen.update()`."
+          "- Declare `global` variables at the top of any function that modifies them.",
+          PY_GRAPHICS_KIT
         ].join("\n")
       : [
-          "Target runtime: self-contained HTML5 document (`<!DOCTYPE html>...`) with inline CSS and `<canvas width=\"400\" height=\"400\">` JavaScript.",
-          "Design & gameplay requirements:",
-          "- Dark Material 3 palette (`#16121e` background, `#d0bcff` primary, `#ff7eb6` accent, `#a8dab5` mint).",
-          "- Smooth `requestAnimationFrame` loop, clear HUD (score + best score), polished Game Over screen with click/Space/Enter to restart.",
-          "- Support BOTH keyboard (Arrow keys / WASD / Space) AND mouse/touch controls, and fit cleanly in a 400x400+ iframe with zero scrollbars."
+          "Target runtime: self-contained HTML5 document (`<!DOCTYPE html>...`) with inline CSS and `<canvas id=\"c\" width=\"400\" height=\"400\">`.",
+          "Visual & gameplay standards:",
+          "- Rich dark-mode visuals (#16121e bg, gradients, glowing neon shapes/sprites, particle bursts, animated background, clean HUD pill for Score/Best, and a Game Over overlay with Space/click to restart).",
+          "- Frame-rate independent `dt` loop (`requestAnimationFrame`), zero scrollbars (`margin:0;overflow:hidden;display:grid;place-items:center;height:100vh`), and zero external assets.",
+          HTML_GRAPHICS_KIT
         ].join("\n");
 
     const fence = lang === "python" ? "python" : "html";
     const sys = mode === "build"
-      ? `You are an expert Web Tok game developer. Build a fun, complete, bug-free playable mini-game.\n${langGuide}\nPut the ENTIRE complete, runnable code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`). Keep explanation to 1-2 short sentences.`
-      : `You are an expert Web Tok game developer. Fix bugs, polish gameplay, or add requested features to the user's ${lang} mini-game.\n${langGuide}\nAlways output the ENTIRE updated, runnable game code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`) so it can be automatically applied, plus 1-2 short sentences explaining the change.`;
+      ? `You are a senior indie game developer building a polished, super-fun mini-game for Web Tok.\n${langGuide}\nPut the ENTIRE complete, runnable code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`). Keep explanation to 1-2 short sentences.`
+      : `You are a senior indie game developer helping polish or fix a Web Tok ${lang} mini-game.\n${langGuide}\nAlways output the ENTIRE updated, runnable game code inside a single fenced code block (\`\`\`${fence}\n...\n\`\`\`) so it can be automatically applied, plus 1-2 short sentences explaining the change.`;
 
     const userMsg = currentCode && mode === "help"
       ? `My current ${lang} code:\n\`\`\`\n${currentCode}\n\`\`\`\n\nRequest: ${prompt}`
@@ -120,7 +152,7 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
     const reply = await callNim(key, [...GAME_MODELS, ...CHAT_MODELS], [
       { role: "system", content: sys },
       { role: "user", content: userMsg }
-    ], 2400);
+    ], 3500);
 
     const codeMatch = /```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)```/.exec(reply);
     return {
