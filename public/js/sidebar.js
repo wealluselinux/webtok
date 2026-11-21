@@ -12,7 +12,7 @@ const css=`
 #sb .srch{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:999px;padding:0 14px}
 #sb .srch input{flex:1;min-width:0;background:none;border:0;color:var(--text);font:inherit;padding:12px 0;outline:0}
 #sb .srch-res{position:absolute;left:0;right:0;top:calc(100% + 6px);background:var(--card);border-radius:20px;padding:6px;box-shadow:0 8px 28px #0004;z-index:40;max-height:300px;overflow-y:auto}
-#sb .srch-res.hidden{display:none}
+#sb .srch-res.hidden,#sb .hidden{display:none}
 #sb .srch-it{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:14px;border:0;background:none;color:var(--text);font:inherit;cursor:pointer;text-align:left;text-decoration:none}
 #sb .srch-it:hover{background:var(--surface)}
 #sb .srch-av{width:32px;height:32px;clip-path:${M3_COOKIE_7};background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-size:13px;font-weight:700;background-size:cover;background-position:center;flex-shrink:0}
@@ -36,6 +36,7 @@ const items=[
   ["following","person_check","Following","/scroll#following"],
   ["friends","group","Friends","/scroll#friends"],
   ["upload","add_box","Upload",null],
+  ["games","sports_esports","Games","/games"],
   ["activity","notifications","Activity","/activity"],
   ["messages","chat_bubble","Messages","/messages"],
   ["profile","account_circle","Profile","/profile"]
@@ -51,7 +52,8 @@ items.map(([id,ic,l,h])=>h?`<a class="it" data-id="${id}" href="${h}"><span clas
 `<button class="it" id="sbmore"><span class="ms">more_horiz</span><span class="lbl">More</span></button>
 <div class="menu" id="sbmenu">
   <a class="it" href="/profile"><span class="ms">palette</span>Theme &amp; settings</a>
-  <a class="it" href="/admin"><span class="ms">admin_panel_settings</span>Admin panel</a>
+  <a class="it" href="/developer"><span class="ms">code</span>Developer Studio</a>
+  <a class="it hidden" id="sbadmin" href="/admin"><span class="ms">admin_panel_settings</span>Admin panel</a>
   <a class="it" href="/privacy"><span class="ms">privacy_tip</span>Privacy Policy</a>
   <a class="it" href="/terms"><span class="ms">description</span>Terms of Service</a>
   <button class="it" id="sbout"><span class="ms">logout</span>Sign out</button>
@@ -70,6 +72,17 @@ function getSb(){
   if(!_sbClient&&window.supabase&&window.WT_CONFIG) _sbClient=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
   return _sbClient;
 }
+(async()=>{
+  try{
+    const c=getSb(); if(!c?.auth?.getSession) return;
+    const {data}=await c.auth.getSession();
+    const uid=data?.session?.user?.id; if(!uid) return;
+    const r=await fetch("/api/profiles/"+encodeURIComponent(uid)+"/badge");
+    const j=await r.json().catch(()=>({}));
+    const role=j?.data?.role||j?.role;
+    if(role==="admin"||role==="owner") nav.querySelector("#sbadmin")?.classList.remove("hidden");
+  }catch{}
+})();
 const sInput=nav.querySelector("#sbq input"), sRes=nav.querySelector("#sbq-res");
 sInput.addEventListener("input",()=>{
   clearTimeout(_sTimer);
