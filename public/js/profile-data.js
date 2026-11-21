@@ -48,9 +48,20 @@ async function resolveTargetAndLoad() {
     avatar_url: row?.avatar_url || null
   };
 
-  if (isMe && row?.theme && Object.keys(row.theme).length) {
-    try { localStorage.setItem("wt_theme", JSON.stringify(row.theme)); } catch {}
-    applyTheme(row.theme);
+  let rowTheme = row?.theme;
+  if (typeof rowTheme === "string") {
+    try { rowTheme = JSON.parse(rowTheme); } catch { rowTheme = null; }
+  }
+  if (isMe) {
+    activeProfileTheme = null;
+    if (rowTheme && Object.keys(rowTheme).length) {
+      try { localStorage.setItem("wt_theme", JSON.stringify(rowTheme)); } catch {}
+      applyTheme(rowTheme);
+    }
+  } else {
+    const pubTheme = (rowTheme && (rowTheme.color || rowTheme.mode || rowTheme.wallpaper)) ? rowTheme : {};
+    activeProfileTheme = pubTheme;
+    applyTheme(pubTheme);
   }
 
   $("openUpload").classList.toggle("hidden", !isMe);

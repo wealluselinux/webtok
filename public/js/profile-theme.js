@@ -14,6 +14,9 @@ const WP_PRESETS = [
   { id: "dusk", label: "Dusk", css: "radial-gradient(circle at 30% 20%, #7b3f8c88, transparent 55%), linear-gradient(135deg, #22141b, #47303c)" },
   { id: "sky", label: "Sky", css: "radial-gradient(circle at 75% 25%, #bae6fd, transparent 50%), linear-gradient(135deg, #f0f9ff, #dbeafe)" }
 ];
+let activeProfileTheme = null;
+window.lastThemeError = "";
+
 function hexToHsl(hex) {
   let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -32,11 +35,24 @@ function getTheme() { try { return JSON.parse(localStorage.getItem("wt_theme") |
 async function saveTheme(patch) {
   const next = { ...getTheme(), ...patch };
   try { localStorage.setItem("wt_theme", JSON.stringify(next)); } catch {}
+  activeProfileTheme = null;
   applyTheme(next);
-  if (sb && user && isMe) { try { await sb.from("profiles").update({ theme: next }).eq("id", user.id); } catch {} }
+  window.lastThemeError = "";
+  if (sb && user && isMe) {
+    try {
+      const res = await sb.from("profiles").update({ theme: next }).eq("id", user.id);
+      if (res?.error) {
+        window.lastThemeError = res.error.message || "Could not save theme.";
+        console.warn("Theme save error:", res.error);
+      }
+    } catch (e) {
+      window.lastThemeError = e?.message || "Could not save theme.";
+      console.warn("Theme save exception:", e);
+    }
+  }
   return next;
 }
-function applyTheme(t = getTheme()) {
+function applyTheme(t = activeProfileTheme || getTheme()) {
   const root = document.documentElement;
   const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const isDark = t.mode === "dark" ? true : t.mode === "light" ? false : sysDark;
@@ -64,7 +80,7 @@ function applyTheme(t = getTheme()) {
   const wp = $("wp-layer");
   if (t.wallpaper) {
     document.body.classList.add("has-wp");
-    wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url(${t.wallpaper})`;
+    wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url("${t.wallpaper}")`;
   } else {
     document.body.classList.remove("has-wp");
     wp.style.backgroundImage = "";
