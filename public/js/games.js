@@ -1,10 +1,11 @@
-/* Web Tok Mini Games Arcade: Built-in Snake, Flappy Tok, Brick Breaker + Community Games Runner */
+/* Web Tok Mini Games Arcade: Built-in Snake, Flappy Tok, Brick Breaker + MORE_BUILTINS + Community Games */
 let stopCurGame = null, currentStarter = null;
 
 const BUILTINS = [
   { id: "snake", title: "Snake", icon: "pest_control", desc: "Eat the glowing berries, grow longer, and avoid the walls or yourself.", dpad: true, start: startSnake },
   { id: "flappy", title: "Flappy Tok", icon: "flutter_dash", desc: "Tap, click, or press Space to flap through the neon pipes.", dpad: false, start: startFlappy },
-  { id: "breaker", title: "Brick Breaker", icon: "grid_view", desc: "Slide the paddle with mouse, touch, or arrow keys to smash all bricks.", dpad: false, start: startBreaker }
+  { id: "breaker", title: "Brick Breaker", icon: "grid_view", desc: "Slide the paddle with mouse, touch, or arrow keys to smash all bricks.", dpad: false, start: startBreaker },
+  ...(window.MORE_BUILTINS || [])
 ];
 
 function bestScore(id, val) {
