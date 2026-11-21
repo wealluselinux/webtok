@@ -1,6 +1,9 @@
 /* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check) */
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false;
+const _parseTags = s => typeof parseTags === "function"
+  ? parseTags(s)
+  : [...new Set(String(s || "").toLowerCase().match(/[a-z0-9_]{1,30}/g) || [])];
 
 function fmtEta(sec) {
   if (!isFinite(sec) || sec <= 0) return "almost done";
@@ -209,7 +212,7 @@ async function submitBatchUpload() {
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
       if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
-      const tags = parseTags(item.tags || "");
+      const tags = _parseTags(item.tags || "");
       if (tags.length < 1 || tags.length > 5) {
         item.status = "Add 1-5 hashtags";
         const se = document.querySelector(`[data-st="${i}"]`);
