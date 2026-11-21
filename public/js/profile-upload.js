@@ -1,4 +1,4 @@
-/* Profile page: full-screen batch upload (R2 Storage, 50 MB, progress + ETA, AI safety check) */
+/* Profile page: full-screen batch upload (R2 Storage, 100 MB, progress + ETA, AI safety check) */
 let upQueue = [];
 function fmtEta(sec) {
   if (!isFinite(sec) || sec <= 0) return "almost done";
@@ -86,7 +86,7 @@ function renderUpQueue() {
       <div class="up-fields">
         <div class="up-meta">
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
-          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 50 MB" : escapeHtml(item.status)}</span>
+          <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
         </div>
         <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
         <input type="text" class="up-tags" value="${escapeHtml(item.tags || "")}" placeholder="#hashtags (1 to 5, required)" maxlength="120" style="background:var(--bg)">
@@ -135,7 +135,7 @@ $("upFile").onchange = e => {
 $("upSubmit").onclick = async () => {
   const valid = upQueue.filter(it => it.file.size <= MAX_INPUT_BYTES);
   if (!valid.length) {
-    $("upHint").textContent = upQueue.length ? "All selected videos exceed 50 MB." : "Pick one or more video files first.";
+    $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
     $("upHint").className = "hint bad";
     return;
   }
@@ -147,7 +147,7 @@ $("upSubmit").onclick = async () => {
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
       const item = upQueue[i];
-      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>50 MB)"; continue; }
+      if (item.file.size > MAX_INPUT_BYTES) { item.status = "Skipped (>100 MB)"; continue; }
       const tags = parseTags(item.tags || "");
       if (tags.length < 1 || tags.length > 5) {
         item.status = "Add 1-5 hashtags";
