@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Web Tok · Profile</title>
-<link rel="icon" href="/images/logo.png">
+<link rel="icon" href="/logo.png">
 <link rel="stylesheet" href="/css/profile-base.css">
 <link rel="stylesheet" href="/css/profile.css">
 <link rel="stylesheet" href="/css/profile-dialogs.css">
@@ -37,7 +37,7 @@
       <div class="p-actions" id="p-actions-me">
         <button class="btn primary sm" id="btn-edit-prof"><span class="ms" style="font-size:18px">edit</span>Edit profile</button>
         <button class="btn tonal sm" id="btn-upload-acct"><span class="ms" style="font-size:18px">upload</span>Upload videos</button>
-        <button class="btn icon" id="btn-settings" title="Theme & Settings" aria-label="Theme & Settings"><span class="ms">settings</span></button>
+        <button class="btn icon" id="btn-settings" title="Settings" aria-label="Settings"><span class="ms">settings</span></button>
         <button class="btn sm" id="btn-switch-acct">Switch account</button>
         <button class="btn sm" id="btn-signout">Sign out</button>
       </div>
@@ -131,41 +131,100 @@
   </div>
 </dialog>
 
-<!-- Settings (Material You Theme, Wallpaper & Delete Account) Modal -->
+<!-- Full-Screen Sectioned Settings -->
 <dialog id="settingsDlg">
-  <div class="dlg-head">
-    <h2>Material You Settings</h2>
-    <button class="btn icon" aria-label="Close" onclick="document.getElementById('settingsDlg').close()"><span class="ms">close</span></button>
+  <div class="st-top">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button type="button" class="btn icon" aria-label="Close settings" onclick="document.getElementById('settingsDlg').close()"><span class="ms">arrow_back</span></button>
+      <h2>Settings</h2>
+    </div>
   </div>
-  <label class="fld">Appearance</label>
-  <select id="st-mode">
-    <option value="auto">System default</option>
-    <option value="light">Light</option>
-    <option value="dark">Dark</option>
-  </select>
+  <div class="st-shell">
+    <nav class="st-nav" aria-label="Settings sections">
+      <button type="button" class="st-nav-btn on" data-sec="theme"><span class="ms">palette</span>Theme</button>
+      <button type="button" class="st-nav-btn" data-sec="account"><span class="ms">manage_accounts</span>Account</button>
+      <button type="button" class="st-nav-btn" data-sec="security"><span class="ms">shield</span>Security &amp; Privacy</button>
+    </nav>
+    <div class="st-main">
+      <!-- Theme Section -->
+      <section class="st-sec" id="st-sec-theme">
+        <div class="st-card">
+          <h3>Material You Theme</h3>
+          <label class="fld">Appearance</label>
+          <select id="st-mode">
+            <option value="auto">System default</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
 
-  <label class="fld">Color palette</label>
-  <div class="swatches" id="st-swatches"></div>
-  <div class="color-row">
-    <input type="color" id="st-custom-color" value="#6750a4">
-    <span style="font-size:14px">Custom accent color</span>
+          <label class="fld">Color palette</label>
+          <div class="swatches" id="st-swatches"></div>
+          <div class="color-row">
+            <input type="color" id="st-custom-color" value="#6750a4">
+            <span style="font-size:14px">Custom accent color</span>
+          </div>
+
+          <label class="fld" style="margin-top:16px">Wallpaper</label>
+          <div class="wp-grid" id="st-wps"></div>
+          <div class="row" style="justify-content:space-between">
+            <button type="button" class="btn sm" id="st-wp-upload"><span class="ms" style="font-size:18px">wallpaper</span>Upload wallpaper</button>
+            <button type="button" class="btn sm" id="st-reset">Reset default</button>
+          </div>
+          <input type="file" id="st-wp-file" accept="image/*" hidden>
+          <div class="hint" id="st-theme-hint"></div>
+        </div>
+      </section>
+
+      <!-- Account Section -->
+      <section class="st-sec hidden" id="st-sec-account">
+        <div class="st-card">
+          <h3>Account Details</h3>
+          <label class="fld" for="st-acct-display">Display name</label>
+          <input type="text" id="st-acct-display" maxlength="40" placeholder="Your display name">
+
+          <label class="fld" for="st-acct-user">Username</label>
+          <input type="text" id="st-acct-user" maxlength="20" placeholder="username">
+
+          <label class="fld" for="st-acct-email">Email</label>
+          <input type="email" id="st-acct-email" maxlength="120" placeholder="you@example.com">
+
+          <label class="fld" for="st-acct-newpw">New password</label>
+          <input type="password" id="st-acct-newpw" maxlength="128" placeholder="Leave blank to keep current password">
+
+          <div class="st-verify-box" id="st-verify-box">
+            <div class="st-verify-title"><span class="ms" style="font-size:18px">verified_user</span>Verify identity</div>
+            <p class="st-verify-sub">Enter your current password to save email or password changes.</p>
+            <input type="password" id="st-acct-curpw" maxlength="128" placeholder="Current password">
+          </div>
+
+          <div class="hint" id="st-acct-hint"></div>
+          <div class="row">
+            <button type="button" class="btn primary sm" id="st-acct-save">Save account changes</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Security & Privacy Section -->
+      <section class="st-sec hidden" id="st-sec-security">
+        <div class="st-card">
+          <h3>Sessions &amp; Devices</h3>
+          <p class="st-sub">Sign out everywhere if you logged in on a shared device or got a suspicious login alert.</p>
+          <button type="button" class="btn tonal sm" id="btn-logout-all"><span class="ms" style="font-size:18px">logout</span>Sign out all devices</button>
+        </div>
+
+        <div class="st-card st-danger">
+          <h3>Danger Zone</h3>
+          <p class="st-sub">Permanently delete your account and all your videos, likes, and comments. This cannot be undone.</p>
+          <button type="button" class="btn danger sm" id="btn-del-acct">Delete account</button>
+          <div class="hint" id="st-del-hint"></div>
+        </div>
+      </section>
+    </div>
   </div>
-
-  <label class="fld" style="margin-top:14px">Wallpaper</label>
-  <div class="wp-grid" id="st-wps"></div>
-  <div class="row" style="justify-content:space-between">
-    <button class="btn sm" id="st-wp-upload"><span class="ms" style="font-size:18px">wallpaper</span>Upload wallpaper</button>
-    <button class="btn sm" id="st-reset">Reset default</button>
-  </div>
-  <input type="file" id="st-wp-file" accept="image/*" hidden>
-
-  <hr style="border:0;border-top:1px solid var(--surface);margin:18px 0 12px">
-  <button class="btn danger sm" id="btn-del-acct" style="width:100%">Delete account</button>
-  <div class="hint" id="st-del-hint"></div>
 </dialog>
 
 <script src="/config.js"></script>
-<script src="/js/wt-local.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="/js/profile-core.js"></script>
 <script src="/js/profile-theme.js"></script>
 <script src="/js/profile-data.js"></script>

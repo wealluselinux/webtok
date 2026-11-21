@@ -1,4 +1,24 @@
-/* Profile page: M3 Expressive theme swatches and wallpaper picker */
+/* Profile page: Full-screen M3 Expressive sectioned settings, swatches, wallpapers, and account security */
+#settingsDlg{width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text)}
+#settingsDlg[open]{display:flex;flex-direction:column}
+.st-top{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--surface);background:var(--bg);flex:none}
+.st-top h2{font-size:22px;font-weight:700;letter-spacing:-.2px}
+.st-shell{flex:1;min-height:0;display:flex;max-width:980px;width:100%;margin:0 auto;padding:20px 16px;gap:22px}
+.st-nav{width:230px;flex:none;display:flex;flex-direction:column;gap:8px}
+.st-nav-btn{display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:999px;background:transparent;color:var(--muted);font-weight:700;font-size:14px;text-align:left;transition:background .18s,color .18s}
+.st-nav-btn:hover{background:var(--surface);color:var(--text)}
+.st-nav-btn.on{background:var(--primary);color:var(--on-primary)}
+.st-main{flex:1;min-width:0;overflow-y:auto;padding-bottom:32px}
+.st-card{background:var(--card);border-radius:var(--r-xl);padding:22px;margin-bottom:16px;box-shadow:0 4px 18px #0001}
+.st-card h3{font-size:18px;font-weight:700;margin-bottom:12px}
+.st-sub{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.45}
+.st-card input[type=email],.st-card input[type=password]{width:100%;padding:14px 18px;border-radius:var(--r-lg);border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;transition:border-color .15s}
+.st-card input[type=email]:focus,.st-card input[type=password]:focus{outline:0;border-color:var(--primary)}
+.st-verify-box{margin-top:16px;padding:14px 16px;border-radius:var(--r-lg);background:var(--surface);border:2px solid transparent;transition:border-color .2s}
+.st-verify-box.req{border-color:var(--primary)}
+.st-verify-title{display:flex;align-items:center;gap:6px;font-size:14px;font-weight:700;margin-bottom:4px;color:var(--primary)}
+.st-verify-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+.st-danger{border:2px solid rgba(179,38,30,.28)}
 .swatches{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px}
 .swatch{width:40px;height:40px;border-radius:14px;border:3px solid transparent;cursor:pointer;transition:transform .2s cubic-bezier(.2,.9,.3,1.1),border-radius .2s}
 .swatch:hover{transform:scale(1.06)}
@@ -9,3 +29,8 @@
 .wp-opt.on{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary)}
 .color-row{display:flex;align-items:center;gap:12px;background:var(--surface);padding:10px 14px;border-radius:var(--r-lg)}
 .color-row input[type=color]{width:42px;height:34px;border:0;background:none;cursor:pointer;padding:0}
+@media(max-width:720px){
+  .st-shell{flex-direction:column;gap:12px;padding:14px}
+  .st-nav{width:100%;flex-direction:row;overflow-x:auto;padding-bottom:4px}
+  .st-nav-btn{flex:none;padding:10px 14px}
+}

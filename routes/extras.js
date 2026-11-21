@@ -7,7 +7,8 @@
    6) Custom user stickers & comment replies
    7) Group Voice Calls, Group Watch, Shared Whiteboard
    8) Security hardening: 20-minute post-login posting cooldown & new-device login alerts
-   9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds) */
+   9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds)
+   10) Account credentials update (/api/account/me, /api/account/credentials) with current-password verification */
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -66,6 +67,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     }
     await db.execute("UPDATE users SET role_since = COALESCE(role_since, created_at) WHERE role IN ('owner','admin') AND role_since IS NULL");
 
+    // Ensure @notifications system account exists
     if (!(await run("SELECT 1 FROM profiles WHERE id = ?", [NOTIF_ID])).length) {
       const ts = nowIso();
       const lockedHash = "$2a$10$" + crypto.randomBytes(24).toString("hex");
@@ -169,12 +171,79 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     next();
   });
 
-  /* ---------- public profile role badge ---------- */
+  /* ---------- public profile role badge (no sensitive fields) ---------- */
   app.get("/api/profiles/:id/badge", wrap(async req => {
     const id = String(req.params.id || "");
     const u = (await run("SELECT role, role_since, created_at FROM users WHERE id = ?", [id]))[0];
     if (!u || !["owner", "admin"].includes(u.role)) return { data: { role: "user", role_since: null }, error: null };
     return { data: { role: u.role, role_since: u.role_since || u.created_at || null }, error: null };
+  }));
+
+  /* ---------- account credentials & verification ---------- */
+  app.get("/api/account/me", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const u = (await run("SELECT u.id, u.email, p.username, p.display_name FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]))[0];
+    if (!u) throw new HttpError(404, "Account not found");
+    return { data: { id: u.id, email: u.email, username: u.username || "", display_name: u.display_name || "" }, error: null };
+  }));
+
+  app.post("/api/account/credentials", limit(15, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const u = (await run("SELECT id, email, encrypted_password, raw_user_meta_data FROM users WHERE id = ?", [uid]))[0];
+    const p = (await run("SELECT username, display_name FROM profiles WHERE id = ?", [uid]))[0];
+    if (!u) throw new HttpError(404, "Account not found");
+
+    const nextDisplay = req.body?.display_name !== undefined ? String(req.body.display_name).trim().slice(0, 40) : (p?.display_name || "");
+    const nextUser = req.body?.username !== undefined ? String(req.body.username).trim().toLowerCase() : (p?.username || "");
+    const nextEmail = req.body?.email !== undefined ? String(req.body.email).trim().toLowerCase() : u.email;
+    const newPw = req.body?.new_password ? String(req.body.new_password) : "";
+    const curPw = req.body?.current_password ? String(req.body.current_password) : "";
+
+    if (!/^[a-z0-9_.]{3,20}$/.test(nextUser)) throw new HttpError(400, "Username must be 3 to 20 characters (letters, numbers, _ or .).");
+    if (nextUser !== (p?.username || "").toLowerCase()) {
+      const taken = await run("SELECT 1 FROM profiles WHERE lower(username) = ? AND id != ?", [nextUser, uid]);
+      if (taken.length) throw new HttpError(409, "That username is already taken.");
+    }
+
+    const emailChanged = nextEmail !== u.email;
+    const pwChanged = newPw.length > 0;
+    if (emailChanged || pwChanged) {
+      if (!curPw) throw new HttpError(403, "Enter your current password to verify email or password changes.");
+      const ok = await bcrypt.compare(curPw, u.encrypted_password);
+      if (!ok) throw new HttpError(403, "Current password is incorrect.");
+    }
+
+    if (emailChanged) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(nextEmail) || nextEmail.length > 120) throw new HttpError(400, "Enter a valid email.");
+      const emailTaken = await run("SELECT 1 FROM users WHERE email = ? AND id != ?", [nextEmail, uid]);
+      if (emailTaken.length) throw new HttpError(409, "That email is already registered.");
+    }
+    if (pwChanged && weakPassword(newPw)) {
+      throw new HttpError(400, "Password needs 10+ characters with upper and lower case, a number and a symbol.");
+    }
+
+    let meta = {};
+    try { meta = JSON.parse(u.raw_user_meta_data || "{}"); } catch {}
+    meta.username = nextUser;
+    meta.display_name = nextDisplay;
+
+    const stmts = [
+      { sql: "UPDATE profiles SET username = ?, display_name = ? WHERE id = ?", args: [nextUser, nextDisplay || null, uid] }
+    ];
+    if (pwChanged) {
+      stmts.push({
+        sql: "UPDATE users SET email = ?, encrypted_password = ?, raw_user_meta_data = ? WHERE id = ?",
+        args: [nextEmail, await bcrypt.hash(newPw, 10), JSON.stringify(meta), uid]
+      });
+    } else {
+      stmts.push({
+        sql: "UPDATE users SET email = ?, raw_user_meta_data = ? WHERE id = ?",
+        args: [nextEmail, JSON.stringify(meta), uid]
+      });
+    }
+    await db.batch(stmts, "write");
+    forget(uid);
+    return { data: { email: nextEmail, username: nextUser, display_name: nextDisplay }, error: null };
   }));
 
   /* ---------- security alerts API ---------- */
