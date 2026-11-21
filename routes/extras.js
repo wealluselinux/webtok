@@ -1,18 +1,19 @@
-/* Extra server features, mounted from server.js (right after the `wrap` helper, before the first app.get):
-     require("./routes/extras")({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 });
-   1) Unread messages (dot next to Messages + browser notifications)
-   2) Roles (owner / admin / user), bans, per-user restrictions (post / comment / message), forced sign-out
-   3) Admin panel API (/api/admin/*) and the pages /admin, /terms, /privacy
-   4) Sign-up must include accepted_terms = true
+/* Extra server features, mounted from server.js:
+   1) Unread messages
+   2) Roles, bans, per-user restrictions, forced sign-out
+   3) Admin panel API (/api/admin/*) and /admin, /terms, /privacy
+   4) Sign-up accepted_terms
    5) Group chats with friend invites & acceptance
-   6) Custom user stickers & comment replies */
+   6) Custom user stickers & comment replies
+   7) Group Voice Calls (WebRTC signaling), Group Watch (synced Web Tok + live reactions), & Shared Whiteboard */
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const { WebSocketServer } = require("ws");
 
-module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 }) {
+module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 }) {
   const SECRET = process.env.JWT_SECRET;
   const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
   const TOS_VERSION = "2026-11-20";
@@ -25,7 +26,7 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
     const mcols = (await db.execute("PRAGMA table_info(messages)")).rows.map(r => r[1]);
     if (!mcols.includes("read_at")) {
       await db.execute("ALTER TABLE messages ADD COLUMN read_at TEXT");
-      await db.execute("UPDATE messages SET read_at = created_at WHERE read_at IS NULL");   // old messages count as read
+      await db.execute("UPDATE messages SET read_at = created_at WHERE read_at IS NULL");
     }
     const ccols = (await db.execute("PRAGMA table_info(comments)")).rows.map(r => r[1]);
     if (!ccols.includes("parent_id")) {
@@ -48,8 +49,7 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
     ], "write");
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
     if (ownerEmail && !(await run("SELECT 1 FROM users WHERE role = 'owner'")).length) {
-      const r = await db.execute({ sql: "UPDATE users SET role = 'owner' WHERE email = ?", args: [ownerEmail] });
-      console.log(r.rowsAffected ? "Owner account set." : "OWNER_EMAIL doesn't match an existing account yet.");
+      await db.execute({ sql: "UPDATE users SET role = 'owner' WHERE email = ?", args: [ownerEmail] });
     }
   })().catch(e => { ready = null; throw e; }));
   ensure().catch(e => console.warn("extras setup:", e.message));
@@ -180,6 +180,118 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
     return m;
   }
 
+  /* ---------- Group Call / Watch / Whiteboard rooms (WebSocket) ---------- */
+  const rooms = new Map();
+  function getRoom(gid) {
+    let r = rooms.get(gid);
+    if (!r) {
+      r = { peers: new Map(), activity: "none", watch: { video: null, playing: false, time: 0, updatedAt: Date.now() }, strokes: [] };
+      rooms.set(gid, r);
+    }
+    return r;
+  }
+  function sendWs(ws, obj) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
+  }
+  function broadcastRoom(gid, obj, exceptUid = null) {
+    const r = rooms.get(gid); if (!r) return;
+    for (const [puid, p] of r.peers) {
+      if (puid !== exceptUid) sendWs(p.ws, obj);
+    }
+  }
+  function roomSnapshot(gid) {
+    const r = rooms.get(gid);
+    if (!r) return { participants: [], activity: "none", watch: { video: null, playing: false, time: 0 } };
+    const participants = [...r.peers.values()].map(p => ({ uid: p.uid, username: p.username, display_name: p.display_name, avatar_url: p.avatar_url, muted: !!p.muted }));
+    return { participants, activity: r.activity, watch: r.watch };
+  }
+
+  if (server) {
+    const wss = new WebSocketServer({ server, path: "/ws" });
+    wss.on("connection", async (ws, req) => {
+      let uid = null, currentGroup = null;
+      try {
+        const u = new URL(req.url, "http://localhost");
+        const tok = jwt.verify(u.searchParams.get("token") || "", SECRET);
+        if (!tok || tok.t !== "a") { ws.close(); return; }
+        uid = tok.sub;
+      } catch { ws.close(); return; }
+
+      const prof = (await run("SELECT id, username, display_name, avatar_url FROM profiles WHERE id = ?", [uid]))[0] || { id: uid, username: "user", display_name: "User", avatar_url: null };
+
+      ws.on("message", async raw => {
+        let msg; try { msg = JSON.parse(String(raw)); } catch { return; }
+        const type = msg.type;
+        if (type === "join-call") {
+          const gid = String(msg.groupId || "");
+          try { await requireMember(gid, uid); } catch { sendWs(ws, { type: "error", message: "Not a member" }); return; }
+          if (currentGroup && currentGroup !== gid) {
+            const oldR = rooms.get(currentGroup);
+            if (oldR) { oldR.peers.delete(uid); broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) }); if (!oldR.peers.size) rooms.delete(currentGroup); }
+          }
+          currentGroup = gid;
+          const r = getRoom(gid);
+          const existing = [...r.peers.keys()].filter(k => k !== uid);
+          r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
+          sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
+          broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
+          return;
+        }
+        if (!currentGroup) return;
+        const r = rooms.get(currentGroup); if (!r || !r.peers.has(uid)) return;
+
+        if (type === "leave-call") {
+          r.peers.delete(uid);
+          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+          if (!r.peers.size) rooms.delete(currentGroup);
+          currentGroup = null;
+        } else if (type === "mute") {
+          const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
+          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+        } else if (type === "rtc-offer" || type === "rtc-answer" || type === "rtc-ice") {
+          const target = r.peers.get(String(msg.to || ""));
+          if (target) sendWs(target.ws, { ...msg, from: uid });
+        } else if (type === "set-activity") {
+          r.activity = ["none", "watch", "whiteboard"].includes(msg.activity) ? msg.activity : "none";
+          broadcastRoom(currentGroup, { type: "activity", activity: r.activity, by: prof.username });
+        } else if (type === "watch-sync") {
+          r.activity = "watch";
+          r.watch = { video: msg.video || r.watch.video, playing: !!msg.playing, time: Number(msg.time) || 0, updatedAt: Date.now() };
+          broadcastRoom(currentGroup, { type: "watch-sync", ...r.watch, by: prof.username }, uid);
+        } else if (type === "watch-react") {
+          broadcastRoom(currentGroup, { type: "watch-react", icon: String(msg.icon || ""), stickerUrl: msg.stickerUrl || null, by: prof.display_name || prof.username });
+        } else if (type === "wb-stroke") {
+          r.activity = "whiteboard";
+          const st = { x0: Number(msg.x0), y0: Number(msg.y0), x1: Number(msg.x1), y1: Number(msg.y1), color: String(msg.color || "#6750a4").slice(0, 20), size: Math.min(Math.max(Number(msg.size) || 4, 1), 32) };
+          r.strokes.push(st);
+          if (r.strokes.length > 800) r.strokes.shift();
+          broadcastRoom(currentGroup, { type: "wb-stroke", ...st }, uid);
+        } else if (type === "wb-clear") {
+          r.strokes = [];
+          broadcastRoom(currentGroup, { type: "wb-clear" });
+        }
+      });
+
+      ws.on("close", () => {
+        if (currentGroup) {
+          const r = rooms.get(currentGroup);
+          if (r) {
+            r.peers.delete(uid);
+            broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+            if (!r.peers.size) rooms.delete(currentGroup);
+          }
+        }
+      });
+    });
+  }
+
+  app.get("/api/groups/:id/call", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    await requireMember(gid, uid);
+    return { data: roomSnapshot(gid), error: null };
+  }));
+
   app.get("/api/groups", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const groups = await run(`
@@ -192,6 +304,7 @@ module.exports = function mount({ app, db, run, wrap, uidFrom, HttpError, limit,
       ORDER BY g.created_at DESC LIMIT 100`, [uid, uid]);
 
     for (const g of groups) {
+      g.call_count = rooms.get(g.id)?.peers.size || 0;
       g.members = await run(`
         SELECT p.id, p.username, p.display_name, p.avatar_url
         FROM group_members m JOIN profiles p ON p.id = m.user_id

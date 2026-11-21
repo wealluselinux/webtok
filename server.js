@@ -2,6 +2,7 @@
    Environment (set in Render): TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, JWT_SECRET, R2_ACCOUNT_ID, R2_BUCKET,
    R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_PUBLIC_URL */
 const express = require("express");
+const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -135,7 +136,7 @@ const str = (v, min, max, what) => { if (typeof v !== "string" || v.trim().lengt
 async function prepareRow(t, raw, uid, op) {
   const T = TABLES[t], P = POLICY[t], row = {};
   for (const c of T.cols) if (raw && raw[c] !== undefined) row[c] = raw[c];
-  row[P.owner] = uid;                                              // you can only write as yourself
+  row[P.owner] = uid;
   if (TEXT_ID.has(t)) row.id = crypto.randomUUID();
   if (T.cols.includes("created_at")) row.created_at = nowIso();
   if (t === "videos") {
@@ -236,7 +237,7 @@ async function runQuery(p, uid) {
   if (op === "delete") {
     if (!(p.filters || []).length && !(p.ors || []).length) throw new HttpError(400, "Delete needs a filter");
     const w = where(t, p, P.owner, uid, false);
-    if (t === "videos") {   // remove everything that belongs to the videos being deleted
+    if (t === "videos") {
       const ids = (await run(`SELECT id FROM videos${w.sql}`, w.args)).map(r => r.id);
       for (const id of ids) await db.batch([{ sql: "DELETE FROM likes WHERE video_id = ?", args: [id] }, { sql: "DELETE FROM comments WHERE video_id = ?", args: [id] }, { sql: "DELETE FROM video_views WHERE video_id = ?", args: [id] }], "write");
     }
@@ -266,6 +267,7 @@ async function removeFromR2(keys) {
 
 /* ---------------- routes ---------------- */
 const app = express();
+const server = http.createServer(app);
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "200kb" }));
 app.use((_q, res, next) => { res.set({ "X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin" }); next(); });
@@ -278,7 +280,7 @@ const wrap = fn => async (req, res) => {
   }
 };
 
-require("./routes/extras")({ app, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 });
+require("./routes/extras")({ app, server, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 });
 
 app.get("/config.js", (_q, res) => res.set("Cache-Control", "no-store").type("js")
   .send("window.WT_CONFIG=" + JSON.stringify({ SUPABASE_URL: "local", SUPABASE_ANON_KEY: "local", R2_PUBLIC_URL }) + ";"));
@@ -378,10 +380,10 @@ app.get(["/profile", "/account"], page("profile.html"));
 app.use(express.static(path.join(__dirname, "public")));
 
 if (require.main === module) {
-  migrate().then(() => app.listen(PORT, () => {
+  migrate().then(() => server.listen(PORT, () => {
     console.log("Web Tok running on port " + PORT);
-    const self = process.env.RENDER_EXTERNAL_URL;     // keeps the free Render instance awake
+    const self = process.env.RENDER_EXTERNAL_URL;
     if (self) setInterval(() => fetch(self + "/health").catch(() => {}), 10 * 60 * 1000).unref();
   })).catch(e => { console.error("Startup failed:", e); process.exit(1); });
 }
-module.exports = { app, migrate, db };
+module.exports = { app, server, migrate, db };
