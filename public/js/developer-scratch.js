@@ -9,10 +9,15 @@ function loadScript(src) {
   });
 }
 
+function getJsGen() {
+  return (window.javascript && window.javascript.javascriptGenerator) || (window.Blockly && window.Blockly.JavaScript);
+}
+
 async function ensureBlockly(container) {
   if (blocklyWs) return blocklyWs;
   if (!blocklyLoaded) {
     await loadScript("https://cdn.jsdelivr.net/npm/blockly@10.4.3/blockly.min.js");
+    await loadScript("https://cdn.jsdelivr.net/npm/blockly@10.4.3/javascript_compressed.js");
     registerScratchBlocks();
     blocklyLoaded = true;
   }
@@ -68,11 +73,12 @@ async function ensureBlockly(container) {
   };
   blocklyWs = Blockly.inject(container, { toolbox, trashcan: true, scrollbars: true });
   loadDefaultScratchBlocks();
+  setTimeout(() => Blockly.svgResize(blocklyWs), 50);
   return blocklyWs;
 }
 
 function registerScratchBlocks() {
-  const B = Blockly.Blocks, G = Blockly.JavaScript;
+  const B = Blockly.Blocks, G = getJsGen();
   const KEY_OPTS = [["ArrowLeft","ArrowLeft"],["ArrowRight","ArrowRight"],["ArrowUp","ArrowUp"],["ArrowDown","ArrowDown"],["Space"," "]];
 
   // Events
@@ -171,6 +177,6 @@ function loadDefaultScratchBlocks() {
   Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), blocklyWs);
 }
 
-function getScratchJs() { return blocklyWs ? Blockly.JavaScript.workspaceToCode(blocklyWs) : ""; }
+function getScratchJs() { const G = getJsGen(); return (blocklyWs && G) ? G.workspaceToCode(blocklyWs) : ""; }
 function getScratchXml() { return blocklyWs ? Blockly.Xml.domToText(Blockly.Xml.workspaceToDom(blocklyWs)) : ""; }
 function setScratchXml(xml) { if (!blocklyWs || !xml) return; blocklyWs.clear(); Blockly.Xml.domToWorkspace(Blockly.utils.xml.textToDom(xml), blocklyWs); }
