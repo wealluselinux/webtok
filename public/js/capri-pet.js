@@ -2,17 +2,56 @@
 (function () {
   if (window.wtCapri) return;
   const BASE = "/images/capri_assets/";
-  const SIZES = { sm: 112, md: 152, lg: 204 };
+  const SIZES = { sm: 200, md: 280, lg: 360 };
   const LINES = ["Scrolling Web Tok?", "Nice Material You!", "Catch me!", "Vibing~", "Glitch check!", "Need a break?"];
 
   function getCfg() {
     try { return { enabled: false, size: "md", cursor: false, ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
     catch { return { enabled: false, size: "md", cursor: false }; }
   }
-  function saveCfg(c) { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); }
+  function saveLocal(c) { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); }
+
+  let _sbClient = null;
+  function getSbClient() {
+    if (window.sb) return window.sb;
+    if (!_sbClient && window.supabase && window.WT_CONFIG?.SUPABASE_URL) {
+      _sbClient = window.supabase.createClient(WT_CONFIG.SUPABASE_URL, WT_CONFIG.SUPABASE_ANON_KEY);
+    }
+    return _sbClient;
+  }
+
+  async function pushToServer(c) {
+    try {
+      const client = getSbClient(); if (!client?.auth?.getSession) return;
+      const { data } = await client.auth.getSession();
+      const tok = data?.session?.access_token; if (!tok) return;
+      await fetch("/api/secret-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
+        body: JSON.stringify(c)
+      });
+    } catch {}
+  }
+
+  async function syncFromServer() {
+    try {
+      const client = getSbClient(); if (!client?.auth?.getSession) return;
+      const { data } = await client.auth.getSession();
+      const tok = data?.session?.access_token; if (!tok) return;
+      const r = await fetch("/api/secret-settings", { headers: { Authorization: "Bearer " + tok } });
+      const j = await r.json().catch(() => ({}));
+      if (j?.data) {
+        saveLocal({ enabled: !!j.data.enabled, size: j.data.size || "md", cursor: !!j.data.cursor });
+        sync();
+      } else {
+        const local = getCfg();
+        if (local.enabled || local.cursor || local.size !== "md") pushToServer(local);
+      }
+    } catch {}
+  }
 
   let wrap = null, img = null, bubble = null, menu = null, raf = 0, aiTmr = 0, talkTmr = 0;
-  let x = 80, y = 200, vx = 1.4, vy = 0, dir = 1, state = "idle", dragging = false, moved = false;
+  let x = 80, y = 200, vx = 1.6, vy = 0, dir = 1, state = "idle", dragging = false, moved = false;
   let dx = 0, dy = 0, lx = 0, ly = 0, pvx = 0, pvy = 0;
 
   function applyCursor(on) {
@@ -32,7 +71,7 @@
   }
   function setState(s) {
     state = s;
-    if (s === "walk") { setPose("walk"); vx = (Math.random() < 0.5 ? -1 : 1) * 1.5; dir = vx > 0 ? 1 : -1; }
+    if (s === "walk") { setPose("walk"); vx = (Math.random() < 0.5 ? -1 : 1) * 1.7; dir = vx > 0 ? 1 : -1; }
     else if (s === "sleep") { setPose("sleep"); vx = 0; say("zZz...", 2600); }
     else if (s === "music") { setPose("perch_music"); vx = 0; say("♪ vibing ♪", 2600); }
     else if (s === "glitch") { setPose("glitch"); vx = 0; say("0xCAPR1!", 1400); }
@@ -41,20 +80,22 @@
   }
 
   function mount() {
-    if (wrap) return;
-    const st = document.createElement("style");
-    st.id = "wt-capri-css";
-    st.textContent = `
-      #wt-capri{position:fixed;left:0;top:0;z-index:9998;user-select:none;touch-action:none;cursor:grab;will-change:transform}
-      #wt-capri:active{cursor:grabbing}
-      #wt-capri img{display:block;height:var(--capri-h,152px);width:auto;pointer-events:none;filter:drop-shadow(0 6px 14px #0004)}
-      #wt-capri-bub{position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--card,#312842);color:var(--text,#f6f1fc);padding:6px 12px;border-radius:999px;font:700 12px/1.2 system-ui,sans-serif;white-space:nowrap;box-shadow:0 4px 14px #0004;pointer-events:none}
-      #wt-capri-bub.hidden,#wt-capri-menu.hidden{display:none}
-      #wt-capri-menu{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);display:flex;gap:4px;background:var(--bg,#16121e);padding:5px;border-radius:999px;box-shadow:0 8px 24px #0006;z-index:9999}
-      #wt-capri-menu button{border:0;background:var(--surface,#221c2e);color:var(--text,#fff);border-radius:999px;padding:5px 10px;font:700 11px system-ui,sans-serif;cursor:pointer}
-      #wt-capri-menu button:hover{background:var(--primary,#d0bcff);color:var(--on-primary,#1d192b)}
-    `;
-    document.head.appendChild(st);
+    if (wrap || !document.body) return;
+    if (!document.getElementById("wt-capri-css")) {
+      const st = document.createElement("style");
+      st.id = "wt-capri-css";
+      st.textContent = `
+        #wt-capri{position:fixed;left:0;top:0;z-index:9998;user-select:none;touch-action:none;cursor:grab;will-change:transform}
+        #wt-capri:active{cursor:grabbing}
+        #wt-capri img{display:block;height:var(--capri-h,280px);width:auto;pointer-events:none;filter:drop-shadow(0 8px 18px #0005)}
+        #wt-capri-bub{position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--card,#312842);color:var(--text,#f6f1fc);padding:7px 14px;border-radius:999px;font:700 13px/1.2 system-ui,sans-serif;white-space:nowrap;box-shadow:0 4px 14px #0004;pointer-events:none}
+        #wt-capri-bub.hidden,#wt-capri-menu.hidden{display:none}
+        #wt-capri-menu{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);display:flex;gap:4px;background:var(--bg,#16121e);padding:6px;border-radius:999px;box-shadow:0 8px 24px #0006;z-index:9999}
+        #wt-capri-menu button{border:0;background:var(--surface,#221c2e);color:var(--text,#fff);border-radius:999px;padding:6px 11px;font:700 12px system-ui,sans-serif;cursor:pointer}
+        #wt-capri-menu button:hover{background:var(--primary,#d0bcff);color:var(--on-primary,#1d192b)}
+      `;
+      document.head.appendChild(st);
+    }
 
     wrap = document.createElement("div");
     wrap.id = "wt-capri";
@@ -71,9 +112,9 @@
     bubble = wrap.querySelector("#wt-capri-bub");
     menu = wrap.querySelector("#wt-capri-menu");
 
-    const h = SIZES[getCfg().size] || 152;
+    const h = SIZES[getCfg().size] || 280;
     wrap.style.setProperty("--capri-h", h + "px");
-    x = Math.max(20, window.innerWidth - h - 40);
+    x = Math.max(20, window.innerWidth - Math.round(h * 0.7) - 32);
     y = Math.max(20, window.innerHeight - h);
     setPose("idle");
 
@@ -84,7 +125,7 @@
       e.stopPropagation();
       const a = e.target.dataset.a; if (!a) return;
       menu.classList.add("hidden");
-      if (a === "hide") { const c = getCfg(); c.enabled = false; saveCfg(c); sync(); }
+      if (a === "hide") { const c = getCfg(); c.enabled = false; saveAndSync(c); }
       else setState(a);
     };
 
@@ -116,7 +157,7 @@
         setTimeout(() => { if (!dragging && (state === "talk" || state === "glitch")) setState("idle"); }, 1800);
         return;
       }
-      if (Math.hypot(pvx, pvy) > 4 || y < window.innerHeight - (SIZES[getCfg().size] || 152) - 8) {
+      if (Math.hypot(pvx, pvy) > 4 || y < window.innerHeight - (SIZES[getCfg().size] || 280) - 8) {
         state = "tossed"; vx = Math.max(-18, Math.min(18, pvx)); vy = Math.max(-18, Math.min(18, pvy));
         setPose("tossed");
       } else setState("idle");
@@ -133,7 +174,7 @@
     }, 5500);
 
     (function loop() {
-      const hCur = SIZES[getCfg().size] || 152;
+      const hCur = SIZES[getCfg().size] || 280;
       const wCur = img.offsetWidth || hCur * 0.65;
       const floor = Math.max(0, window.innerHeight - hCur);
       const maxX = Math.max(0, window.innerWidth - wCur);
@@ -171,14 +212,28 @@
   function sync() {
     const c = getCfg();
     applyCursor(!!c.cursor);
-    if (c.enabled) { mount(); if (wrap) wrap.style.setProperty("--capri-h", (SIZES[c.size] || 152) + "px"); }
+    if (c.enabled) { mount(); if (wrap) wrap.style.setProperty("--capri-h", (SIZES[c.size] || 280) + "px"); }
     else unmount();
+  }
+
+  function saveAndSync(c) {
+    saveLocal(c);
+    sync();
+    pushToServer(c);
   }
 
   window.wtCapri = {
     sync,
+    save: saveAndSync,
+    syncFromServer,
     setState: s => { if (getCfg().enabled) setState(s); },
-    center: () => { if (wrap) { const h = SIZES[getCfg().size] || 152; x = window.innerWidth / 2 - 50; y = window.innerHeight - h; } }
+    center: () => { if (wrap) { const h = SIZES[getCfg().size] || 280; x = window.innerWidth / 2 - 80; y = window.innerHeight - h; } }
   };
+
   sync();
+  setTimeout(syncFromServer, 200);
+  const client = getSbClient();
+  if (client?.auth?.onAuthStateChange) {
+    client.auth.onAuthStateChange(ev => { if (ev === "SIGNED_IN") syncFromServer(); });
+  }
 })();

@@ -33,7 +33,6 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
  <label>Password</label><input id="li-pass" type="password" autocomplete="current-password">
  <label class="chk"><input type="checkbox" class="showpw" data-t="li-pass"> Show password</label>
  <div class="hint" id="h-in"></div>
- <div style="margin:2px 4px 6px"><a class="link" href="/forgot">Forgot password?</a></div>
  <div class="row"><button class="btn" id="to-up">Create account</button><button class="btn p" id="do-in">Sign in</button></div>
 </section>
 
@@ -61,15 +60,14 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
  <label>Password</label><input id="pw" type="password" autocomplete="new-password">
  <label>Confirm password</label><input id="pw2" type="password" autocomplete="new-password">
  <label class="chk"><input type="checkbox" class="showpw" data-t="pw,pw2"> Show password</label>
- <label class="chk" style="color:var(--text)"><input type="checkbox" id="tos"> <span>I agree to the <a href="/terms" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener">Privacy Policy</a></span></label>
  <ul class="rules" id="rules"></ul><div class="hint" id="h-pw"></div>
  <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-pw" disabled>Create account</button></div>
 </section>
-<p style="text-align:center;font-size:12px;color:var(--muted);margin-top:16px"><a href="/terms" style="color:inherit">Terms</a> · <a href="/privacy" style="color:inherit">Privacy</a></p>
 </main>
 
 <script src="/config.js"></script>
 <script src="/js/wt-local.js"></script>
+<script src="/js/capri-pet.js"></script>
 <script>
 const $=id=>document.getElementById(id), C=window.WT_CONFIG||{};
 if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){document.querySelector(".card").innerHTML="<h3>Setup problem</h3><p style=\"margin-top:8px\">The server did not send its Supabase settings. Make sure you opened this site through the Render URL (not a local file) and that /config.js loads.</p>";throw new Error("Missing Supabase config");}
@@ -106,7 +104,6 @@ document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>go(FLOW[FLOW.i
 $("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in");
 if(qs.get("email")) $("li-email").value=qs.get("email");
 
-/* sign in */
 $("do-in").onclick=async()=>{
   say("h-in","Signing in…");
   const {data,error}=await sb.auth.signInWithPassword({email:$("li-email").value.trim(),password:$("li-pass").value});
@@ -120,14 +117,12 @@ $("do-in").onclick=async()=>{
   say("h-in",error.message,"bad");
 };
 
-/* 1 email */
 $("n-email").onclick=()=>{
   const v=$("email").value.trim().toLowerCase();
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return say("h-email","Enter a valid email.","bad");
   d.email=v; go("username");
 };
 
-/* 2 username (checked against the database) */
 let t=null,seq=0;
 $("username").oninput=()=>{
   const v=$("username").value.trim().toLowerCase(); $("n-user").disabled=true; clearTimeout(t);
@@ -142,7 +137,6 @@ $("username").oninput=()=>{
 };
 $("n-user").onclick=()=>go("profile");
 
-/* 3 profile */
 $("av").onclick=()=>$("file").click();
 $("bio").oninput=()=>say("h-bio",$("bio").value.length+" / 160 · everything here is optional");
 $("file").onchange=e=>{
@@ -155,7 +149,6 @@ $("file").onchange=e=>{
 };
 $("n-prof").onclick=()=>{d.display_name=$("dname").value.trim();d.bio=$("bio").value.trim();go("pass")};
 
-/* 4 password */
 const COMMON=["password","123456","qwerty","letmein","welcome","admin","iloveyou","webtok"];
 const RULES=[["At least 10 characters",p=>p.length>=10],["Upper and lower case",p=>/[a-z]/.test(p)&&/[A-Z]/.test(p)],["A number",p=>/\d/.test(p)],["A symbol",p=>/[^A-Za-z0-9]/.test(p)],
  ["Not a common password",p=>!COMMON.some(w=>p.toLowerCase().includes(w))],["Doesn't contain your username or email name",p=>![d.username,(d.email||"").split("@")[0]].some(w=>w&&w.length>2&&p.toLowerCase().includes(w))]];
@@ -163,13 +156,13 @@ function checkPw(){
   const p=$("pw").value; let all=true;
   $("rules").innerHTML=RULES.map(([t,f])=>{const y=f(p);all=all&&y;return`<li class="${y?"y":""}">${t}</li>`}).join("");
   const m=p&&p===$("pw2").value; say("h-pw",$("pw2").value?(m?"Passwords match":"Passwords don't match"):"",m?"ok":"bad");
-  $("n-pw").disabled=!(all&&m&&$("tos").checked);
+  $("n-pw").disabled=!(all&&m);
 }
-$("pw").oninput=$("pw2").oninput=$("tos").onchange=checkPw; $("pw").onfocus=checkPw;
+$("pw").oninput=$("pw2").oninput=checkPw; $("pw").onfocus=checkPw;
 $("n-pw").onclick=async()=>{
   $("n-pw").disabled=true; say("h-pw","Creating account…");
   const pw=$("pw").value;
-  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio,accepted_terms:true}}});
+  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio}}});
   if(error){$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
   if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){$("n-pw").disabled=false;return say("h-pw","That email already has an account. Sign in instead, or use a different email.","bad")}
   try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){}
@@ -203,4 +196,3 @@ sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur
 
 go(location.hash==="#signup"?"email":"in");
 </script></body></html>
-

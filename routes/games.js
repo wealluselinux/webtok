@@ -1,4 +1,4 @@
-/* Web Tok Mini Games & /developer Studio API (Turso + NVIDIA NIM AI Game Builder) */
+/* Web Tok Mini Games & /developer Studio API (Turso + NVIDIA NIM AI Game Builder) + Secret Settings */
 const crypto = require("crypto");
 
 const GAME_MODELS = [
@@ -38,7 +38,7 @@ screen.tracer(0)
 \`\`\``;
 
 module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, nowIso, aiKey, callNim, CHAT_MODELS }) {
-  let ready = false;
+  let ready = false, secretReady = false;
   async function ensureGamesTable() {
     if (ready) return;
     await db.execute(`CREATE TABLE IF NOT EXISTS user_games (
@@ -56,6 +56,42 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
     await db.execute("CREATE INDEX IF NOT EXISTS idx_ugames_pub ON user_games(published, updated_at DESC)");
     ready = true;
   }
+
+  async function ensureSecretTable() {
+    if (secretReady) return;
+    await db.execute(`CREATE TABLE IF NOT EXISTS user_secret_settings (
+      user_id TEXT PRIMARY KEY,
+      settings_json TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`);
+    secretReady = true;
+  }
+
+  app.get("/api/secret-settings", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await ensureSecretTable();
+    const row = (await run("SELECT settings_json FROM user_secret_settings WHERE user_id = ?", [uid]))[0];
+    let parsed = null;
+    try { if (row?.settings_json) parsed = JSON.parse(row.settings_json); } catch {}
+    return { data: parsed, error: null };
+  }));
+
+  app.post("/api/secret-settings", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await ensureSecretTable();
+    const b = req.body || {};
+    const cfg = {
+      enabled: !!b.enabled,
+      size: ["sm", "md", "lg"].includes(b.size) ? b.size : "md",
+      cursor: !!b.cursor
+    };
+    await db.execute({
+      sql: `INSERT INTO user_secret_settings (user_id, settings_json, updated_at) VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET settings_json=excluded.settings_json, updated_at=excluded.updated_at`,
+      args: [uid, JSON.stringify(cfg), nowIso()]
+    });
+    return { data: cfg, error: null };
+  }));
 
   app.get("/api/games", wrap(async () => {
     await ensureGamesTable();

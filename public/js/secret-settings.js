@@ -5,8 +5,8 @@
     catch { return { enabled: false, size: "md", cursor: false }; }
   }
   function saveCfg(c) {
-    localStorage.setItem("wt_capri_cfg", JSON.stringify(c));
-    if (window.wtCapri) window.wtCapri.sync();
+    if (window.wtCapri?.save) window.wtCapri.save(c);
+    else { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); window.wtCapri?.sync(); }
   }
 
   window.openSecretSettings = function () {
@@ -42,7 +42,7 @@
         <div class="ss-head">
           <div class="ss-title">
             <div class="ss-ic"><span class="ms fill">auto_awesome</span></div>
-            <div><h2 style="font-size:20px;font-weight:700;margin:0">Secret Settings</h2><small style="color:var(--muted)">Material You · Easter Egg Lab</small></div>
+            <div><h2 style="font-size:20px;font-weight:700;margin:0">Secret Settings</h2><small style="color:var(--muted)">Material You · Saved to your account</small></div>
           </div>
           <button type="button" class="btn icon" id="ssClose" aria-label="Close"><span class="ms">close</span></button>
         </div>
@@ -57,9 +57,9 @@
           <div>
             <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">Pet Size</div>
             <div class="ss-seg" id="ssSizeSeg">
-              <button type="button" data-sz="sm">Small</button>
-              <button type="button" data-sz="md">Normal</button>
-              <button type="button" data-sz="lg">Large</button>
+              <button type="button" data-sz="sm">Medium (200px)</button>
+              <button type="button" data-sz="md">Normal (280px)</button>
+              <button type="button" data-sz="lg">Large (360px)</button>
             </div>
           </div>
           <div>
