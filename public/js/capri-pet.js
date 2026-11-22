@@ -50,13 +50,33 @@
     } catch {}
   }
 
-  let wrap = null, img = null, bubble = null, menu = null, raf = 0, aiTmr = 0, talkTmr = 0;
+  let wrap = null, img = null, bubble = null, menu = null, raf = 0, aiTmr = 0, talkTmr = 0, cursorUrl = "";
   let x = 80, y = 200, vx = 1.6, vy = 0, dir = 1, state = "idle", dragging = false, moved = false;
   let dx = 0, dy = 0, lx = 0, ly = 0, pvx = 0, pvy = 0;
 
   function applyCursor(on) {
-    document.documentElement.style.cursor = on ? `url("${BASE}cursor.png") 4 4, auto` : "";
+    const existing = document.getElementById("wt-capri-cursor-css");
+    if (!on) { if (existing) existing.remove(); document.documentElement.style.cursor = ""; return; }
+    const inject = url => {
+      let st = document.getElementById("wt-capri-cursor-css");
+      if (!st) { st = document.createElement("style"); st.id = "wt-capri-cursor-css"; document.head.appendChild(st); }
+      st.textContent = `html,body,*{cursor:url("${url}") 4 4,auto!important}`;
+    };
+    if (cursorUrl) return inject(cursorUrl);
+    const ci = new Image();
+    ci.onload = () => {
+      const c = document.createElement("canvas");
+      c.width = c.height = 36;
+      const ctx = c.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(ci, 0, 0, 36, 36);
+      cursorUrl = c.toDataURL("image/png");
+      if (getCfg().cursor) inject(cursorUrl);
+    };
+    ci.src = BASE + "cursor.png";
   }
+
   function setPose(name) {
     if (!img) return;
     const src = BASE + name + ".webp";
