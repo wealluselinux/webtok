@@ -1,4 +1,4 @@
-/* Interactive Gravity Mode: gravifies all page elements (including Profile & Capri with full spin & tossed sprite) */
+/* Interactive Gravity Mode: gravifies & rotates every visible part on the page (including Capri & Profile) */
 (function () {
   if (window.wtGravity) return;
 
@@ -17,16 +17,17 @@
 
   function collectElements() {
     const sel = [
-      "h1", "h2", "h3", ".tag", ".legal",
-      ".btn", ".chip", ".fab", ".vid-seek-wrap", ".wt-pill", ".st-pill",
+      "h1", "h2", "h3", "p", "a", "button", "input", "select", "textarea", "label", "img", "video", "canvas",
+      ".tag", ".legal", ".btn", ".chip", ".fab", ".vid-seek-wrap", ".wt-pill", ".st-pill",
       ".g-card", ".pfp", ".p-names", ".p-stats", ".p-bio", ".tabs .tab", ".vid-tile", ".cmt-card", ".empty-box",
       ".pane", ".ai-box", ".upd-box", ".dev-bar", ".card", ".act-card", ".snd-card",
       ".fl", ".phone", ".chips span", "#sb .it", "#sb .brand", "#sb .srch-wrap", ".fr", ".m-wrap", "#wt-capri"
     ].join(",");
     const raw = [...document.querySelectorAll(sel)].filter(el => {
       if (el.closest("#wt-capri-chat,#wt-grav-btn,dialog") || el.id === "wt-grav-btn") return false;
+      if (el.closest("#wt-capri") && el.id !== "wt-capri") return false;
       const r = el.getBoundingClientRect();
-      return r.width > 8 && r.height > 8 && r.bottom > -40 && r.top < window.innerHeight + 40;
+      return r.width > 6 && r.height > 6 && r.bottom > -40 && r.top < window.innerHeight + 40;
     });
     return raw.filter(el => !raw.some(other => other !== el && other.contains(el)));
   }
@@ -47,19 +48,20 @@
           if (!a.dragging) a.dx += dir * push;
           if (!b.dragging) b.dx -= dir * push;
           const avgVx = (a.vx + b.vx) * 0.5;
-          if (!a.dragging) a.vx = avgVx + dir * 0.8;
-          if (!b.dragging) b.vx = avgVx - dir * 0.8;
+          if (!a.dragging) { a.vx = avgVx + dir * 0.9; a.vr += dir * 1.4; }
+          if (!b.dragging) { b.vx = avgVx - dir * 0.9; b.vr -= dir * 1.4; }
         } else {
           const dir = (ay1 + ay2) < (by1 + by2) ? -1 : 1;
           const push = oy * 0.5;
           if (!a.dragging) a.dy += dir * push;
           if (!b.dragging) b.dy -= dir * push;
+          const spin = Math.max(-4, Math.min(4, (a.vx - b.vx) * 0.4));
           if (dir < 0) {
-            if (!a.dragging && a.vy > 0) a.vy = -a.vy * 0.25;
-            if (!b.dragging && b.vy < 0) b.vy = -b.vy * 0.25;
+            if (!a.dragging && a.vy > 0) { a.vy = -a.vy * 0.28; a.vr += spin; }
+            if (!b.dragging && b.vy < 0) { b.vy = -b.vy * 0.28; b.vr -= spin; }
           } else {
-            if (!b.dragging && b.vy > 0) b.vy = -b.vy * 0.25;
-            if (!a.dragging && a.vy < 0) a.vy = -a.vy * 0.25;
+            if (!b.dragging && b.vy > 0) { b.vy = -b.vy * 0.28; b.vr -= spin; }
+            if (!a.dragging && a.vy < 0) { a.vy = -a.vy * 0.28; a.vr += spin; }
           }
         }
       }
@@ -89,7 +91,7 @@
         dx: 0, dy: 0,
         vx: (Math.random() - 0.5) * 4,
         vy: Math.random() * 2,
-        rot: 0, vr: (Math.random() - 0.5) * 2.2,
+        rot: 0, vr: (Math.random() - 0.5) * 3.5,
         dragging: false
       };
       el._wtGravDown = e => {
@@ -125,12 +127,12 @@
           const curLeft = it.r.left + it.dx, curRight = it.r.right + it.dx;
           const curBottom = it.r.bottom + it.dy, curTop = it.r.top + it.dy;
 
-          if (curLeft < 0) { it.dx -= curLeft; it.vx = Math.abs(it.vx) * 0.55; }
-          if (curRight > W) { it.dx -= (curRight - W); it.vx = -Math.abs(it.vx) * 0.55; }
+          if (curLeft < 0) { it.dx -= curLeft; it.vx = Math.abs(it.vx) * 0.55; it.vr += (Math.random() - 0.5) * 4; }
+          if (curRight > W) { it.dx -= (curRight - W); it.vx = -Math.abs(it.vx) * 0.55; it.vr += (Math.random() - 0.5) * 4; }
           if (curTop < 0) { it.dy -= curTop; it.vy = Math.abs(it.vy) * 0.4; }
           if (curBottom >= H - 4) {
             it.dy -= (curBottom - (H - 4));
-            if (Math.abs(it.vy) > 3.2) { it.vy = -it.vy * 0.36; it.vr = (Math.random() - 0.5) * 3; }
+            if (Math.abs(it.vy) > 3.2) { it.vy = -it.vy * 0.36; it.vr = (Math.random() - 0.5) * 3.5; }
             else { it.vy = 0; it.vx *= 0.85; it.vr *= 0.7; }
           }
         }
@@ -177,7 +179,7 @@
     dragItem.dx += mx; dragItem.dy += my;
     dragItem.vx = Math.max(-22, Math.min(22, mx * 0.85));
     dragItem.vy = Math.max(-22, Math.min(22, my * 0.85));
-    dragItem.vr = Math.max(-12, Math.min(12, mx * 0.45));
+    dragItem.vr = Math.max(-14, Math.min(14, mx * 0.5));
     lx = e.clientX; ly = e.clientY;
   });
   addEventListener("pointerup", () => {
