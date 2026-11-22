@@ -1,4 +1,4 @@
-/* Sidebar More-menu links (Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Profile Frames/Decorations renderer */
+/* Sidebar More-menu links (Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Capri/Profile Frames renderer */
 (function () {
   if (window.wtShopDecoInit) return;
   window.wtShopDecoInit = true;
@@ -104,6 +104,7 @@
       .wt-pfp-ring{position:absolute;inset:-8px;clip-path:var(--m3-cookie-7);pointer-events:none;z-index:0}
       .wt-pfp-wrap .pfp{position:relative;z-index:1}
       .wt-pfp-over{position:absolute;inset:-12px;width:calc(100% + 24px);height:calc(100% + 24px);object-fit:contain;pointer-events:none;z-index:2}
+      .wt-pfp-sprite{position:absolute;bottom:-8px;right:-10px;height:48px;width:auto;object-fit:contain;pointer-events:none;z-index:3;filter:drop-shadow(0 4px 10px #0006)}
       .wt-pfp-badge{position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;clip-path:var(--m3-cookie-4);display:grid;place-items:center;z-index:3;box-shadow:0 3px 10px #0004}
       .wt-card-deco-tag{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;margin-left:auto}
       .wt-card-deco-img{position:absolute;top:12px;right:14px;width:44px;height:44px;border-radius:14px;object-fit:cover;box-shadow:0 4px 14px #0003;pointer-events:none}
@@ -128,7 +129,9 @@
       }
       const ring = document.createElement("div");
       ring.className = "wt-pfp-ring";
-      ring.style.background = av.style === "prism"
+      ring.style.background = av.style === "capri"
+        ? "conic-gradient(#ff1744,#00e676,#0b0a10,#ff1744,#00e676,#ff1744)"
+        : av.style === "prism"
         ? "conic-gradient(#d0bcff,#ff9ed2,#ffd58a,#a8dab5,#8ab4f8,#d0bcff)"
         : av.style === "cyber"
         ? "linear-gradient(135deg,#00e5ff,#ff4081)"
@@ -141,6 +144,12 @@
         im.src = av.image_url;
         im.alt = av.name || "";
         wrap.appendChild(im);
+      } else if (av.sprite) {
+        const sp = document.createElement("img");
+        sp.className = "wt-pfp-sprite";
+        sp.src = av.sprite;
+        sp.alt = av.name || "Capri";
+        wrap.appendChild(sp);
       } else {
         const bd = document.createElement("div");
         bd.className = "wt-pfp-badge";
@@ -154,7 +163,11 @@
     const pr = data?.profile;
     if (pr) {
       card.style.position = "relative";
-      card.style.boxShadow = `0 0 0 3px ${pr.color || "var(--primary)"}, 0 10px 30px #0003`;
+      if (pr.style === "capri") {
+        card.style.boxShadow = "0 0 0 3px #ff1744, 0 0 28px #00e67644";
+      } else {
+        card.style.boxShadow = `0 0 0 3px ${pr.color || "var(--primary)"}, 0 10px 30px #0003`;
+      }
       if (pr.image_url) {
         const im = document.createElement("img");
         im.className = "wt-card-deco-img";
@@ -166,9 +179,11 @@
         if (names) {
           const tag = document.createElement("span");
           tag.className = "wt-card-deco-tag";
-          tag.style.background = pr.color || "var(--primary)";
-          tag.style.color = "#16121e";
-          tag.innerHTML = `<span class="ms fill" style="font-size:14px">${pr.icon || "auto_awesome"}</span>${pr.name}`;
+          tag.style.background = pr.style === "capri" ? "linear-gradient(135deg,#ff1744,#00e676)" : (pr.color || "var(--primary)");
+          tag.style.color = pr.style === "capri" ? "#fff" : "#16121e";
+          tag.innerHTML = pr.sprite
+            ? `<img src="${pr.sprite}" alt="" style="height:18px;width:auto"> ${pr.name}`
+            : `<span class="ms fill" style="font-size:14px">${pr.icon || "auto_awesome"}</span>${pr.name}`;
           names.appendChild(tag);
         }
       }

@@ -1,4 +1,4 @@
-/* Tok Coins, Profile Frames, Card Decorations & Video Banners Shop API (Turso) */
+/* Tok Coins, Profile Frames, Card Decorations, Video Banners & Capri Bundle Shop API (Turso) */
 const crypto = require("crypto");
 
 const LIKE_REWARD = 10;
@@ -11,13 +11,31 @@ const CATALOG = [
   { id: "av_sakura_bloom", slot: "avatar", name: "Sakura Frame", desc: "Soft blossom frame with rosy petal glow.", price: 80, style: "sakura", color: "#ff9ed2", icon: "local_florist" },
   { id: "av_gold_crown", slot: "avatar", name: "Golden Crown Frame", desc: "Royal gold frame with a floating crown crest.", price: 90, style: "crown", color: "#ffca28", icon: "workspace_premium" },
   { id: "av_cyber_glitch", slot: "avatar", name: "Cyber Glitch Frame", desc: "Electric cyan & magenta cyber frame.", price: 110, style: "cyber", color: "#4dd0e1", icon: "bolt" },
+  { id: "av_capri_frame", slot: "avatar", name: "Capri Glitch Frame", desc: "Crimson-magenta & neon-green Capri frame with mini Capri sprite.", price: 80, style: "capri", color: "#ff1744", icon: "auto_awesome", sprite: "/images/capri_assets/grin.webp" },
+
   { id: "pr_aurora_glow", slot: "profile", name: "Aurora Card Glow", desc: "Iridescent aurora border and ambient glow on your profile card.", price: 70, style: "aurora", color: "#a8dab5", icon: "nights_stay" },
   { id: "pr_emerald_wave", slot: "profile", name: "Emerald Wave", desc: "Mint-emerald expressive trim and crest on your profile card.", price: 85, style: "emerald", color: "#66bb6a", icon: "waves" },
   { id: "pr_retro_arcade", slot: "profile", name: "Arcade Neon", desc: "Retro arcade neon outline and gamer badge on your profile.", price: 95, style: "arcade", color: "#f48fb1", icon: "sports_esports" },
   { id: "pr_vip_badge", slot: "profile", name: "Creator Crest", desc: "Bold Material You creator crest & gold accent border.", price: 100, style: "crest", color: "#ffd58a", icon: "verified" },
+  { id: "pr_capri_card", slot: "profile", name: "Capri Profile Card", desc: "Crimson & neon-green Capri glitch border with Capri crest.", price: 85, style: "capri", color: "#00e676", icon: "bolt", sprite: "/images/capri_assets/glitch.webp" },
+
   { id: "bn_neon_spotlight", slot: "banner", name: "Spotlight Banner", desc: "Glowing Material You top banner on any video you choose.", price: 75, style: "spotlight", color: "#d0bcff", icon: "auto_awesome" },
   { id: "bn_gold_premiere", slot: "banner", name: "Gold Premiere Banner", desc: "Royal gold premiere ribbon banner for your featured video.", price: 95, style: "premiere", color: "#ffca28", icon: "workspace_premium" },
-  { id: "bn_cyber_ticker", slot: "banner", name: "Cyber Neon Banner", desc: "Electric cyan & pink neon banner across the top of your video.", price: 105, style: "cyber", color: "#4dd0e1", icon: "bolt" }
+  { id: "bn_cyber_ticker", slot: "banner", name: "Cyber Neon Banner", desc: "Electric cyan & pink neon banner across the top of your video.", price: 105, style: "cyber", color: "#4dd0e1", icon: "bolt" },
+  { id: "bn_capri_banner", slot: "banner", name: "Capri Video Banner", desc: "Crimson-magenta & neon-green Capri banner for your video.", price: 85, style: "capri", color: "#ff1744", icon: "auto_awesome", sprite: "/images/capri_assets/idle.webp" }
+];
+
+const BUNDLES = [
+  {
+    id: "capri_bundle",
+    name: "Capri Bundle",
+    desc: "Complete Capri set: Capri Glitch Frame, Capri Profile Card, and Capri Video Banner!",
+    price: 195,
+    color: "#ff1744",
+    accent: "#00e676",
+    preview: "/images/capri_assets/idle.webp",
+    items: ["av_capri_frame", "pr_capri_card", "bn_capri_banner"]
+  }
 ];
 
 module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, nowIso }) {
@@ -117,6 +135,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
         commentReward: COMMENT_REWARD,
         customPrice: CUSTOM_PRICE,
         catalog: CATALOG,
+        bundles: BUNDLES,
         owned,
         myVideos,
         videoBanners,
@@ -124,6 +143,51 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
       },
       error: null
     };
+  }));
+
+  app.post("/api/shop/buy-bundle", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const bundleId = String(req.body?.bundleId || "").trim();
+    const videoId = req.body?.videoId ? String(req.body.videoId).trim() : null;
+    const bundle = BUNDLES.find(b => b.id === bundleId);
+    if (!bundle) throw new HttpError(404, "Bundle not found");
+
+    const wallet = await getWallet(uid);
+    const ownedRows = await run("SELECT item_id FROM user_shop_items WHERE user_id = ?", [uid]);
+    const ownedSet = new Set(ownedRows.map(r => r.item_id));
+    const missing = bundle.items.filter(id => !ownedSet.has(id));
+    if (!missing.length) throw new HttpError(409, "You already own every item in this bundle!");
+    if (wallet.balance < bundle.price) throw new HttpError(400, `Not enough Tok Coins (need ${bundle.price}, have ${wallet.balance}).`);
+
+    const ts = nowIso();
+    const stmts = missing.map((itemId, idx) => {
+      const it = CATALOG.find(x => x.id === itemId);
+      return {
+        sql: "INSERT INTO user_shop_items (id, user_id, item_id, slot, name, price, is_custom, image_url, color, style, icon, created_at) VALUES (?,?,?,?,?, ?,0,NULL,?,?,?,?)",
+        args: [crypto.randomUUID(), uid, it.id, it.slot, it.name, idx === 0 ? bundle.price : 0, it.color, it.style, it.icon, ts]
+      };
+    });
+
+    const avId = bundle.items.find(id => CATALOG.find(x => x.id === id)?.slot === "avatar");
+    const prId = bundle.items.find(id => CATALOG.find(x => x.id === id)?.slot === "profile");
+    const bnId = bundle.items.find(id => CATALOG.find(x => x.id === id)?.slot === "banner");
+    if (avId && prId) {
+      stmts.push({
+        sql: "INSERT INTO user_equipped_decos (user_id, avatar_deco, profile_deco, updated_at) VALUES (?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET avatar_deco=excluded.avatar_deco, profile_deco=excluded.profile_deco, updated_at=excluded.updated_at",
+        args: [uid, avId, prId, ts]
+      });
+    }
+    if (bnId && videoId) {
+      const v = await run("SELECT 1 FROM videos WHERE id = ? AND user_id = ?", [videoId, uid]);
+      if (v.length) {
+        stmts.push({
+          sql: "INSERT INTO user_video_banners (video_id, user_id, item_id, updated_at) VALUES (?,?,?,?) ON CONFLICT(video_id) DO UPDATE SET item_id=excluded.item_id, updated_at=excluded.updated_at",
+          args: [videoId, uid, bnId, ts]
+        });
+      }
+    }
+    await db.batch(stmts, "write");
+    return { data: { bundleId: bundle.id, unlocked: missing }, error: null };
   }));
 
   app.post("/api/shop/buy", wrap(async req => {
@@ -255,7 +319,9 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     const owned = await run(`SELECT user_id, item_id, name, is_custom, image_url, color, style, icon FROM user_shop_items WHERE user_id IN (${uph}) AND slot = 'banner'`, uids);
     const out = {};
     rows.forEach(r => {
-      out[r.video_id] = owned.find(x => x.user_id === r.user_id && x.item_id === r.item_id) || CATALOG.find(x => x.id === r.item_id) || null;
+      const cat = CATALOG.find(x => x.id === r.item_id);
+      const ow = owned.find(x => x.user_id === r.user_id && x.item_id === r.item_id);
+      out[r.video_id] = ow ? { ...cat, ...ow } : (cat || null);
     });
     return { data: out, error: null };
   }));
@@ -267,7 +333,12 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     const eq = (await run("SELECT avatar_deco, profile_deco FROM user_equipped_decos WHERE user_id = ?", [uid]))[0];
     if (!eq) return { data: { avatar: null, profile: null }, error: null };
     const owned = await run("SELECT item_id, slot, name, is_custom, image_url, color, style, icon FROM user_shop_items WHERE user_id = ?", [uid]);
-    const find = id => id ? (owned.find(x => x.item_id === id) || CATALOG.find(x => x.id === id) || null) : null;
+    const find = id => {
+      if (!id) return null;
+      const cat = CATALOG.find(x => x.id === id);
+      const ow = owned.find(x => x.item_id === id);
+      return ow ? { ...cat, ...ow } : (cat || null);
+    };
     return { data: { avatar: find(eq.avatar_deco), profile: find(eq.profile_deco) }, error: null };
   }));
 };

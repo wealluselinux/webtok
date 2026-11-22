@@ -18,14 +18,17 @@ body{overflow:auto;padding:24px 16px 96px}
 .sec-h{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:4px}
 .s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .s-card{background:var(--card);border-radius:var(--r-xl);padding:18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 18px #0001}
-.s-prev{width:64px;height:64px;clip-path:var(--m3-cookie-7);background:var(--surface);display:grid;place-items:center;font-size:28px;position:relative;flex:none}
-.s-prev img{width:100%;height:100%;object-fit:cover}
+.s-prev{width:64px;height:64px;clip-path:var(--m3-cookie-7);background:var(--surface);display:grid;place-items:center;font-size:28px;position:relative;flex:none;overflow:hidden}
+.s-prev img{width:100%;height:100%;object-fit:contain}
 .s-top{display:flex;align-items:center;gap:12px}
 .s-meta b{display:block;font-size:16px}
 .s-meta small{color:var(--primary);font-weight:700;font-size:12px}
 .s-desc{font-size:13px;color:var(--muted);line-height:1.4;flex:1}
 .s-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .s-vid-sel{width:100%;background:var(--surface);border:0;border-radius:999px;padding:9px 14px;color:var(--text);font:inherit;font-size:12px;outline:0}
+.bundle-card{background:linear-gradient(135deg,#2a0b16,#121a16);color:#fff;border-radius:var(--r-xl);padding:20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;border:2px solid #ff1744;box-shadow:0 10px 30px #ff174433}
+.bundle-art{width:92px;height:92px;clip-path:var(--m3-cookie-7);background:radial-gradient(circle,#ff174444,#00e67633);display:grid;place-items:center;flex:none}
+.bundle-art img{height:80px;width:auto;object-fit:contain}
 .custom-box{background:var(--card);border-radius:var(--r-xl);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 18px #0001}
 .c-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .c-row input[type=text],.c-row select{flex:1;min-width:170px;background:var(--surface);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
@@ -48,6 +51,9 @@ body{overflow:auto;padding:24px 16px 96px}
     <span>Earn <b>+10 Tok Coins</b> for every like and <b>+15 Tok Coins</b> for every comment on your videos.</span>
     <span id="earnStats">Loading stats…</span>
   </div>
+
+  <div class="sec-h">Featured Bundle</div>
+  <div id="bundleBox"></div>
 
   <div class="custom-box">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -163,6 +169,37 @@ function videoOptionsHtml(selectedId = "") {
   return vids.map(v => `<option value="${escapeHtml(v.id)}" ${v.id === selectedId ? "selected" : ""}>${escapeHtml(v.title || "Untitled video")}</option>`).join("");
 }
 
+function renderBundles() {
+  const box = $("bundleBox"); box.innerHTML = "";
+  const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
+  (shopState.bundles || []).forEach(b => {
+    const allOwned = b.items.every(id => ownedIds.has(id));
+    const el = document.createElement("div");
+    el.className = "bundle-card";
+    el.innerHTML = `
+      <div class="bundle-art"><img src="${escapeHtml(b.preview)}" alt="${escapeHtml(b.name)}"></div>
+      <div style="flex:1;min-width:220px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+          <b style="font-size:20px">${escapeHtml(b.name)}</b>
+          <span style="background:#00e676;color:#0b1911;font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px">3-IN-1 BUNDLE</span>
+        </div>
+        <div style="font-size:13px;opacity:.88;margin-bottom:10px">${escapeHtml(b.desc)}</div>
+        <select class="s-vid-sel" id="bunVidSel" style="max-width:320px;margin-bottom:8px;background:#ffffff1a;color:#fff">${videoOptionsHtml()}</select>
+      </div>
+      <button type="button" class="btn primary" style="background:#ff1744;color:#fff" ${allOwned ? "disabled" : ""}>${allOwned ? "Bundle Owned" : `Buy Bundle (${b.price} Coins)`}</button>`;
+    el.querySelector("button").onclick = async () => {
+      try {
+        const videoId = el.querySelector("#bunVidSel")?.value || null;
+        await apiShop("/api/shop/buy-bundle", { method: "POST", body: JSON.stringify({ bundleId: b.id, videoId }) });
+        await loadShop();
+      } catch (e) {
+        if (window.wtAlert) await wtAlert({ title: "Capri Bundle", message: e.message });
+      }
+    };
+    box.appendChild(el);
+  });
+}
+
 function renderGrid(elId, items, slot) {
   const box = $(elId); box.innerHTML = "";
   const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
@@ -174,14 +211,13 @@ function renderGrid(elId, items, slot) {
     const equipped = eqId === id;
     const card = document.createElement("div");
     card.className = "s-card";
-    const prevHtml = item.image_url
-      ? `<img src="${escapeHtml(item.image_url)}" alt="">`
+    const imgSrc = item.image_url || item.sprite;
+    const prevHtml = imgSrc
+      ? `<img src="${escapeHtml(imgSrc)}" alt="">`
       : `<span class="ms fill" style="font-size:28px;color:${escapeHtml(item.color || "var(--primary)")}">${escapeHtml(item.icon || "auto_awesome")}</span>`;
 
     const appliedVid = slot === "banner" ? (shopState.videoBanners || []).find(b => b.item_id === id)?.video_id : "";
-    const vidSelectHtml = slot === "banner"
-      ? `<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>`
-      : "";
+    const vidSelectHtml = slot === "banner" ? `<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>` : "";
 
     card.innerHTML = `
       <div class="s-top">
@@ -221,6 +257,7 @@ async function loadShop() {
   $("coinBal").textContent = shopState.balance.toLocaleString();
   $("earnStats").textContent = `${shopState.likesCount} likes + ${shopState.commentsCount} comments · ${shopState.earned} earned · ${shopState.spent} spent`;
   $("custVideo").innerHTML = videoOptionsHtml();
+  renderBundles();
   const customAv = (shopState.owned || []).filter(x => x.is_custom && x.slot === "avatar");
   const customPr = (shopState.owned || []).filter(x => x.is_custom && x.slot === "profile");
   const customBn = (shopState.owned || []).filter(x => x.is_custom && x.slot === "banner");
@@ -229,9 +266,7 @@ async function loadShop() {
   renderGrid("bannerGrid", [...customBn, ...shopState.catalog.filter(x => x.slot === "banner")], "banner");
 }
 
-$("custSlot").onchange = () => {
-  $("custVideo").classList.toggle("hidden", $("custSlot").value !== "banner");
-};
+$("custSlot").onchange = () => { $("custVideo").classList.toggle("hidden", $("custSlot").value !== "banner"); };
 
 $("custCreate").onclick = async () => {
   const name = $("custName").value.trim();

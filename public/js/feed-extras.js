@@ -61,7 +61,6 @@
     }, 220);
   };
 
-  // Enhance feed slides: Profile picture above Like/Comment, Sound label under Share, Video Banners
   let soundsCache = null;
   async function getSounds() {
     if (soundsCache) return soundsCache;
@@ -137,11 +136,18 @@
       if (bn && player && !player.querySelector(".wt-vid-banner")) {
         const el = document.createElement("div");
         el.className = "wt-vid-banner";
-        el.style.background = bn.style === "cyber"
-          ? "linear-gradient(90deg,#00e5ff,#ff4081)"
-          : `linear-gradient(90deg, ${bn.color || "#d0bcff"}, var(--accent,#ffd8e4))`;
-        el.innerHTML = bn.image_url
-          ? `<img src="${bn.image_url}" alt=""><span>${bn.name.replace(/</g, "&lt;")}</span>`
+        if (bn.style === "capri") {
+          el.style.background = "linear-gradient(90deg,#ff1744,#16121e,#00e676)";
+          el.style.color = "#fff";
+          el.style.border = "1px solid #ff1744";
+        } else {
+          el.style.background = bn.style === "cyber"
+            ? "linear-gradient(90deg,#00e5ff,#ff4081)"
+            : `linear-gradient(90deg, ${bn.color || "#d0bcff"}, var(--accent,#ffd8e4))`;
+        }
+        const imgSrc = bn.image_url || bn.sprite;
+        el.innerHTML = imgSrc
+          ? `<img src="${imgSrc}" alt=""><span>${bn.name.replace(/</g, "&lt;")}</span>`
           : `<span class="ms fill" style="font-size:18px">${bn.icon || "auto_awesome"}</span><span>${bn.name.replace(/</g, "&lt;")}</span>`;
         player.appendChild(el);
       }
