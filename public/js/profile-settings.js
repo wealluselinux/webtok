@@ -1,4 +1,4 @@
-/* Profile page: full-screen sectioned settings (Theme, Account with current-password verification, Security) */
+/* Profile page: full-screen sectioned settings (Theme, Spin Shapes, Account with current-password verification, Security) */
 let origAcctEmail = "";
 
 function setThemeHint(msg, bad = false) {
@@ -39,6 +39,7 @@ function renderSettings() {
   const t = getTheme();
   $("st-mode").value = t.mode || "auto";
   $("st-custom-color").value = t.color || "#6750a4";
+  if ($("st-spin-shapes")) $("st-spin-shapes").checked = !!t.spinShapes;
   setThemeHint("");
   setDelHint("");
   const sw = $("st-swatches"); sw.innerHTML = "";
@@ -156,15 +157,24 @@ $("st-mode").onchange = async e => {
   if (window.lastThemeError) setThemeHint(window.lastThemeError, true);
 };
 $("st-custom-color").oninput = e => saveTheme({ color: e.target.value });
+if ($("st-spin-shapes")) {
+  $("st-spin-shapes").onchange = async e => {
+    const on = !!e.target.checked;
+    if (window.wtApplySpinShapes) window.wtApplySpinShapes(on);
+    await saveTheme({ spinShapes: on });
+    if (window.lastThemeError) setThemeHint(window.lastThemeError, true);
+  };
+}
 $("st-wp-upload").onclick = () => $("st-wp-file").click();
 $("st-wp-file").onchange = e => {
-  const f = e.target.files[0]; if (!f) return;
-  const objUrl = URL.createObjectURL(f);
+  const f = e.target.files?.[0];
+  if (!f) return;
   const img = new Image();
+  const objUrl = URL.createObjectURL(f);
   img.onload = () => {
     URL.revokeObjectURL(objUrl);
+    const maxW = 1440, scale = Math.min(1, maxW / img.width);
     const c = document.createElement("canvas");
-    const scale = Math.min(1280 / img.width, 1280 / img.height, 1);
     c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
     $("st-wp-upload").disabled = true;
@@ -172,14 +182,16 @@ $("st-wp-file").onchange = e => {
     c.toBlob(async blob => {
       try {
         if (!blob) throw new Error("Could not process image.");
+        const { data } = await sb.auth.getSession();
+        const tok = data?.session?.access_token;
         let wpValue = "";
-        if (sb && user) {
-          const path = user.id + "/wallpaper.jpg";
-          const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
-          if (up?.error) throw up.error;
-          wpValue = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?t=" + Date.now();
+        if (tok) {
+          const r = await fetch("/api/wallpapers", { method: "POST", headers: { "Content-Type": "image/jpeg", Authorization: "Bearer " + tok }, body: blob });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.error) throw new Error(j.error?.message || "Upload failed");
+          wpValue = j.data.url;
         } else {
-          wpValue = c.toDataURL("image/jpeg", .82);
+          wpValue = c.toDataURL("image/jpeg", 0.72);
         }
         await saveTheme({ wallpaper: wpValue });
         renderSettings();
@@ -190,7 +202,7 @@ $("st-wp-file").onchange = e => {
         $("st-wp-upload").disabled = false;
         e.target.value = "";
       }
-    }, "image/jpeg", .82);
+    }, "image/jpeg", 0.82);
   };
   img.onerror = () => {
     URL.revokeObjectURL(objUrl);
@@ -200,7 +212,8 @@ $("st-wp-file").onchange = e => {
 };
 $("st-reset").onclick = async () => {
   localStorage.removeItem("wt_theme");
-  activeProfileTheme = null;
+  activeProfileTheme = {};
+  if (window.wtApplySpinShapes) window.wtApplySpinShapes(false);
   applyTheme({});
   if (sb && user) { try { await sb.from("profiles").update({ theme: {} }).eq("id", user.id); } catch {} }
   renderSettings();

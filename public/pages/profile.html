@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Web Tok · Profile</title>
-<link rel="icon" href="/logo.png">
+<link rel="icon" href="/images/logo.png">
 <link rel="stylesheet" href="/css/profile-base.css">
 <link rel="stylesheet" href="/css/profile.css">
 <link rel="stylesheet" href="/css/profile-dialogs.css">
@@ -16,8 +16,8 @@
 <div id="wp-scrim"></div>
 
 <div id="bar">
-  <a class="chip" href="/scroll"><span class="ms">arrow_back</span>Feed</a>
-  <button class="chip p hidden" id="openUpload"><span class="ms">add</span>Upload</button>
+  <a class="chip" href="/scroll">← Feed</a>
+  <button class="chip p hidden" id="openUpload">+ Upload</button>
 </div>
 
 <main class="acct-wrap">
@@ -62,12 +62,12 @@
 <dialog id="switchDlg">
   <div class="dlg-head">
     <h2>Switch account</h2>
-    <button class="btn icon" aria-label="Close" onclick="document.getElementById('switchDlg').close()"><span class="ms">close</span></button>
+    <button class="btn icon" onclick="document.getElementById('switchDlg').close()">✕</button>
   </div>
   <div class="u-list" id="sw-list"></div>
   <div class="hint" id="sw-hint"></div>
   <div class="row" style="justify-content:space-between">
-    <a class="btn tonal sm" href="/login?add=1" style="text-decoration:none"><span class="ms" style="font-size:18px">person_add</span>Add account</a>
+    <a class="btn tonal sm" href="/login?add=1" style="text-decoration:none">+ Add account</a>
     <button class="btn sm" onclick="document.getElementById('switchDlg').close()">Close</button>
   </div>
 </dialog>
@@ -76,7 +76,7 @@
 <dialog id="followListDlg">
   <div class="dlg-head">
     <h2 id="fl-title">Followers</h2>
-    <button class="btn icon" aria-label="Close" onclick="document.getElementById('followListDlg').close()"><span class="ms">close</span></button>
+    <button class="btn icon" onclick="document.getElementById('followListDlg').close()">✕</button>
   </div>
   <div class="u-list" id="fl-list"></div>
 </dialog>
@@ -85,7 +85,7 @@
 <dialog id="uploadDlg">
   <div class="up-top">
     <div style="display:flex;align-items:center;gap:12px">
-      <button type="button" class="btn icon" aria-label="Close" onclick="document.getElementById('uploadDlg').close()"><span class="ms">close</span></button>
+      <button type="button" class="btn icon" onclick="document.getElementById('uploadDlg').close()">✕</button>
       <h2>Upload videos</h2>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
@@ -96,7 +96,7 @@
   <div class="up-body">
     <label class="up-drop" for="upFile">
       <b>Choose videos to upload</b>
-      <span>MP4, WebM, or MOV · Up to 50 MB each · Select multiple at once</span>
+      <span>MP4, WebM, or MOV · Up to 100 MB each · Select multiple at once</span>
     </label>
     <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
     <div class="up-bar-wrap hidden" id="upBarWrap">
@@ -114,9 +114,9 @@
 <dialog id="editProfDlg">
   <div class="dlg-head">
     <h2>Edit profile</h2>
-    <button class="btn icon" aria-label="Close" onclick="document.getElementById('editProfDlg').close()"><span class="ms">close</span></button>
+    <button class="btn icon" onclick="document.getElementById('editProfDlg').close()">✕</button>
   </div>
-  <div class="pfp" id="ep-av" style="margin:0 auto 10px;cursor:pointer;width:88px;height:88px" title="Change avatar"><span class="ms" style="font-size:32px">photo_camera</span></div>
+  <div class="pfp" id="ep-av" style="margin:0 auto 10px;cursor:pointer;width:88px;height:88px" title="Change avatar">📷</div>
   <input type="file" id="ep-file" accept="image/*" hidden>
   <label class="fld">Display name</label>
   <input type="text" id="ep-display" maxlength="40">
@@ -171,6 +171,15 @@
             <button type="button" class="btn sm" id="st-reset">Reset default</button>
           </div>
           <input type="file" id="st-wp-file" accept="image/*" hidden>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding:12px 16px;border-radius:var(--r-lg);background:var(--surface)">
+            <div>
+              <b style="display:block;font-size:14px">Spin all shapes</b>
+              <small style="color:var(--muted);font-size:12px">Spin cookie &amp; sunny borders while keeping photos and icons centered</small>
+            </div>
+            <input type="checkbox" id="st-spin-shapes" style="width:22px;height:22px;accent-color:var(--primary);cursor:pointer">
+          </div>
+
           <div class="hint" id="st-theme-hint"></div>
         </div>
       </section>
@@ -229,6 +238,7 @@
 <script src="/js/profile-theme.js"></script>
 <script src="/js/profile-data.js"></script>
 <script src="/js/profile-follows.js"></script>
+<script src="/js/tags.js"></script>
 <script src="/js/profile-upload.js"></script>
 <script src="/js/profile-edit.js"></script>
 <script src="/js/profile-settings.js"></script>
