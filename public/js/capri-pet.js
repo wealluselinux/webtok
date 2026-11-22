@@ -5,8 +5,8 @@
   const SIZES = { sm: 200, md: 280, lg: 360 };
 
   function getCfg() {
-    try { return { enabled: false, size: "md", cursor: false, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
-    catch { return { enabled: false, size: "md", cursor: false, prompt: "" }; }
+    try { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
+    catch { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "" }; }
   }
   function saveLocal(c) { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); }
 
@@ -41,11 +41,12 @@
       const r = await fetch("/api/secret-settings", { headers: { Authorization: "Bearer " + tok } });
       const j = await r.json().catch(() => ({}));
       if (j?.data) {
-        saveLocal({ enabled: !!j.data.enabled, size: j.data.size || "md", cursor: !!j.data.cursor, prompt: j.data.prompt || "" });
+        saveLocal({ enabled: !!j.data.enabled, size: j.data.size || "md", cursor: !!j.data.cursor, gravityBtn: !!j.data.gravityBtn, prompt: j.data.prompt || "" });
         sync();
+        if (window.wtGravity) window.wtGravity.sync();
       } else {
         const local = getCfg();
-        if (local.enabled || local.cursor || local.size !== "md" || local.prompt) pushToServer(local);
+        if (local.enabled || local.cursor || local.gravityBtn || local.size !== "md" || local.prompt) pushToServer(local);
       }
     } catch {}
   }

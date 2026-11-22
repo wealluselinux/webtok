@@ -86,6 +86,7 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
       enabled: !!b.enabled,
       size: ["sm", "md", "lg"].includes(b.size) ? b.size : "md",
       cursor: !!b.cursor,
+      gravityBtn: !!b.gravityBtn,
       prompt: String(b.prompt || "").trim().slice(0, 600)
     };
     await db.execute({
