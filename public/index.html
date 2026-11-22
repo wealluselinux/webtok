@@ -15,19 +15,26 @@
   <i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i>
   <div class="hero">
     <div class="copy">
-      <div class="brand-row"><img src="/images/logo.png" alt="" width="40" height="40"><span class="logo">Web Tok</span></div>
+      <div class="brand-row" id="wtHomeLogo" style="cursor:pointer;user-select:none;transition:transform .1s"><img src="/images/logo.png" alt="" width="40" height="40"><span class="logo">Web Tok</span></div>
       <h1>Short videos.<br><em>Big</em> vibes.</h1>
       <p class="tag">Scroll for free. Make an account to like, comment, follow, chat with friends and post your own.</p>
       <div class="row">
-        <button class="btn primary big" id="start"><span class="ms">play_arrow</span>Start scrolling</button>
-        <button class="btn big" id="signin">Sign in</button>
+        <a class="btn primary big" href="/scroll"><span class="ms">play_arrow</span>Start scrolling</a>
+        <a class="btn big" id="signin" href="/login">Sign in</a>
       </div>
-      <div class="chips"><span><i class="ms">favorite</i>Like</span><span><i class="ms">group</i>Friends</span><span><i class="ms">chat_bubble</i>Chat</span><span><i class="ms">palette</i>Your theme</span></div>
+      <div class="chips">
+        <span><span class="ms">bolt</span>Instant feed</span>
+        <span><span class="ms">chat</span>Friends &amp; DMs</span>
+        <span><span class="ms">palette</span>Material You themes</span>
+      </div>
     </div>
-    <div class="art" aria-hidden="true">
-      <div class="phone"><span class="ms play">play_arrow</span><div class="bars"><i></i><i></i><i></i></div></div>
-      <div class="fl f1"><span class="ms">favorite</span>2.4k</div>
-      <div class="fl f2"><span class="ms">chat_bubble</span>318</div>
+    <div class="art">
+      <div class="phone">
+        <span class="ms play">play_arrow</span>
+        <div class="bars"><i></i><i></i><i></i></div>
+      </div>
+      <div class="fl f1"><span class="ms">favorite</span>Likes</div>
+      <div class="fl f2"><span class="ms">auto_awesome</span>Custom themes</div>
       <div class="fl f3"><span class="ms">group</span>Friends</div>
     </div>
   </div>
@@ -40,5 +47,23 @@
 <script src="/js/theme.js"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/landing.js"></script>
+<script>
+(function(){
+  const logo = document.getElementById("wtHomeLogo");
+  if (!logo) return;
+  let taps = 0, tmr = 0;
+  logo.addEventListener("click", () => {
+    clearTimeout(tmr);
+    taps++;
+    logo.style.transform = "scale(0.95)";
+    setTimeout(() => logo.style.transform = "", 90);
+    tmr = setTimeout(() => { taps = 0; }, 3500);
+    if (taps >= 10) {
+      taps = 0;
+      if (window.openSecretSettings) window.openSecretSettings();
+    }
+  });
+})();
+</script>
 </body>
 </html>

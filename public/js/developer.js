@@ -1,4 +1,4 @@
-/* Web Tok /developer Studio: Python, Scratch Blocks, HTML/JS + AI Game Builder */
+/* Web Tok /developer Studio: Python, Scratch Blocks, HTML/JS + Update Section + AI Game Builder */
 let curLang = "python", curGameId = null, myTok = null;
 
 const STARTERS = {
@@ -62,6 +62,15 @@ function buildScratchDoc(jsCode) {
     try{${jsCode}}catch(e){ctx.fillStyle="#ff8a80";ctx.font="14px monospace";ctx.fillText(e.message,12,24)}<\/script></body></html>`;
 }
 
+function syncEditingUi(title) {
+  const isEdit = !!curGameId;
+  $("editingBadge").textContent = isEdit ? `Editing: ${title || $("gTitle").value.trim() || "Saved Game"}` : "New Project";
+  $("btnUpdateGame").classList.toggle("hidden", !isEdit);
+  $("btnPub").innerHTML = isEdit
+    ? '<span class="ms" style="font-size:18px">publish</span>Publish Update'
+    : '<span class="ms" style="font-size:18px">publish</span>Save &amp; Publish';
+}
+
 async function switchLang(lang) {
   curLang = lang;
   document.querySelectorAll(".ltab").forEach(b => b.classList.toggle("on", b.dataset.lang === lang));
@@ -92,15 +101,22 @@ async function loadMyGames() {
   try {
     const r = await fetch("/api/games/mine", { headers: { Authorization: "Bearer " + myTok } });
     const j = await r.json();
+    const rows = j.data || [];
     const bar = $("myGamesBar"); bar.innerHTML = "";
-    (j.data || []).forEach(g => {
-      const chip = document.createElement("div"); chip.className = "my-chip";
-      chip.innerHTML = `<span>${escapeHtml(g.title)} (${g.lang})</span><span class="ms" style="font-size:15px" data-del="1">close</span>`;
+    if (!rows.length) {
+      bar.innerHTML = '<span style="font-size:12px;color:var(--muted)">No saved games yet — publish a game below and it will appear here so you can update it anytime.</span>';
+      return;
+    }
+    rows.forEach(g => {
+      const chip = document.createElement("div");
+      chip.className = "my-chip" + (curGameId === g.id ? " on" : "");
+      chip.title = "Click to load and update this game";
+      chip.innerHTML = `<span class="ms" style="font-size:15px;color:var(--primary)">edit</span><span>${escapeHtml(g.title)}</span><small>${escapeHtml(g.lang)}</small><span class="ms" style="font-size:15px;opacity:.7" data-del="1" title="Delete">close</span>`;
       chip.onclick = async e => {
         if (e.target.dataset.del) {
           if (!(await wtConfirm({ title: "Delete game?", message: `Delete "${g.title}"?`, danger: true }))) return;
           await fetch(`/api/games/${encodeURIComponent(g.id)}`, { method: "DELETE", headers: { Authorization: "Bearer " + myTok } });
-          if (curGameId === g.id) curGameId = null;
+          if (curGameId === g.id) { curGameId = null; syncEditingUi(); }
           return loadMyGames();
         }
         curGameId = g.id;
@@ -108,6 +124,8 @@ async function loadMyGames() {
         await switchLang(g.lang);
         if (g.lang === "scratch") setScratchXml(g.workspace_xml);
         else $("codeEd").value = g.code;
+        syncEditingUi(g.title);
+        loadMyGames();
         runPreview();
       };
       bar.appendChild(chip);
@@ -143,6 +161,29 @@ async function askAi(mode) {
   } finally { $("btnAiHelp").disabled = $("btnAiBuild").disabled = false; }
 }
 
+async function saveOrUpdateGame() {
+  const title = $("gTitle").value.trim();
+  if (!title) return wtAlert({ title: "Title needed", message: "Give your game a title before saving." });
+  const code = curLang === "scratch" ? getScratchJs() : $("codeEd").value;
+  const workspace_xml = curLang === "scratch" ? getScratchXml() : "";
+  const wasUpdate = !!curGameId;
+  $("btnPub").disabled = $("btnUpdateGame").disabled = true;
+  try {
+    const r = await fetch("/api/games", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + myTok },
+      body: JSON.stringify({ id: curGameId, title, description: $("gDesc").value.trim(), lang: curLang, code, workspace_xml, published: true })
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Could not save game");
+    curGameId = j.data.id;
+    syncEditingUi(title);
+    await loadMyGames();
+    await wtAlert({ title: wasUpdate ? "Game Updated!" : "Published!", message: `"${title}" is live in Mini Games.` });
+  } catch (e) { await wtAlert({ title: "Error", message: e.message }); }
+  finally { $("btnPub").disabled = $("btnUpdateGame").disabled = false; }
+}
+
 // Resizable coding area (drag divider + Expand toggle + Blockly auto-resize)
 const savedPrevW = Number(localStorage.getItem("wt_dev_prev_w") || 0);
 if (savedPrevW >= 280 && savedPrevW <= 760) $("prevPane").style.width = savedPrevW + "px";
@@ -171,35 +212,22 @@ new ResizeObserver(() => { if (typeof blocklyWs !== "undefined" && blocklyWs) Bl
 $("langTabs").onclick = e => { const b = e.target.closest(".ltab"); if (b) switchLang(b.dataset.lang); };
 $("btnRun").onclick = runPreview;
 $("btnResetTpl").onclick = () => { if (curLang === "scratch") loadDefaultScratchBlocks(); else $("codeEd").value = STARTERS[curLang]; runPreview(); };
+$("btnNewGame").onclick = () => {
+  curGameId = null; $("gTitle").value = ""; $("gDesc").value = "";
+  if (curLang === "scratch") loadDefaultScratchBlocks(); else $("codeEd").value = STARTERS[curLang];
+  syncEditingUi(); loadMyGames(); runPreview();
+};
 $("btnAiHelp").onclick = () => askAi("help");
 $("btnAiBuild").onclick = () => askAi("build");
-
-$("btnPub").onclick = async () => {
-  const title = $("gTitle").value.trim();
-  if (!title) return wtAlert({ title: "Title needed", message: "Give your game a title before publishing." });
-  const code = curLang === "scratch" ? getScratchJs() : $("codeEd").value;
-  const workspace_xml = curLang === "scratch" ? getScratchXml() : "";
-  $("btnPub").disabled = true;
-  try {
-    const r = await fetch("/api/games", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + myTok },
-      body: JSON.stringify({ id: curGameId, title, description: $("gDesc").value.trim(), lang: curLang, code, workspace_xml, published: true })
-    });
-    const j = await r.json();
-    if (!r.ok || j.error) throw new Error(j.error?.message || "Could not publish");
-    curGameId = j.data.id;
-    await loadMyGames();
-    await wtAlert({ title: "Published!", message: `"${title}" is now live in Mini Games.` });
-  } catch (e) { await wtAlert({ title: "Error", message: e.message }); }
-  finally { $("btnPub").disabled = false; }
-};
+$("btnPub").onclick = saveOrUpdateGame;
+$("btnUpdateGame").onclick = saveOrUpdateGame;
 
 (async () => {
   const { data } = await sb.auth.getSession();
   if (!data?.session) { location.href = "/login"; return; }
   myTok = data.session.access_token;
   $("codeEd").value = STARTERS.python;
+  syncEditingUi();
   runPreview();
   loadMyGames();
 })();

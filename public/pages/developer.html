@@ -17,6 +17,15 @@ body{overflow:auto;padding:20px 16px 90px}
 .lang-tabs{display:flex;gap:4px;background:var(--surface);padding:4px;border-radius:999px}
 .ltab{border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:700;padding:8px 14px;border-radius:999px;cursor:pointer}
 .ltab.on{background:var(--primary);color:var(--on-primary)}
+.upd-box{background:var(--card);border-radius:var(--r-xl);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.upd-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.upd-head-l{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.upd-badge{font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;background:var(--surface);color:var(--primary)}
+.my-list{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.my-chip{display:inline-flex;align-items:center;gap:8px;background:var(--surface);padding:8px 13px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;border:2px solid transparent;transition:transform .15s,border-color .15s}
+.my-chip:hover{transform:translateY(-1px)}
+.my-chip.on{border-color:var(--primary);background:var(--bg)}
+.my-chip small{color:var(--muted);font-weight:600;text-transform:uppercase;font-size:10px}
 .dev-grid{display:flex;gap:0;align-items:stretch}
 .pane{background:var(--card);border-radius:var(--r-xl);padding:16px;display:flex;flex-direction:column;gap:10px;min-height:520px}
 #edPane{flex:1 1 auto;min-width:280px}
@@ -33,8 +42,6 @@ body{overflow:auto;padding:20px 16px 90px}
 .ai-row{display:flex;gap:8px;flex-wrap:wrap}
 .ai-row input{flex:1;min-width:200px;background:var(--bg);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
 #aiOut{font-size:13px;line-height:1.5;color:var(--text);background:var(--surface);padding:12px 14px;border-radius:18px;white-space:pre-wrap;max-height:180px;overflow-y:auto}
-.my-list{display:flex;gap:8px;flex-wrap:wrap}
-.my-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
 .hidden{display:none!important}
 </style>
 </head>
@@ -51,6 +58,20 @@ body{overflow:auto;padding:20px 16px 90px}
     </div>
   </div>
 
+  <div class="upd-box" id="updateSection">
+    <div class="upd-head">
+      <div class="upd-head-l">
+        <b style="display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">system_update_alt</span>Update Your Game / App</b>
+        <span class="upd-badge" id="editingBadge">New Project</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="btn sm" id="btnNewGame"><span class="ms" style="font-size:16px">add</span>New Game</button>
+        <button type="button" class="btn primary sm hidden" id="btnUpdateGame"><span class="ms" style="font-size:16px">save</span>Save Update</button>
+      </div>
+    </div>
+    <div class="my-list" id="myGamesBar"><span style="font-size:12px;color:var(--muted)">Loading your games…</span></div>
+  </div>
+
   <div class="dev-bar">
     <div class="lang-tabs" id="langTabs">
       <button type="button" class="ltab on" data-lang="python">Python</button>
@@ -60,8 +81,6 @@ body{overflow:auto;padding:20px 16px 90px}
     <input id="gTitle" maxlength="60" placeholder="Game title (e.g. Space Dodger)">
     <input id="gDesc" maxlength="160" placeholder="Short description (optional)">
   </div>
-
-  <div class="my-list" id="myGamesBar"></div>
 
   <div class="dev-grid" id="devGrid">
     <div class="pane" id="edPane">
