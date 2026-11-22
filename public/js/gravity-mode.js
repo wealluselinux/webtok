@@ -1,4 +1,4 @@
-/* Interactive Gravity Mode: gravifies all page elements (including Profile & Capri) with optional element-to-element collision */
+/* Interactive Gravity Mode: gravifies all page elements (including Profile & Capri with full spin & tossed sprite) */
 (function () {
   if (window.wtGravity) return;
 
@@ -6,6 +6,13 @@
 
   function getCfg() {
     try { return JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}"); } catch { return {}; }
+  }
+
+  function setCapriPose(el, pose) {
+    if (el.id !== "wt-capri") return;
+    const im = el.querySelector("img");
+    const src = `/images/capri_assets/${pose}.webp`;
+    if (im && !im.src.endsWith(src)) im.src = src;
   }
 
   function collectElements() {
@@ -76,12 +83,13 @@
       el.style.cursor = "grab";
       el.style.userSelect = "none";
       el.style.zIndex = el.id === "wt-capri" ? "9998" : "900";
+      if (el.id === "wt-capri") setCapriPose(el, "tossed");
       const obj = {
         el, orig, r,
         dx: 0, dy: 0,
         vx: (Math.random() - 0.5) * 4,
         vy: Math.random() * 2,
-        rot: 0, vr: el.id === "wt-capri" ? 0 : (Math.random() - 0.5) * 1.4,
+        rot: 0, vr: (Math.random() - 0.5) * 2.2,
         dragging: false
       };
       el._wtGravDown = e => {
@@ -92,6 +100,7 @@
         lx = e.clientX; ly = e.clientY;
         el.style.cursor = "grabbing";
         el.style.zIndex = "9999";
+        if (el.id === "wt-capri") setCapriPose(el, "dangle");
       };
       el.addEventListener("pointerdown", el._wtGravDown);
       return obj;
@@ -121,7 +130,7 @@
           if (curTop < 0) { it.dy -= curTop; it.vy = Math.abs(it.vy) * 0.4; }
           if (curBottom >= H - 4) {
             it.dy -= (curBottom - (H - 4));
-            if (Math.abs(it.vy) > 3.2) { it.vy = -it.vy * 0.36; it.vr = it.el.id === "wt-capri" ? 0 : (Math.random() - 0.5) * 2; }
+            if (Math.abs(it.vy) > 3.2) { it.vy = -it.vy * 0.36; it.vr = (Math.random() - 0.5) * 3; }
             else { it.vy = 0; it.vx *= 0.85; it.vr *= 0.7; }
           }
         }
@@ -130,7 +139,7 @@
       for (const it of items) {
         if (it.el.id === "wt-capri") {
           const tx = Math.round(it.r.left + it.dx), ty = Math.round(it.r.top + it.dy);
-          it.el.style.transform = `translate3d(${tx}px,${ty}px,0)`;
+          it.el.style.transform = `translate3d(${tx}px,${ty}px,0) rotate(${it.rot.toFixed(1)}deg)`;
         } else {
           it.el.style.transform = `translate3d(${it.dx.toFixed(1)}px,${it.dy.toFixed(1)}px,0) rotate(${it.rot.toFixed(1)}deg)`;
         }
@@ -148,6 +157,7 @@
     for (const it of items) {
       it.el.removeEventListener("pointerdown", it.el._wtGravDown);
       delete it.el._wtGravDown;
+      if (it.el.id === "wt-capri") setCapriPose(it.el, "idle");
       it.el.style.transition = "transform .45s cubic-bezier(.2,.9,.3,1.1)";
       it.el.style.transform = it.orig.transform || "";
       setTimeout(() => {
@@ -167,11 +177,13 @@
     dragItem.dx += mx; dragItem.dy += my;
     dragItem.vx = Math.max(-22, Math.min(22, mx * 0.85));
     dragItem.vy = Math.max(-22, Math.min(22, my * 0.85));
+    dragItem.vr = Math.max(-12, Math.min(12, mx * 0.45));
     lx = e.clientX; ly = e.clientY;
   });
   addEventListener("pointerup", () => {
     if (!dragItem) return;
     dragItem.dragging = false;
+    if (dragItem.el.id === "wt-capri") setCapriPose(dragItem.el, "tossed");
     dragItem.el.style.cursor = "grab";
     dragItem.el.style.zIndex = dragItem.el.id === "wt-capri" ? "9998" : "900";
     dragItem = null;
