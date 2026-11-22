@@ -1,12 +1,13 @@
 /* Material You Secret Settings Modal (unlocked by 10 clicks on WebTok homepage logo) */
 (function () {
   function getCfg() {
-    try { return { enabled: false, size: "md", cursor: false, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
-    catch { return { enabled: false, size: "md", cursor: false, prompt: "" }; }
+    try { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
+    catch { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "" }; }
   }
   function saveCfg(c) {
     if (window.wtCapri?.save) window.wtCapri.save(c);
     else { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); window.wtCapri?.sync(); }
+    window.wtGravity?.sync();
   }
 
   window.openSecretSettings = function () {
@@ -77,6 +78,10 @@
             <div><b style="font-size:14px">Capri Custom Cursor</b><div style="font-size:12px;color:var(--muted)">Use Capri's custom pointer</div></div>
             <button type="button" class="ss-switch" id="ssCurTog" aria-label="Toggle Capri Cursor"></button>
           </div>
+          <div class="ss-row">
+            <div><b style="font-size:14px">Gravity</b><div style="font-size:12px;color:var(--muted)">Show Activate Gravity button at bottom of screen</div></div>
+            <button type="button" class="ss-switch" id="ssGravTog" aria-label="Toggle Gravity Button"></button>
+          </div>
           <div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
               <span style="font-size:12px;font-weight:700;color:var(--muted)">Capri AI Prompt (optional)</span>
@@ -92,12 +97,14 @@
         const c = getCfg();
         dlg.querySelector("#ssCapriTog").classList.toggle("on", !!c.enabled);
         dlg.querySelector("#ssCurTog").classList.toggle("on", !!c.cursor);
+        dlg.querySelector("#ssGravTog").classList.toggle("on", !!c.gravityBtn);
         dlg.querySelector("#ssPrompt").value = c.prompt || "";
         dlg.querySelectorAll("#ssSizeSeg button").forEach(b => b.classList.toggle("on", b.dataset.sz === c.size));
       };
       dlg.querySelector("#ssClose").onclick = () => dlg.close();
       dlg.querySelector("#ssCapriTog").onclick = () => { const c = getCfg(); c.enabled = !c.enabled; saveCfg(c); paint(); };
       dlg.querySelector("#ssCurTog").onclick = () => { const c = getCfg(); c.cursor = !c.cursor; saveCfg(c); paint(); };
+      dlg.querySelector("#ssGravTog").onclick = () => { const c = getCfg(); c.gravityBtn = !c.gravityBtn; saveCfg(c); paint(); };
       dlg.querySelector("#ssSavePrompt").onclick = () => {
         const c = getCfg(); c.prompt = dlg.querySelector("#ssPrompt").value.trim(); saveCfg(c);
         const btn = dlg.querySelector("#ssSavePrompt"); btn.textContent = "Saved!"; setTimeout(() => btn.textContent = "Save Prompt", 1400);

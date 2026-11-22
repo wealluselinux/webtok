@@ -1,6 +1,6 @@
-/* Custom Material You Dialogs (replaces browser alert / confirm / prompt) + global Capri, Spin Shapes & Layout Prefs loader */
+/* Custom Material You Dialogs (replaces browser alert / confirm / prompt) + global Capri, Gravity, Spin Shapes & Layout Prefs loader */
 (function initM3Dialogs() {
-  for (const src of ["/js/capri-pet.js", "/js/spin-shapes.js", "/js/layout-prefs.js"]) {
+  for (const src of ["/js/capri-pet.js", "/js/gravity-mode.js", "/js/spin-shapes.js", "/js/layout-prefs.js"]) {
     if (!document.querySelector(`script[src="${src}"]`)) {
       const s = document.createElement("script"); s.src = src; document.head.appendChild(s);
     }
