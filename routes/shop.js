@@ -321,7 +321,9 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     rows.forEach(r => {
       const cat = CATALOG.find(x => x.id === r.item_id);
       const ow = owned.find(x => x.user_id === r.user_id && x.item_id === r.item_id);
-      out[r.video_id] = ow ? { ...cat, ...ow } : (cat || null);
+      out[r.video_id] = ow
+        ? { ...cat, ...ow, image_url: ow.image_url || cat?.image_url || null, sprite: cat?.sprite || null }
+        : (cat || null);
     });
     return { data: out, error: null };
   }));
@@ -337,7 +339,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
       if (!id) return null;
       const cat = CATALOG.find(x => x.id === id);
       const ow = owned.find(x => x.item_id === id);
-      return ow ? { ...cat, ...ow } : (cat || null);
+      return ow ? { ...cat, ...ow, image_url: ow.image_url || cat?.image_url || null, sprite: cat?.sprite || null } : (cat || null);
     };
     return { data: { avatar: find(eq.avatar_deco), profile: find(eq.profile_deco) }, error: null };
   }));

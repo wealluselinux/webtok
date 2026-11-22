@@ -17,7 +17,7 @@
     .rail-av{order:-10!important;clip-path:var(--m3-cookie-7)!important;background:var(--card) center/cover;color:var(--primary);font-weight:700;font-size:18px;text-decoration:none}
     .rail-snd{order:99!important;text-decoration:none;color:var(--text);padding:4px}
     .rail-snd small{max-width:54px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
-    .wt-vid-banner{position:absolute;top:12px;left:12px;right:12px;z-index:3;padding:8px 14px;border-radius:18px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#16121e;box-shadow:0 6px 20px #0005;pointer-events:none;overflow:hidden}
+    .wt-vid-banner{position:absolute;top:12px;left:12px;right:12px;z-index:5;padding:8px 14px;border-radius:18px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#16121e;box-shadow:0 6px 20px #0005;pointer-events:none;overflow:hidden}
     .wt-vid-banner img{height:28px;width:auto;border-radius:8px;object-fit:contain}
   `;
   document.head.appendChild(style);
@@ -89,10 +89,12 @@
     const [profMap, bannerMap, sounds] = await Promise.all([
       (async () => {
         const m = {};
-        if (usernames.length && typeof sb !== "undefined") {
-          const { data } = await sb.from("profiles").select("username,display_name,avatar_url").in("username", [...new Set(usernames)]);
-          (data || []).forEach(p => { m[p.username] = p; });
-        }
+        try {
+          if (usernames.length && typeof sb !== "undefined") {
+            const res = await sb.from("profiles").select("username,display_name,avatar_url").in("username", [...new Set(usernames)]);
+            (res?.data || []).forEach(p => { m[p.username] = p; });
+          }
+        } catch {}
         return m;
       })(),
       (async () => {
@@ -121,7 +123,7 @@
 
       if (rail && !rail.querySelector(".rail-snd")) {
         const capTxt = (s.querySelector(".cap-t")?.textContent || "").toLowerCase();
-        const match = sounds.find(sn => sn.title && capTxt.includes(sn.title.toLowerCase()));
+        const match = Array.isArray(sounds) ? sounds.find(sn => sn.title && capTxt.includes(sn.title.toLowerCase())) : null;
         const sndLabel = match ? match.title : "Original sound";
         const snd = document.createElement("a");
         snd.className = "fab rail-snd";
@@ -140,15 +142,16 @@
           el.style.background = "linear-gradient(90deg,#ff1744,#16121e,#00e676)";
           el.style.color = "#fff";
           el.style.border = "1px solid #ff1744";
+        } else if (bn.style === "cyber") {
+          el.style.background = "linear-gradient(90deg,#00e5ff,#ff4081)";
+          el.style.color = "#fff";
         } else {
-          el.style.background = bn.style === "cyber"
-            ? "linear-gradient(90deg,#00e5ff,#ff4081)"
-            : `linear-gradient(90deg, ${bn.color || "#d0bcff"}, var(--accent,#ffd8e4))`;
+          el.style.background = `linear-gradient(90deg, ${bn.color || "#d0bcff"}, var(--accent,#ffd8e4))`;
         }
         const imgSrc = bn.image_url || bn.sprite;
         el.innerHTML = imgSrc
-          ? `<img src="${imgSrc}" alt=""><span>${bn.name.replace(/</g, "&lt;")}</span>`
-          : `<span class="ms fill" style="font-size:18px">${bn.icon || "auto_awesome"}</span><span>${bn.name.replace(/</g, "&lt;")}</span>`;
+          ? `<img src="${imgSrc}" alt=""><span>${(bn.name || "Banner").replace(/</g, "&lt;")}</span>`
+          : `<span class="ms fill" style="font-size:18px">${bn.icon || "auto_awesome"}</span><span>${(bn.name || "Banner").replace(/</g, "&lt;")}</span>`;
         player.appendChild(el);
       }
     });
@@ -157,6 +160,8 @@
   const feedEl = document.getElementById("feed");
   if (feedEl) {
     new MutationObserver(() => enhanceSlides()).observe(feedEl, { childList: true });
+    enhanceSlides();
     setTimeout(enhanceSlides, 300);
+    setTimeout(enhanceSlides, 900);
   }
 })();

@@ -20,6 +20,8 @@ body{overflow:auto;padding:24px 16px 96px}
 .s-card{background:var(--card);border-radius:var(--r-xl);padding:18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 18px #0001}
 .s-prev{width:64px;height:64px;clip-path:var(--m3-cookie-7);background:var(--surface);display:grid;place-items:center;font-size:28px;position:relative;flex:none;overflow:hidden}
 .s-prev img{width:100%;height:100%;object-fit:contain}
+.s-banner-prev{padding:8px 12px;border-radius:14px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#16121e;box-shadow:0 4px 12px #0002;overflow:hidden}
+.s-banner-prev img{height:24px;width:auto;border-radius:6px;object-fit:contain}
 .s-top{display:flex;align-items:center;gap:12px}
 .s-meta b{display:block;font-size:16px}
 .s-meta small{color:var(--primary);font-weight:700;font-size:12px}
@@ -169,6 +171,23 @@ function videoOptionsHtml(selectedId = "") {
   return vids.map(v => `<option value="${escapeHtml(v.id)}" ${v.id === selectedId ? "selected" : ""}>${escapeHtml(v.title || "Untitled video")}</option>`).join("");
 }
 
+function bannerPreviewHtml(item) {
+  const imgSrc = item.image_url || item.sprite;
+  let bg = `linear-gradient(90deg, ${escapeHtml(item.color || "#d0bcff")}, var(--accent,#ffd8e4))`;
+  let col = "#16121e", border = "none";
+  if (item.style === "capri") {
+    bg = "linear-gradient(90deg,#ff1744,#16121e,#00e676)";
+    col = "#fff"; border = "1px solid #ff1744";
+  } else if (item.style === "cyber") {
+    bg = "linear-gradient(90deg,#00e5ff,#ff4081)";
+    col = "#fff";
+  }
+  const inner = imgSrc
+    ? `<img src="${escapeHtml(imgSrc)}" alt=""><span>${escapeHtml(item.name)}</span>`
+    : `<span class="ms fill" style="font-size:18px">${escapeHtml(item.icon || "auto_awesome")}</span><span>${escapeHtml(item.name)}</span>`;
+  return `<div class="s-banner-prev" style="background:${bg};color:${col};border:${border}">${inner}</div>`;
+}
+
 function renderBundles() {
   const box = $("bundleBox"); box.innerHTML = "";
   const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
@@ -216,8 +235,8 @@ function renderGrid(elId, items, slot) {
       ? `<img src="${escapeHtml(imgSrc)}" alt="">`
       : `<span class="ms fill" style="font-size:28px;color:${escapeHtml(item.color || "var(--primary)")}">${escapeHtml(item.icon || "auto_awesome")}</span>`;
 
-    const appliedVid = slot === "banner" ? (shopState.videoBanners || []).find(b => b.item_id === id)?.video_id : "";
-    const vidSelectHtml = slot === "banner" ? `<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>` : "";
+    const appliedVid = slot === "banner" ? (shopState.videoBanners || []).find(b => b.item_id === id)?.video_id || "" : "";
+    const vidSelectHtml = slot === "banner" ? `${bannerPreviewHtml(item)}<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>` : "";
 
     card.innerHTML = `
       <div class="s-top">
@@ -228,10 +247,25 @@ function renderGrid(elId, items, slot) {
       ${vidSelectHtml}
       <div class="s-foot">
         <span style="font-size:12px;color:var(--muted)">${slot === "banner" ? (appliedVid ? "Applied to video" : "Pick video") : (equipped ? "Currently equipped" : "")}</span>
-        <button type="button" class="btn ${(slot !== "banner" && equipped) ? "" : "primary"} sm">${slot === "banner" ? (owned ? "Apply Banner" : `Buy (${item.price})`) : (equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`)}</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${slot === "banner" && appliedVid ? `<button type="button" class="btn sm" data-act="remove">Remove</button>` : ""}
+          <button type="button" class="btn ${(slot !== "banner" && equipped) ? "" : "primary"} sm" data-act="main">${slot === "banner" ? (owned ? "Apply Banner" : `Buy (${item.price})`) : (equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`)}</button>
+        </div>
       </div>`;
 
-    card.querySelector("button").onclick = async () => {
+    const rmBtn = card.querySelector('[data-act="remove"]');
+    if (rmBtn) {
+      rmBtn.onclick = async () => {
+        try {
+          await apiShop("/api/shop/equip-banner", { method: "POST", body: JSON.stringify({ videoId: appliedVid, itemId: null }) });
+          await loadShop();
+        } catch (e) {
+          if (window.wtAlert) await wtAlert({ title: "Shop", message: e.message });
+        }
+      };
+    }
+
+    card.querySelector('[data-act="main"]').onclick = async () => {
       try {
         if (slot === "banner") {
           const videoId = card.querySelector(".s-vid-sel")?.value || "";
