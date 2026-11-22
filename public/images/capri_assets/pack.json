@@ -1,0 +1,57 @@
+{
+  "smooth": true,
+  "height": 300,
+  "heights": {
+    "idle": 333,
+    "talk": 333,
+    "walk": 333,
+    "grin": 333,
+    "glitch": 333,
+    "dangle": 333,
+    "sleep": 333,
+    "tossed": 333,
+    "perch": 328,
+    "perch_talk": 328,
+    "perch_music": 328
+  },
+  "poses": {
+    "idle": "idle.webp",
+    "talk": "talk.webp",
+    "walk": "walk.webp",
+    "grin": "grin.webp",
+    "glitch": "glitch.webp",
+    "dangle": "dangle.webp",
+    "sleep": "sleep.webp",
+    "perch": "perch.webp",
+    "perch_talk": "perch_talk.webp",
+    "perch_music": "perch_music.webp",
+    "tossed": "tossed.webp"
+  },
+  "roles": {
+    "idle": "idle",
+    "walk": "walk",
+    "talk": "talk",
+    "perch": [
+      "perch"
+    ],
+    "ground": [
+      "idle"
+    ],
+    "play": [
+      "grin",
+      "glitch"
+    ],
+    "hover": "grin",
+    "poke": "glitch",
+    "working": "glitch",
+    "sleep": "sleep",
+    "music": "perch_music",
+    "drag": "tossed"
+  },
+  "seat": {
+    "perch": 0.721,
+    "perch_talk": 0.721,
+    "perch_music": 0.721
+  },
+  "cursor": "cursor.png"
+}
