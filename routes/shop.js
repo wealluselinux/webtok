@@ -39,6 +39,17 @@ const BUNDLES = [
 ];
 
 module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, nowIso }) {
+  // Remove 20-minute post-login video upload cooldown while preserving new-device login alerts
+  db.execute("UPDATE users SET last_login_at = NULL WHERE last_login_at IS NOT NULL").catch(() => {});
+  const origRecordLogin = app.locals.recordLoginDevice;
+  if (origRecordLogin) {
+    app.locals.recordLoginDevice = async (uid, req, isSignup = false) => {
+      await db.execute({ sql: "UPDATE users SET last_login_at = NULL WHERE id = ?", args: [uid] }).catch(() => {});
+      if (app.locals.forgetUser) app.locals.forgetUser(uid);
+      return origRecordLogin(uid, req, isSignup);
+    };
+  }
+
   let ready = false;
   async function ensureTables() {
     if (ready) return;
