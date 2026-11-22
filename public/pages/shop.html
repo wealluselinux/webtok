@@ -33,7 +33,9 @@ body{overflow:auto;padding:24px 16px 96px}
 .bundle-art img{height:80px;width:auto;object-fit:contain}
 .custom-box{background:var(--card);border-radius:var(--r-xl);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 18px #0001}
 .c-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.c-row input[type=text],.c-row select{flex:1;min-width:170px;background:var(--surface);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
+.c-row input[type=text],.c-row input[type=number],.c-row select{flex:1;min-width:150px;background:var(--surface);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
+.xfer-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.xfer-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-radius:16px;background:var(--surface);font-size:12px}
 .hidden{display:none!important}
 </style>
 </head>
@@ -56,6 +58,21 @@ body{overflow:auto;padding:24px 16px 96px}
 
   <div class="sec-h">Featured Bundle</div>
   <div id="bundleBox"></div>
+
+  <div class="custom-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <b style="font-size:17px;display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">send</span>Send Tok Coins</b>
+      <span style="font-size:12px;color:var(--muted)">Transfer coins to another user</span>
+    </div>
+    <div class="c-row">
+      <input type="text" id="xferUser" maxlength="32" placeholder="Recipient @username">
+      <input type="number" id="xferAmt" min="1" max="1000000000" placeholder="Amount">
+      <input type="text" id="xferNote" maxlength="100" placeholder="Note (optional)">
+      <button type="button" class="btn primary sm" id="xferBtn">Send Coins</button>
+    </div>
+    <div class="hint" id="xferHint"></div>
+    <div class="xfer-list hidden" id="xferList"></div>
+  </div>
 
   <div class="custom-box">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
@@ -188,6 +205,19 @@ function bannerPreviewHtml(item) {
   return `<div class="s-banner-prev" style="background:${bg};color:${col};border:${border}">${inner}</div>`;
 }
 
+function renderTransfers() {
+  const list = $("xferList");
+  const rows = shopState?.transfers || [];
+  if (!rows.length) { list.classList.add("hidden"); list.innerHTML = ""; return; }
+  list.classList.remove("hidden");
+  list.innerHTML = rows.map(t => {
+    const isSent = t.from_user_id === uid;
+    const who = isSent ? `to @${escapeHtml(t.to_username || "user")}` : `from @${escapeHtml(t.from_username || "user")}`;
+    const noteHtml = t.note ? ` · "${escapeHtml(t.note)}"` : "";
+    return `<div class="xfer-row"><span>${isSent ? "Sent" : "Received"} ${who}${noteHtml}</span><b style="color:${isSent ? "var(--bad,#b3261e)" : "var(--ok,#2e7d4f)"}">${isSent ? "-" : "+"}${Number(t.amount).toLocaleString()}</b></div>`;
+  }).join("");
+}
+
 function renderBundles() {
   const box = $("bundleBox"); box.innerHTML = "";
   const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
@@ -292,6 +322,7 @@ async function loadShop() {
   $("earnStats").textContent = `${shopState.likesCount} likes + ${shopState.commentsCount} comments · ${shopState.earned} earned · ${shopState.spent} spent`;
   $("custVideo").innerHTML = videoOptionsHtml();
   renderBundles();
+  renderTransfers();
   const customAv = (shopState.owned || []).filter(x => x.is_custom && x.slot === "avatar");
   const customPr = (shopState.owned || []).filter(x => x.is_custom && x.slot === "profile");
   const customBn = (shopState.owned || []).filter(x => x.is_custom && x.slot === "banner");
@@ -299,6 +330,24 @@ async function loadShop() {
   renderGrid("profileGrid", [...customPr, ...shopState.catalog.filter(x => x.slot === "profile")], "profile");
   renderGrid("bannerGrid", [...customBn, ...shopState.catalog.filter(x => x.slot === "banner")], "banner");
 }
+
+$("xferBtn").onclick = async () => {
+  const username = $("xferUser").value.trim();
+  const amount = Math.floor(Number($("xferAmt").value));
+  const note = $("xferNote").value.trim();
+  const hint = $("xferHint");
+  if (!username) { hint.textContent = "Enter a @username."; hint.className = "hint bad"; return; }
+  if (!amount || amount < 1) { hint.textContent = "Enter 1 or more Tok Coins."; hint.className = "hint bad"; return; }
+  $("xferBtn").disabled = true; hint.textContent = "Sending Tok Coins…"; hint.className = "hint";
+  try {
+    const res = await apiShop("/api/shop/transfer", { method: "POST", body: JSON.stringify({ username, amount, note }) });
+    $("xferUser").value = ""; $("xferAmt").value = ""; $("xferNote").value = "";
+    hint.textContent = `Sent ${res.amount.toLocaleString()} Tok Coins to @${res.toUsername}!`;
+    await loadShop();
+  } catch (e) {
+    hint.textContent = e.message || "Transfer failed."; hint.className = "hint bad";
+  } finally { $("xferBtn").disabled = false; }
+};
 
 $("custSlot").onchange = () => { $("custVideo").classList.toggle("hidden", $("custSlot").value !== "banner"); };
 

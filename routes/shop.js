@@ -1,4 +1,4 @@
-/* Tok Coins, Profile Frames, Card Decorations, Video Banners & Capri Bundle Shop API (Turso) */
+/* Tok Coins, Profile Frames, Card Decorations, Video Banners, Capri Bundle & Coin Transfers Shop API (Turso) */
 const crypto = require("crypto");
 
 const LIKE_REWARD = 10;
@@ -76,27 +76,41 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
         item_id TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS user_coin_transfers (
+        id TEXT PRIMARY KEY,
+        from_user_id TEXT NOT NULL,
+        to_user_id TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL
+      )`,
       "CREATE INDEX IF NOT EXISTS idx_shop_user ON user_shop_items(user_id, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_grants_user ON user_coin_grants(user_id)",
-      "CREATE INDEX IF NOT EXISTS idx_vb_user ON user_video_banners(user_id)"
+      "CREATE INDEX IF NOT EXISTS idx_vb_user ON user_video_banners(user_id)",
+      "CREATE INDEX IF NOT EXISTS idx_xfer_from ON user_coin_transfers(from_user_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_xfer_to ON user_coin_transfers(to_user_id, created_at DESC)"
     ], "write");
     ready = true;
   }
 
   async function getWallet(uid) {
     await ensureTables();
-    const [likesRow, cmtsRow, spentRow, grantRow] = await Promise.all([
+    const [likesRow, cmtsRow, spentRow, grantRow, recvRow, sentRow] = await Promise.all([
       run("SELECT COUNT(*) AS c FROM likes l JOIN videos v ON v.id = l.video_id WHERE v.user_id = ?", [uid]),
       run("SELECT COUNT(*) AS c FROM comments c JOIN videos v ON v.id = c.video_id WHERE v.user_id = ?", [uid]),
       run("SELECT COALESCE(SUM(price), 0) AS s FROM user_shop_items WHERE user_id = ?", [uid]),
-      run("SELECT COALESCE(SUM(amount), 0) AS g FROM user_coin_grants WHERE user_id = ?", [uid])
+      run("SELECT COALESCE(SUM(amount), 0) AS g FROM user_coin_grants WHERE user_id = ?", [uid]),
+      run("SELECT COALESCE(SUM(amount), 0) AS r FROM user_coin_transfers WHERE to_user_id = ?", [uid]),
+      run("SELECT COALESCE(SUM(amount), 0) AS s FROM user_coin_transfers WHERE from_user_id = ?", [uid])
     ]);
     const likesCount = Number(likesRow[0]?.c || 0);
     const commentsCount = Number(cmtsRow[0]?.c || 0);
     const granted = Number(grantRow[0]?.g || 0);
-    const earned = likesCount * LIKE_REWARD + commentsCount * COMMENT_REWARD + granted;
-    const spent = Number(spentRow[0]?.s || 0);
-    return { balance: Math.max(0, earned - spent), earned, spent, granted, likesCount, commentsCount };
+    const received = Number(recvRow[0]?.r || 0);
+    const sent = Number(sentRow[0]?.s || 0);
+    const earned = likesCount * LIKE_REWARD + commentsCount * COMMENT_REWARD + granted + received;
+    const spent = Number(spentRow[0]?.s || 0) + sent;
+    return { balance: Math.max(0, earned - spent), earned, spent, granted, received, sent, likesCount, commentsCount };
   }
 
   app.post("/api/admin/tok-coins", wrap(async req => {
@@ -121,11 +135,21 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
   app.get("/api/shop/me", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const wallet = await getWallet(uid);
-    const [owned, eqRows, myVideos, videoBanners] = await Promise.all([
+    const [owned, eqRows, myVideos, videoBanners, transfers] = await Promise.all([
       run("SELECT * FROM user_shop_items WHERE user_id = ? ORDER BY created_at DESC", [uid]),
       run("SELECT avatar_deco, profile_deco FROM user_equipped_decos WHERE user_id = ?", [uid]),
       run("SELECT id, title, created_at FROM videos WHERE user_id = ? ORDER BY created_at DESC LIMIT 50", [uid]),
-      run("SELECT video_id, item_id FROM user_video_banners WHERE user_id = ?", [uid])
+      run("SELECT video_id, item_id FROM user_video_banners WHERE user_id = ?", [uid]),
+      run(
+        `SELECT t.id, t.from_user_id, t.to_user_id, t.amount, t.note, t.created_at,
+                pf.username AS from_username, pt.username AS to_username
+         FROM user_coin_transfers t
+         LEFT JOIN profiles pf ON pf.id = t.from_user_id
+         LEFT JOIN profiles pt ON pt.id = t.to_user_id
+         WHERE t.from_user_id = ? OR t.to_user_id = ?
+         ORDER BY t.created_at DESC LIMIT 10`,
+        [uid, uid]
+      )
     ]);
     const eq = eqRows[0] || {};
     return {
@@ -139,7 +163,45 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
         owned,
         myVideos,
         videoBanners,
+        transfers,
         equipped: { avatar: eq.avatar_deco || null, profile: eq.profile_deco || null }
+      },
+      error: null
+    };
+  }));
+
+  app.post("/api/shop/transfer", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const rawUser = String(req.body?.username || "").replace(/^@+/, "").trim().toLowerCase();
+    const amount = Math.floor(Number(req.body?.amount));
+    const note = String(req.body?.note || "").trim().slice(0, 100);
+    if (!rawUser) throw new HttpError(400, "Enter the recipient's @username.");
+    if (!Number.isFinite(amount) || amount < 1 || amount > 1000000000) {
+      throw new HttpError(400, "Enter a valid amount of Tok Coins (1 or more).");
+    }
+
+    const recipient = (await run("SELECT id, username, display_name FROM profiles WHERE LOWER(username) = ?", [rawUser]))[0];
+    if (!recipient) throw new HttpError(404, `User @${rawUser} not found.`);
+    if (recipient.id === uid) throw new HttpError(400, "You can't send Tok Coins to yourself.");
+
+    const wallet = await getWallet(uid);
+    if (wallet.balance < amount) {
+      throw new HttpError(400, `Not enough Tok Coins (need ${amount}, have ${wallet.balance}).`);
+    }
+
+    await db.execute({
+      sql: "INSERT INTO user_coin_transfers (id, from_user_id, to_user_id, amount, note, created_at) VALUES (?,?,?,?,?,?)",
+      args: [crypto.randomUUID(), uid, recipient.id, amount, note || null, nowIso()]
+    });
+
+    const updated = await getWallet(uid);
+    return {
+      data: {
+        toUserId: recipient.id,
+        toUsername: recipient.username,
+        toDisplayName: recipient.display_name || recipient.username,
+        amount,
+        balance: updated.balance
       },
       error: null
     };
