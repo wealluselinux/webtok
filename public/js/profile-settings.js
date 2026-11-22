@@ -227,14 +227,12 @@ $("st-wp-file").onchange = e => {
     c.toBlob(async blob => {
       try {
         if (!blob) throw new Error("Could not process image.");
-        const { data } = await sb.auth.getSession();
-        const tok = data?.session?.access_token;
         let wpValue = "";
-        if (tok) {
-          const r = await fetch("/api/wallpapers", { method: "POST", headers: { "Content-Type": "image/jpeg", Authorization: "Bearer " + tok }, body: blob });
-          const j = await r.json().catch(() => ({}));
-          if (!r.ok || j.error) throw new Error(j.error?.message || "Upload failed");
-          wpValue = j.data.url;
+        if (sb && user) {
+          const path = user.id + "/wallpaper.jpg";
+          const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+          if (up?.error) throw up.error;
+          wpValue = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?t=" + Date.now();
         } else {
           wpValue = c.toDataURL("image/jpeg", 0.72);
         }
