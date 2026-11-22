@@ -32,7 +32,7 @@
     return raw.filter(el => !raw.some(other => other !== el && other.contains(el)));
   }
 
-  function resolveCollisions() {
+  function resolveCollisions(allowRot) {
     for (let i = 0; i < items.length; i++) {
       const a = items[i];
       const ax1 = a.r.left + a.dx, ay1 = a.r.top + a.dy, ax2 = ax1 + a.r.width, ay2 = ay1 + a.r.height;
@@ -48,20 +48,20 @@
           if (!a.dragging) a.dx += dir * push;
           if (!b.dragging) b.dx -= dir * push;
           const avgVx = (a.vx + b.vx) * 0.5;
-          if (!a.dragging) { a.vx = avgVx + dir * 0.9; a.vr += dir * 1.4; }
-          if (!b.dragging) { b.vx = avgVx - dir * 0.9; b.vr -= dir * 1.4; }
+          if (!a.dragging) { a.vx = avgVx + dir * 0.9; if (allowRot) a.vr += dir * 1.4; }
+          if (!b.dragging) { b.vx = avgVx - dir * 0.9; if (allowRot) b.vr -= dir * 1.4; }
         } else {
           const dir = (ay1 + ay2) < (by1 + by2) ? -1 : 1;
           const push = oy * 0.5;
           if (!a.dragging) a.dy += dir * push;
           if (!b.dragging) b.dy -= dir * push;
-          const spin = Math.max(-4, Math.min(4, (a.vx - b.vx) * 0.4));
+          const spin = allowRot ? Math.max(-4, Math.min(4, (a.vx - b.vx) * 0.4)) : 0;
           if (dir < 0) {
-            if (!a.dragging && a.vy > 0) { a.vy = -a.vy * 0.28; a.vr += spin; }
-            if (!b.dragging && b.vy < 0) { b.vy = -b.vy * 0.28; b.vr -= spin; }
+            if (!a.dragging && a.vy > 0) { a.vy = -a.vy * 0.28; if (allowRot) a.vr += spin; }
+            if (!b.dragging && b.vy < 0) { b.vy = -b.vy * 0.28; if (allowRot) b.vr -= spin; }
           } else {
-            if (!b.dragging && b.vy > 0) { b.vy = -b.vy * 0.28; b.vr -= spin; }
-            if (!a.dragging && a.vy < 0) { a.vy = -a.vy * 0.28; a.vr += spin; }
+            if (!b.dragging && b.vy > 0) { b.vy = -b.vy * 0.28; if (allowRot) b.vr -= spin; }
+            if (!a.dragging && a.vy < 0) { a.vy = -a.vy * 0.28; if (allowRot) a.vr += spin; }
           }
         }
       }
@@ -71,6 +71,7 @@
   function activate() {
     if (active) return;
     active = true;
+    const allowRot = getCfg().gravityRotate !== false;
     const els = collectElements();
     items = els.map(el => {
       const r = el.getBoundingClientRect();
@@ -91,7 +92,7 @@
         dx: 0, dy: 0,
         vx: (Math.random() - 0.5) * 4,
         vy: Math.random() * 2,
-        rot: 0, vr: (Math.random() - 0.5) * 3.5,
+        rot: 0, vr: allowRot ? (Math.random() - 0.5) * 3.5 : 0,
         dragging: false
       };
       el._wtGravDown = e => {
@@ -114,36 +115,45 @@
     (function loop() {
       if (!active) return;
       const W = window.innerWidth, H = window.innerHeight;
-      const collide = !!getCfg().gravityCollide;
+      const cfg = getCfg();
+      const collide = !!cfg.gravityCollide;
+      const rotOn = cfg.gravityRotate !== false;
       for (const it of items) {
+        if (!rotOn) { it.rot = 0; it.vr = 0; }
         if (!it.dragging) {
           it.vy += 0.65;
           it.dx += it.vx;
           it.dy += it.vy;
-          it.rot += it.vr;
+          if (rotOn) {
+            it.rot += it.vr;
+            it.vr *= 0.985;
+          }
           it.vx *= 0.992;
-          it.vr *= 0.985;
 
           const curLeft = it.r.left + it.dx, curRight = it.r.right + it.dx;
           const curBottom = it.r.bottom + it.dy, curTop = it.r.top + it.dy;
 
-          if (curLeft < 0) { it.dx -= curLeft; it.vx = Math.abs(it.vx) * 0.55; it.vr += (Math.random() - 0.5) * 4; }
-          if (curRight > W) { it.dx -= (curRight - W); it.vx = -Math.abs(it.vx) * 0.55; it.vr += (Math.random() - 0.5) * 4; }
+          if (curLeft < 0) { it.dx -= curLeft; it.vx = Math.abs(it.vx) * 0.55; if (rotOn) it.vr += (Math.random() - 0.5) * 4; }
+          if (curRight > W) { it.dx -= (curRight - W); it.vx = -Math.abs(it.vx) * 0.55; if (rotOn) it.vr += (Math.random() - 0.5) * 4; }
           if (curTop < 0) { it.dy -= curTop; it.vy = Math.abs(it.vy) * 0.4; }
           if (curBottom >= H - 4) {
             it.dy -= (curBottom - (H - 4));
-            if (Math.abs(it.vy) > 3.2) { it.vy = -it.vy * 0.36; it.vr = (Math.random() - 0.5) * 3.5; }
+            if (Math.abs(it.vy) > 3.2) { it.vy = -it.vy * 0.36; it.vr = rotOn ? (Math.random() - 0.5) * 3.5 : 0; }
             else { it.vy = 0; it.vx *= 0.85; it.vr *= 0.7; }
           }
         }
       }
-      if (collide) resolveCollisions();
+      if (collide) resolveCollisions(rotOn);
       for (const it of items) {
         if (it.el.id === "wt-capri") {
           const tx = Math.round(it.r.left + it.dx), ty = Math.round(it.r.top + it.dy);
-          it.el.style.transform = `translate3d(${tx}px,${ty}px,0) rotate(${it.rot.toFixed(1)}deg)`;
+          it.el.style.transform = rotOn
+            ? `translate3d(${tx}px,${ty}px,0) rotate(${it.rot.toFixed(1)}deg)`
+            : `translate3d(${tx}px,${ty}px,0)`;
         } else {
-          it.el.style.transform = `translate3d(${it.dx.toFixed(1)}px,${it.dy.toFixed(1)}px,0) rotate(${it.rot.toFixed(1)}deg)`;
+          it.el.style.transform = rotOn
+            ? `translate3d(${it.dx.toFixed(1)}px,${it.dy.toFixed(1)}px,0) rotate(${it.rot.toFixed(1)}deg)`
+            : `translate3d(${it.dx.toFixed(1)}px,${it.dy.toFixed(1)}px,0)`;
         }
       }
       raf = requestAnimationFrame(loop);
@@ -179,7 +189,7 @@
     dragItem.dx += mx; dragItem.dy += my;
     dragItem.vx = Math.max(-22, Math.min(22, mx * 0.85));
     dragItem.vy = Math.max(-22, Math.min(22, my * 0.85));
-    dragItem.vr = Math.max(-14, Math.min(14, mx * 0.5));
+    dragItem.vr = getCfg().gravityRotate !== false ? Math.max(-14, Math.min(14, mx * 0.5)) : 0;
     lx = e.clientX; ly = e.clientY;
   });
   addEventListener("pointerup", () => {
