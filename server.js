@@ -341,7 +341,6 @@ app.post("/api/auth/login", limit(20, 600000), wrap(async req => {
   const u = (await run("SELECT * FROM users WHERE email = ?", [em]))[0];
   const ok = await bcrypt.compare(pw, u ? u.encrypted_password : DUMMY_HASH);
   if (!u || !ok) throw new HttpError(400, "Invalid login credentials");
-  await db.execute({ sql: "UPDATE users SET last_login_at = ? WHERE id = ?", args: [nowIso(), u.id] });
   if (app.locals.forgetUser) app.locals.forgetUser(u.id);
   if (app.locals.recordLoginDevice) await app.locals.recordLoginDevice(u.id, req, false);
   const session = makeSession(u);

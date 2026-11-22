@@ -6,7 +6,7 @@
    5) Group chats with friend invites & acceptance
    6) Custom user stickers & comment replies
    7) Group Voice Calls, Group Watch, Shared Whiteboard
-   8) Security hardening: 20-minute post-login posting cooldown & new-device login alerts
+   8) Security hardening: new-device login alerts
    9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds)
    10) Account credentials update & Web Tok AI / Content Safety Checker (routes/ai.js) */
 const path = require("path");
@@ -23,7 +23,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
   const TOS_VERSION = "2026-11-20";
   const RESTRICTIONS = ["post", "comment", "message"];
-  const POST_COOLDOWN_MS = 20 * 60 * 1000;
   const safeArr = s => { try { const a = JSON.parse(s || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
 
   /* ---------- database setup (safe to run every start) ---------- */
@@ -83,11 +82,10 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   async function stateOf(uid) {
     const c = cache.get(uid);
     if (c && c.t > Date.now()) return c.s;
-    const u = (await run("SELECT role, banned, ban_reason, restrictions, sessions_valid_after, last_login_at FROM users WHERE id = ?", [uid]))[0];
+    const u = (await run("SELECT role, banned, ban_reason, restrictions, sessions_valid_after FROM users WHERE id = ?", [uid]))[0];
     const s = u ? {
       role: u.role, banned: !!u.banned, reason: u.ban_reason, restrictions: safeArr(u.restrictions),
-      after: u.sessions_valid_after ? Date.parse(u.sessions_valid_after) : 0,
-      lastLoginAt: u.last_login_at ? Date.parse(u.last_login_at) : 0
+      after: u.sessions_valid_after ? Date.parse(u.sessions_valid_after) : 0
     } : null;
     cache.set(uid, { s, t: Date.now() + 20000 });
     return s;
@@ -141,13 +139,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       if (req.method === "POST" && req.path === "/db" && (body.op === "insert" || body.op === "upsert")) need = { comments: "comment", messages: "message", videos: "post" }[body.table] || null;
       if (req.method === "POST" && req.path === "/storage/presign" && body.bucket === "videos") need = "post";
       if (need && st.restrictions.includes(need)) return deny(res, 403, `You aren't allowed to ${need === "post" ? "post videos" : need === "comment" ? "comment" : "send messages"} right now.`);
-      if (need === "post" && st.lastLoginAt) {
-        const elapsed = Date.now() - st.lastLoginAt;
-        if (elapsed >= 0 && elapsed < POST_COOLDOWN_MS) {
-          const mins = Math.ceil((POST_COOLDOWN_MS - elapsed) / 60000);
-          return deny(res, 403, `Security cooldown: you can post videos in ${mins} minute${mins === 1 ? "" : "s"} after signing in.`);
-        }
-      }
       if (req.method === "POST" && req.path === "/db" && body.table === "videos" && body.op === "insert" && app.locals.checkMediaSafety) {
         const text = `${body.data?.title || ""} ${(Array.isArray(body.data?.hashtags) ? body.data.hashtags.join(" ") : "")}`.trim();
         const chk = await app.locals.checkMediaSafety({ text });
