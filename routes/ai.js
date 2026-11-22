@@ -1,24 +1,13 @@
 /* Web Tok AI (@webtok_ai via NVIDIA NIM) & AI Content Safety Checker (videos + stickers) */
 const path = require("path");
 const crypto = require("crypto");
-const bcrypt = require("bcryptjs");
 
 const AI_ID = "00000000-0000-0000-0000-000000000002";
 const NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const CHAT_MODELS = ["nvidia/nemotron-3.5-bolt-e4b", "meta/llama-3.1-8b-instruct"];
+const CHAT_MODELS = ["meta/llama-3.3-70b-instruct", "google/gemma-4-31b-it"];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
 module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 }) {
-  // Remove 20-minute post-login video cooldown while preserving new-device login alerts
-  const origRecordLogin = app.locals.recordLoginDevice;
-  if (origRecordLogin) {
-    app.locals.recordLoginDevice = async (uid, req, isSignup = false) => {
-      await db.execute({ sql: "UPDATE users SET last_login_at = NULL WHERE id = ?", args: [uid] }).catch(() => {});
-      if (app.locals.forgetUser) app.locals.forgetUser(uid);
-      return origRecordLogin(uid, req, isSignup);
-    };
-  }
-
   const aiKey = () => (process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || "").trim();
   const checkerKey = () => (process.env.WEBTOK_CHECKER || process.env.WEB_TALK_CHECKER || "").trim();
 
@@ -101,32 +90,6 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     return { data: { safe: true }, error: null };
   }));
 
-  app.delete("/api/messages/with/:peerId", wrap(async req => {
-    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
-    const peerId = String(req.params.peerId || "").trim();
-    if (!peerId) throw new HttpError(400, "Missing peerId");
-    await db.execute({
-      sql: "DELETE FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)",
-      args: [uid, peerId, peerId, uid]
-    });
-    return { data: { cleared: true }, error: null };
-  }));
-
-  app.post("/api/admin/set-password", wrap(async req => {
-    if (!req.wt) throw new HttpError(401, "Sign in required");
-    if (!["admin", "owner"].includes(req.wt.role)) throw new HttpError(403, "Admins only");
-    const t = (await run("SELECT u.id, u.email, u.role, p.username FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [String(req.body?.userId || "")]))[0];
-    if (!t) throw new HttpError(404, "User not found");
-    if (t.role === "owner" || t.role === "system" || t.id === req.wt.uid) throw new HttpError(403, "You can't change this account");
-    if (req.wt.role !== "owner" && t.role !== "user") throw new HttpError(403, "Only the owner can change admins");
-    const pw = String(req.body?.password || "");
-    if (pw.length < 6 || pw.length > 128) throw new HttpError(400, "Password must be 6 to 128 characters.");
-    await db.execute({ sql: "UPDATE users SET encrypted_password = ?, sessions_valid_after = ? WHERE id = ?", args: [await bcrypt.hash(pw, 10), nowIso(), t.id] });
-    if (app.locals.forgetUser) app.locals.forgetUser(t.id);
-    await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [req.wt.uid, "reset_password", `@${t.username || "?"} (${t.email})`, nowIso()] });
-    return { data: { username: t.username, email: t.email }, error: null };
-  }));
-
   app.post("/api/ai/chat", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     await ensureAiAccount();
@@ -185,5 +148,7 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
 
   app.get("/games", (_req, res) => res.sendFile(path.join(__dirname, "../public/pages/games.html")));
   app.get("/developer", (_req, res) => res.sendFile(path.join(__dirname, "../public/pages/developer.html")));
+  app.get("/shop", (_req, res) => res.sendFile(path.join(__dirname, "../public/pages/shop.html")));
   require("./games")({ app, db, run, wrap, uidFrom, HttpError, nowIso, aiKey, callNim, CHAT_MODELS });
+  require("./shop")({ app, db, run, wrap, uidFrom, HttpError, nowIso });
 };

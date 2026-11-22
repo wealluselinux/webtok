@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Web Tok · Talk Coins Shop</title>
+<link rel="icon" href="/images/logo.png">
+<link rel="stylesheet" href="/css/base.css">
+<style>
+body{overflow:auto;padding:24px 16px 96px}
+.wrap{max-width:960px;margin:0 auto;padding-left:var(--sbw,0px);display:flex;flex-direction:column;gap:18px}
+@media(max-width:800px){.wrap{padding-left:0}}
+.head-row{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.head-row h1{font-size:28px;font-weight:700;letter-spacing:-.3px;display:flex;align-items:center;gap:10px}
+.coin-pill{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:var(--primary);color:var(--on-primary);font-weight:700;font-size:15px;box-shadow:0 4px 16px #0002}
+.earn-bar{background:var(--card);border-radius:var(--r-xl);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.earn-bar b{color:var(--text)}
+.sec-h{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:4px}
+.s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.s-card{background:var(--card);border-radius:var(--r-xl);padding:18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 18px #0001}
+.s-prev{width:64px;height:64px;clip-path:var(--m3-cookie-7);background:var(--surface);display:grid;place-items:center;font-size:28px;position:relative;flex:none}
+.s-prev img{width:100%;height:100%;object-fit:cover}
+.s-top{display:flex;align-items:center;gap:12px}
+.s-meta b{display:block;font-size:16px}
+.s-meta small{color:var(--primary);font-weight:700;font-size:12px}
+.s-desc{font-size:13px;color:var(--muted);line-height:1.4;flex:1}
+.s-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.custom-box{background:var(--card);border-radius:var(--r-xl);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 18px #0001}
+.c-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.c-row input[type=text],.c-row select{flex:1;min-width:170px;background:var(--surface);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
+</style>
+</head>
+<body data-page="shop">
+<div id="wp-layer"></div>
+<div id="wp-scrim"></div>
+<main class="wrap">
+  <div class="head-row">
+    <h1><span class="ms fill" style="font-size:30px;color:var(--primary)">storefront</span>Talk Coins Shop</h1>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="coin-pill"><span class="ms fill" style="font-size:20px">monetization_on</span><span id="coinBal">0</span> Talk Coins</div>
+      <a class="btn sm" href="/profile"><span class="ms" style="font-size:18px">account_circle</span>My Profile</a>
+    </div>
+  </div>
+
+  <div class="earn-bar">
+    <span>Earn <b>+10 Talk Coins</b> for every like and <b>+15 Talk Coins</b> for every comment on your videos.</span>
+    <span id="earnStats">Loading stats…</span>
+  </div>
+
+  <div class="custom-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+      <b style="font-size:17px;display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">brush</span>Make Your Own Decoration</b>
+      <span class="coin-pill" style="padding:6px 14px;font-size:13px">130 Talk Coins</span>
+    </div>
+    <p style="font-size:13px;color:var(--muted)">Design your own custom profile picture frame or profile card decoration (costs a little bit more than buying a ready-made one).</p>
+    <div class="c-row">
+      <input type="text" id="custName" maxlength="32" placeholder="Decoration name (e.g. My Galaxy Frame)">
+      <select id="custSlot">
+        <option value="avatar">Profile Picture Decoration</option>
+        <option value="profile">Profile Card Decoration</option>
+      </select>
+      <input type="color" id="custColor" value="#d0bcff" title="Accent color" style="width:46px;height:40px;border:0;background:none;cursor:pointer">
+    </div>
+    <div class="c-row">
+      <input type="file" id="custFile" accept="image/png,image/webp,image/jpeg,image/gif" style="flex:1">
+      <button type="button" class="btn primary sm" id="custCreate">Create &amp; Equip (130 Coins)</button>
+    </div>
+    <div class="hint" id="custHint"></div>
+  </div>
+
+  <div class="sec-h">Profile Picture Decorations</div>
+  <div class="s-grid" id="avatarGrid"></div>
+
+  <div class="sec-h">Profile Card Decorations</div>
+  <div class="s-grid" id="profileGrid"></div>
+</main>
+
+<script src="/config.js"></script>
+<script src="/js/wt-local.js"></script>
+<script src="/js/sidebar.js"></script>
+<script src="/js/core.js"></script>
+<script src="/js/theme.js"></script>
+<script>
+let tok = null, uid = null, shopState = null;
+
+function makeDecoBlob(file) {
+  return new Promise((resolve, reject) => {
+    const u = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(u);
+      const max = 256, sc = Math.min(max / img.width, max / img.height, 1);
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * sc));
+      c.height = Math.max(1, Math.round(img.height * sc));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => b ? resolve(b) : reject(new Error("Could not process image")), "image/png");
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); reject(new Error("Could not read image")); };
+    img.src = u;
+  });
+}
+
+async function apiShop(url, opts = {}) {
+  const r = await fetch(url, { ...opts, headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok, ...(opts.headers || {}) } });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error?.message || "Request failed");
+  return j.data;
+}
+
+function renderGrid(elId, items, slot) {
+  const box = $(elId); box.innerHTML = "";
+  const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
+  const eqId = shopState.equipped?.[slot];
+
+  items.forEach(item => {
+    const id = item.item_id || item.id;
+    const owned = ownedIds.has(id);
+    const equipped = eqId === id;
+    const card = document.createElement("div");
+    card.className = "s-card";
+    const prevHtml = item.image_url
+      ? `<img src="${escapeHtml(item.image_url)}" alt="">`
+      : `<span class="ms fill" style="font-size:28px;color:${escapeHtml(item.color || "var(--primary)")}">${escapeHtml(item.icon || "auto_awesome")}</span>`;
+    card.innerHTML = `
+      <div class="s-top">
+        <div class="s-prev" style="box-shadow:0 0 0 3px ${escapeHtml(item.color || "var(--primary)")}">${prevHtml}</div>
+        <div class="s-meta"><b>${escapeHtml(item.name)}</b><small>${owned ? (item.is_custom ? "Custom · Owned" : "Owned") : `${item.price} Talk Coins`}</small></div>
+      </div>
+      <div class="s-desc">${escapeHtml(item.desc || (item.is_custom ? "Your custom-made decoration." : ""))}</div>
+      <div class="s-foot">
+        <span style="font-size:12px;color:var(--muted)">${equipped ? "Currently equipped" : ""}</span>
+        <button type="button" class="btn ${equipped ? "" : "primary"} sm">${equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`}</button>
+      </div>`;
+    card.querySelector("button").onclick = async () => {
+      try {
+        if (equipped) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: null }) });
+        else if (owned) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: id }) });
+        else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id }) });
+        await loadShop();
+      } catch (e) {
+        if (window.wtAlert) await wtAlert({ title: "Shop", message: e.message });
+      }
+    };
+    box.appendChild(card);
+  });
+}
+
+async function loadShop() {
+  shopState = await apiShop("/api/shop/me");
+  $("coinBal").textContent = shopState.balance;
+  $("earnStats").textContent = `${shopState.likesCount} likes + ${shopState.commentsCount} comments · ${shopState.earned} earned · ${shopState.spent} spent`;
+  const customAv = (shopState.owned || []).filter(x => x.is_custom && x.slot === "avatar");
+  const customPr = (shopState.owned || []).filter(x => x.is_custom && x.slot === "profile");
+  renderGrid("avatarGrid", [...customAv, ...shopState.catalog.filter(x => x.slot === "avatar")], "avatar");
+  renderGrid("profileGrid", [...customPr, ...shopState.catalog.filter(x => x.slot === "profile")], "profile");
+}
+
+$("custCreate").onclick = async () => {
+  const name = $("custName").value.trim();
+  const slot = $("custSlot").value;
+  const color = $("custColor").value;
+  const f = $("custFile").files?.[0];
+  const hint = $("custHint");
+  if (!name) { hint.textContent = "Enter a name for your decoration."; hint.className = "hint bad"; return; }
+  $("custCreate").disabled = true; hint.textContent = "Creating decoration…"; hint.className = "hint";
+  try {
+    let image_url = "";
+    if (f) {
+      const blob = await makeDecoBlob(f);
+      const path = `${uid}/deco-${Date.now()}.png`;
+      const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/png" });
+      if (up?.error) throw up.error;
+      image_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    }
+    await apiShop("/api/shop/custom", { method: "POST", body: JSON.stringify({ name, slot, color, image_url }) });
+    $("custName").value = ""; $("custFile").value = "";
+    hint.textContent = "Custom decoration created & equipped!";
+    await loadShop();
+  } catch (e) {
+    hint.textContent = e.message || "Could not create decoration."; hint.className = "hint bad";
+  } finally { $("custCreate").disabled = false; }
+};
+
+(async () => {
+  const { data } = await sb.auth.getSession();
+  if (!data?.session) { location.href = "/login"; return; }
+  uid = data.session.user.id;
+  tok = data.session.access_token;
+  loadShop();
+})();
+</script>
+</body>
+</html>
