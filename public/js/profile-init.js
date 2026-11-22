@@ -5,5 +5,6 @@
   user = data.session?.user || null;
   await loadMyFollows();
   await resolveTargetAndLoad();
+  if (window.loadProfileStories) await window.loadProfileStories();
   if (data.session && isMe && profile) syncCurrentAccount(data.session, profile);
 })();
