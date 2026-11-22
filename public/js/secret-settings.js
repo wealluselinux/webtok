@@ -1,8 +1,8 @@
 /* Material You Secret Settings Modal (unlocked by 10 clicks on WebTok homepage logo) */
 (function () {
   function getCfg() {
-    try { return { enabled: false, size: "md", cursor: false, ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
-    catch { return { enabled: false, size: "md", cursor: false }; }
+    try { return { enabled: false, size: "md", cursor: false, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
+    catch { return { enabled: false, size: "md", cursor: false, prompt: "" }; }
   }
   function saveCfg(c) {
     if (window.wtCapri?.save) window.wtCapri.save(c);
@@ -33,6 +33,7 @@
         .ss-chips{display:flex;gap:6px;flex-wrap:wrap}
         .ss-chip{border:0;background:var(--surface);color:var(--text);padding:7px 12px;border-radius:999px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
         .ss-chip:hover{background:var(--primary);color:var(--on-primary)}
+        .ss-ta{width:100%;min-height:68px;border:0;border-radius:18px;padding:10px 12px;background:var(--surface);color:var(--text);font:inherit;font-size:12px;resize:vertical;outline:0}
       `;
       document.head.appendChild(st);
 
@@ -50,7 +51,7 @@
           <div class="ss-row">
             <div style="display:flex;align-items:center;gap:12px">
               <div class="ss-prev"><img src="/images/capri_assets/idle.webp" alt="Capri"></div>
-              <div><b style="font-size:16px">Mini Desktop Capri Pet</b><div style="font-size:12px;color:var(--muted)">Roams, perches, naps &amp; can be tossed!</div></div>
+              <div><b style="font-size:16px">Mini Desktop Capri Pet</b><div style="font-size:12px;color:var(--muted)">Click her to chat via Web Tok AI!</div></div>
             </div>
             <button type="button" class="ss-switch" id="ssCapriTog" aria-label="Toggle Capri Pet"></button>
           </div>
@@ -76,6 +77,13 @@
             <div><b style="font-size:14px">Capri Custom Cursor</b><div style="font-size:12px;color:var(--muted)">Use Capri's custom pointer</div></div>
             <button type="button" class="ss-switch" id="ssCurTog" aria-label="Toggle Capri Cursor"></button>
           </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:12px;font-weight:700;color:var(--muted)">Capri AI Prompt (optional)</span>
+              <button type="button" class="ss-chip" id="ssSavePrompt" style="padding:4px 10px">Save Prompt</button>
+            </div>
+            <textarea class="ss-ta" id="ssPrompt" maxlength="600" placeholder="Leave blank for default Capri personality, or enter a custom Web Tok AI prompt…"></textarea>
+          </div>
         </div>
         <div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center">Capri assets © 2026 Lachy (capri-desktop) · PolyForm Noncommercial 1.0.0</div>`;
       document.body.appendChild(dlg);
@@ -84,11 +92,16 @@
         const c = getCfg();
         dlg.querySelector("#ssCapriTog").classList.toggle("on", !!c.enabled);
         dlg.querySelector("#ssCurTog").classList.toggle("on", !!c.cursor);
+        dlg.querySelector("#ssPrompt").value = c.prompt || "";
         dlg.querySelectorAll("#ssSizeSeg button").forEach(b => b.classList.toggle("on", b.dataset.sz === c.size));
       };
       dlg.querySelector("#ssClose").onclick = () => dlg.close();
       dlg.querySelector("#ssCapriTog").onclick = () => { const c = getCfg(); c.enabled = !c.enabled; saveCfg(c); paint(); };
       dlg.querySelector("#ssCurTog").onclick = () => { const c = getCfg(); c.cursor = !c.cursor; saveCfg(c); paint(); };
+      dlg.querySelector("#ssSavePrompt").onclick = () => {
+        const c = getCfg(); c.prompt = dlg.querySelector("#ssPrompt").value.trim(); saveCfg(c);
+        const btn = dlg.querySelector("#ssSavePrompt"); btn.textContent = "Saved!"; setTimeout(() => btn.textContent = "Save Prompt", 1400);
+      };
       dlg.querySelector("#ssSizeSeg").onclick = e => {
         const b = e.target.closest("button"); if (!b) return;
         const c = getCfg(); c.size = b.dataset.sz; saveCfg(c); paint();

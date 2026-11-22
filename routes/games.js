@@ -1,4 +1,4 @@
-/* Web Tok Mini Games & /developer Studio API (Turso + NVIDIA NIM AI Game Builder) + Secret Settings */
+/* Web Tok Mini Games & /developer Studio API (Turso + NVIDIA NIM AI Game Builder) + Secret Settings & Capri Chat */
 const crypto = require("crypto");
 
 const GAME_MODELS = [
@@ -6,6 +6,8 @@ const GAME_MODELS = [
   "nvidia/nemotron-3.5-lightning-30b-a3b",
   "meta/llama-3.1-8b-instruct"
 ];
+
+const DEFAULT_CAPRI_PROMPT = `You are Capri, a playful, witty, neon-cyberpunk mini desktop pet living on Web Tok. You roam around the user's screen, perch on windows, glitch out for fun, and love Web Tok videos, mini games, and Material You themes. Keep replies short (1-3 punchy sentences) and fun.`;
 
 const HTML_GRAPHICS_KIT = `Use or adapt these graphics & game-loop helpers so the game looks sharp and plays smoothly:
 \`\`\`js
@@ -83,7 +85,8 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
     const cfg = {
       enabled: !!b.enabled,
       size: ["sm", "md", "lg"].includes(b.size) ? b.size : "md",
-      cursor: !!b.cursor
+      cursor: !!b.cursor,
+      prompt: String(b.prompt || "").trim().slice(0, 600)
     };
     await db.execute({
       sql: `INSERT INTO user_secret_settings (user_id, settings_json, updated_at) VALUES (?, ?, ?)
@@ -91,6 +94,29 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
       args: [uid, JSON.stringify(cfg), nowIso()]
     });
     return { data: cfg, error: null };
+  }));
+
+  app.post("/api/capri/chat", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in to chat with Capri!");
+    const key = aiKey();
+    if (!key) throw new HttpError(503, "Web Tok AI is not configured on the server.");
+    const message = String(req.body?.message || "").trim().slice(0, 600);
+    if (!message) throw new HttpError(400, "Say something to Capri!");
+    const customPrompt = String(req.body?.customPrompt || "").trim().slice(0, 600);
+    const history = Array.isArray(req.body?.history)
+      ? req.body.history.slice(-8).map(m => ({
+          role: m?.role === "assistant" ? "assistant" : "user",
+          content: String(m?.content || "").slice(0, 600)
+        })).filter(m => m.content)
+      : [];
+
+    const reply = await callNim(key, CHAT_MODELS, [
+      { role: "system", content: customPrompt || DEFAULT_CAPRI_PROMPT },
+      ...history,
+      { role: "user", content: message }
+    ], 320);
+
+    return { data: { reply: String(reply || "").trim() }, error: null };
   }));
 
   app.get("/api/games", wrap(async () => {
