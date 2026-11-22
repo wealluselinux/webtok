@@ -5,8 +5,8 @@
   const SIZES = { sm: 200, md: 280, lg: 360 };
 
   function getCfg() {
-    try { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
-    catch { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "" }; }
+    try { return { enabled: false, size: "md", cursor: false, gravityBtn: false, gravityCollide: true, prompt: "", _ts: 0, ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
+    catch { return { enabled: false, size: "md", cursor: false, gravityBtn: false, gravityCollide: true, prompt: "", _ts: 0 }; }
   }
   function saveLocal(c) { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); }
 
@@ -41,13 +41,22 @@
       const r = await fetch("/api/secret-settings", { headers: { Authorization: "Bearer " + tok } });
       const j = await r.json().catch(() => ({}));
       if (localDirty) return;
-      if (j?.data) {
-        saveLocal({ enabled: !!j.data.enabled, size: j.data.size || "md", cursor: !!j.data.cursor, gravityBtn: !!j.data.gravityBtn, prompt: j.data.prompt || "" });
+      const local = getCfg();
+      const srv = j?.data;
+      if (srv && Number(srv._ts || 0) >= Number(local._ts || 0)) {
+        saveLocal({
+          enabled: !!srv.enabled,
+          size: srv.size || "md",
+          cursor: !!srv.cursor,
+          gravityBtn: !!srv.gravityBtn,
+          gravityCollide: srv.gravityCollide !== false,
+          prompt: srv.prompt || "",
+          _ts: Number(srv._ts || 0)
+        });
         sync();
         if (window.wtGravity) window.wtGravity.sync();
-      } else {
-        const local = getCfg();
-        if (local.enabled || local.cursor || local.gravityBtn || local.size !== "md" || local.prompt) pushToServer(local);
+      } else if (local._ts || local.enabled || local.cursor || local.gravityBtn || local.size !== "md" || local.prompt) {
+        pushToServer(local);
       }
     } catch {}
   }
@@ -237,7 +246,7 @@
     };
 
     wrap.onpointerdown = e => {
-      if (e.button === 2 || e.target.closest("#wt-capri-menu")) return;
+      if (document.body.dataset.wtGravity === "1" || e.button === 2 || e.target.closest("#wt-capri-menu")) return;
       menu.classList.add("hidden");
       dragging = true; moved = false;
       wrap.setPointerCapture(e.pointerId);
@@ -265,7 +274,7 @@
     };
 
     aiTmr = setInterval(() => {
-      if (dragging || chatOpen || state === "tossed") return;
+      if (dragging || chatOpen || state === "tossed" || document.body.dataset.wtGravity === "1") return;
       const r = Math.random();
       if (r < 0.38) setState("walk");
       else if (r < 0.62) setState("idle");
@@ -275,31 +284,33 @@
     }, 5500);
 
     (function loop() {
-      const hCur = SIZES[getCfg().size] || 280;
-      const wCur = img.offsetWidth || hCur * 0.65;
-      const floor = Math.max(0, window.innerHeight - hCur);
-      const maxX = Math.max(0, window.innerWidth - wCur);
-      if (!dragging) {
-        if (state === "tossed") {
-          vy += 0.65; x += vx; y += vy; vx *= 0.99;
-          if (x <= 0) { x = 0; vx = Math.abs(vx) * 0.65; }
-          if (x >= maxX) { x = maxX; vx = -Math.abs(vx) * 0.65; }
-          if (y >= floor) {
+      if (document.body.dataset.wtGravity !== "1") {
+        const hCur = SIZES[getCfg().size] || 280;
+        const wCur = img.offsetWidth || hCur * 0.65;
+        const floor = Math.max(0, window.innerHeight - hCur);
+        const maxX = Math.max(0, window.innerWidth - wCur);
+        if (!dragging) {
+          if (state === "tossed") {
+            vy += 0.65; x += vx; y += vy; vx *= 0.99;
+            if (x <= 0) { x = 0; vx = Math.abs(vx) * 0.65; }
+            if (x >= maxX) { x = maxX; vx = -Math.abs(vx) * 0.65; }
+            if (y >= floor) {
+              y = floor;
+              if (Math.abs(vy) > 3.5) vy = -vy * 0.45;
+              else { vy = 0; vx = 0; setState(chatOpen ? "talk" : "idle"); }
+            }
+          } else if (state === "walk" && !chatOpen) {
+            x += vx;
+            if (x <= 0) { x = 0; vx = Math.abs(vx); dir = 1; }
+            if (x >= maxX) { x = maxX; vx = -Math.abs(vx); dir = -1; }
             y = floor;
-            if (Math.abs(vy) > 3.5) vy = -vy * 0.45;
-            else { vy = 0; vx = 0; setState(chatOpen ? "talk" : "idle"); }
+          } else {
+            x = Math.max(0, Math.min(maxX, x));
+            y = Math.min(floor, y + 6);
           }
-        } else if (state === "walk" && !chatOpen) {
-          x += vx;
-          if (x <= 0) { x = 0; vx = Math.abs(vx); dir = 1; }
-          if (x >= maxX) { x = maxX; vx = -Math.abs(vx); dir = -1; }
-          y = floor;
-        } else {
-          x = Math.max(0, Math.min(maxX, x));
-          y = Math.min(floor, y + 6);
         }
+        wrap.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
       }
-      wrap.style.transform = `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;
       img.style.transform = dir < 0 ? "scaleX(-1)" : "";
       if (chatOpen) positionChatBox();
       raf = requestAnimationFrame(loop);
@@ -321,6 +332,7 @@
 
   function saveAndSync(c) {
     localDirty = true;
+    c._ts = c._ts || Date.now();
     saveLocal(c);
     sync();
     pushToServer(c);

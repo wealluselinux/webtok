@@ -87,7 +87,9 @@ module.exports = function mountGames({ app, db, run, wrap, uidFrom, HttpError, n
       size: ["sm", "md", "lg"].includes(b.size) ? b.size : "md",
       cursor: !!b.cursor,
       gravityBtn: !!b.gravityBtn,
-      prompt: String(b.prompt || "").trim().slice(0, 600)
+      gravityCollide: b.gravityCollide !== false,
+      prompt: String(b.prompt || "").trim().slice(0, 600),
+      _ts: Number(b._ts || Date.now())
     };
     await db.execute({
       sql: `INSERT INTO user_secret_settings (user_id, settings_json, updated_at) VALUES (?, ?, ?)
