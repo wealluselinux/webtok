@@ -20,6 +20,7 @@ function openBuiltin(g) {
   $("playTitle").textContent = g.title;
   $("playScore").textContent = `Score: 0 · Best: ${bestScore(g.id)}`;
   $("dpad").classList.toggle("hidden", !g.dpad);
+  $("playDlg").classList.toggle("has-dpad", !!g.dpad);
   $("playStage").innerHTML = '<canvas id="gameCanvas" width="400" height="400"></canvas>';
   $("playDlg").showModal();
   stopCurGame = g.start($("gameCanvas"), sc => {
@@ -152,6 +153,7 @@ function openCommunityGame(g) {
   $("playTitle").textContent = g.title;
   $("playScore").textContent = `by @${g.username || "creator"} · ${g.lang.toUpperCase()}`;
   $("dpad").classList.add("hidden");
+  $("playDlg").classList.remove("has-dpad");
   const frame = document.createElement("iframe");
   frame.id = "gameFrame";
   frame.sandbox = "allow-scripts";
@@ -169,7 +171,7 @@ function openCommunityGame(g) {
 
 function buildCanvasJsRunnerHtml(jsCode) {
   return `<!DOCTYPE html><html><body style="margin:0;background:#16121e;display:grid;place-items:center;height:100vh;overflow:hidden">
-    <canvas id="c" width="400" height="400" style="background:#1d192b;border-radius:16px"></canvas>
+    <canvas id="c" width="400" height="400" style="background:#1d192b;border-radius:16px;width:min(96vw,96vh,1000px);height:auto;aspect-ratio:1"></canvas>
     <script>const canvas=document.getElementById("c"),ctx=canvas.getContext("2d"),keys={};
     let score=0;const player={x:200,y:340,vx:0,vy:0,onGround:true};
     addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();keys[e.key]=true;});
@@ -180,7 +182,7 @@ function buildCanvasJsRunnerHtml(jsCode) {
 function buildPythonRunnerHtml(pyCode) {
   const safe = JSON.stringify(pyCode);
   return `<!DOCTYPE html><html><body style="margin:0;background:#16121e;color:#fff;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh">
-    <div id="mycanvas" style="width:400px;height:360px;background:#1d192b;border-radius:16px"></div>
+    <div id="mycanvas" style="width:min(94vw,86vh,960px);height:min(82vh,880px);background:#1d192b;border-radius:16px"></div>
     <pre id="out" style="margin:6px 0 0;font-size:12px;color:#d0bcff;max-height:48px;overflow:auto"></pre>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"><\/script>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"><\/script>
