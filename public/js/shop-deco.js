@@ -1,4 +1,4 @@
-/* Sidebar More-menu links (Admin panel + Tok Coins Shop), Admin Tok Coins grant UI & Profile Decorations renderer */
+/* Sidebar More-menu links (Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Profile Frames/Decorations renderer */
 (function () {
   if (window.wtShopDecoInit) return;
   window.wtShopDecoInit = true;
@@ -76,7 +76,25 @@
     };
   }
 
-  // 3. Render equipped Tok Coins decorations on /profile
+  // 3. Top-right Tok Coins balance chip on /profile
+  const coinsChip = document.getElementById("profCoinsChip");
+  if (coinsChip && typeof sb !== "undefined") {
+    sb.auth.getSession().then(async ({ data }) => {
+      const tok = data?.session?.access_token;
+      if (!tok) return;
+      try {
+        const r = await fetch("/api/shop/me", { headers: { Authorization: "Bearer " + tok } });
+        const j = await r.json();
+        if (r.ok && j?.data) {
+          const bal = document.getElementById("profCoinsBal");
+          if (bal) bal.textContent = Number(j.data.balance || 0).toLocaleString();
+          coinsChip.classList.remove("hidden");
+        }
+      } catch {}
+    }).catch(() => {});
+  }
+
+  // 4. Render equipped Profile Frames & Card Decorations on /profile
   function injectDecoCss() {
     if (document.getElementById("wt-deco-css")) return;
     const st = document.createElement("style");
@@ -85,8 +103,8 @@
       .wt-pfp-wrap{position:relative;display:inline-grid;place-items:center;flex-shrink:0}
       .wt-pfp-ring{position:absolute;inset:-8px;clip-path:var(--m3-cookie-7);pointer-events:none;z-index:0}
       .wt-pfp-wrap .pfp{position:relative;z-index:1}
-      .wt-pfp-over{position:absolute;inset:-10px;width:calc(100% + 20px);height:calc(100% + 20px);object-fit:contain;pointer-events:none;z-index:2}
-      .wt-pfp-badge{position:absolute;bottom:-4px;right:-4px;width:30px;height:30px;clip-path:var(--m3-cookie-4);display:grid;place-items:center;z-index:3;box-shadow:0 3px 10px #0004}
+      .wt-pfp-over{position:absolute;inset:-12px;width:calc(100% + 24px);height:calc(100% + 24px);object-fit:contain;pointer-events:none;z-index:2}
+      .wt-pfp-badge{position:absolute;bottom:-4px;right:-4px;width:32px;height:32px;clip-path:var(--m3-cookie-4);display:grid;place-items:center;z-index:3;box-shadow:0 3px 10px #0004}
       .wt-card-deco-tag{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;margin-left:auto}
       .wt-card-deco-img{position:absolute;top:12px;right:14px;width:44px;height:44px;border-radius:14px;object-fit:cover;box-shadow:0 4px 14px #0003;pointer-events:none}
     `;

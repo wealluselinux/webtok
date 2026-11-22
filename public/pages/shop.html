@@ -16,7 +16,7 @@ body{overflow:auto;padding:24px 16px 96px}
 .earn-bar{background:var(--card);border-radius:var(--r-xl);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .earn-bar b{color:var(--text)}
 .sec-h{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:4px}
-.s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+.s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .s-card{background:var(--card);border-radius:var(--r-xl);padding:18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 18px #0001}
 .s-prev{width:64px;height:64px;clip-path:var(--m3-cookie-7);background:var(--surface);display:grid;place-items:center;font-size:28px;position:relative;flex:none}
 .s-prev img{width:100%;height:100%;object-fit:cover}
@@ -25,9 +25,11 @@ body{overflow:auto;padding:24px 16px 96px}
 .s-meta small{color:var(--primary);font-weight:700;font-size:12px}
 .s-desc{font-size:13px;color:var(--muted);line-height:1.4;flex:1}
 .s-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.s-vid-sel{width:100%;background:var(--surface);border:0;border-radius:999px;padding:9px 14px;color:var(--text);font:inherit;font-size:12px;outline:0}
 .custom-box{background:var(--card);border-radius:var(--r-xl);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 18px #0001}
 .c-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .c-row input[type=text],.c-row select{flex:1;min-width:170px;background:var(--surface);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
+.hidden{display:none!important}
 </style>
 </head>
 <body data-page="shop">
@@ -52,13 +54,19 @@ body{overflow:auto;padding:24px 16px 96px}
       <b style="font-size:17px;display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">brush</span>Make Your Own Decoration</b>
       <span class="coin-pill" style="padding:6px 14px;font-size:13px">130 Tok Coins</span>
     </div>
-    <p style="font-size:13px;color:var(--muted)">Design your own custom profile picture frame or profile card decoration (costs a little bit more than buying a ready-made one).</p>
+    <p style="font-size:13px;color:var(--muted)">Design your own custom Profile Frame, Profile Card decoration, or Video Banner (costs a little bit more than buying a ready-made one). Download a free PNG template below to draw your own!</p>
+    <div class="c-row">
+      <button type="button" class="btn sm" id="dlFrameTpl"><span class="ms" style="font-size:18px">download</span>Free Frame Template (PNG)</button>
+      <button type="button" class="btn sm" id="dlBannerTpl"><span class="ms" style="font-size:18px">download</span>Free Banner Template (PNG)</button>
+    </div>
     <div class="c-row">
       <input type="text" id="custName" maxlength="32" placeholder="Decoration name (e.g. My Galaxy Frame)">
       <select id="custSlot">
-        <option value="avatar">Profile Picture Decoration</option>
+        <option value="avatar">Profile Frame</option>
         <option value="profile">Profile Card Decoration</option>
+        <option value="banner">Video Banner</option>
       </select>
+      <select id="custVideo" class="hidden"></select>
       <input type="color" id="custColor" value="#d0bcff" title="Accent color" style="width:46px;height:40px;border:0;background:none;cursor:pointer">
     </div>
     <div class="c-row">
@@ -68,11 +76,14 @@ body{overflow:auto;padding:24px 16px 96px}
     <div class="hint" id="custHint"></div>
   </div>
 
-  <div class="sec-h">Profile Picture Decorations</div>
+  <div class="sec-h">Profile Frames</div>
   <div class="s-grid" id="avatarGrid"></div>
 
   <div class="sec-h">Profile Card Decorations</div>
   <div class="s-grid" id="profileGrid"></div>
+
+  <div class="sec-h">Video Banners</div>
+  <div class="s-grid" id="bannerGrid"></div>
 </main>
 
 <script src="/config.js"></script>
@@ -83,12 +94,51 @@ body{overflow:auto;padding:24px 16px 96px}
 <script>
 let tok = null, uid = null, shopState = null;
 
+function downloadTemplate(type) {
+  const c = document.createElement("canvas");
+  const ctx = c.getContext("2d");
+  if (type === "frame") {
+    c.width = 256; c.height = 256;
+    ctx.strokeStyle = "#d0bcff"; ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.arc(128, 128, 114, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([8, 6]); ctx.strokeStyle = "#ffd58a"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(128, 128, 92, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = "rgba(208,188,255,0.14)";
+    ctx.beginPath(); ctx.arc(128, 128, 114, 0, Math.PI * 2); ctx.arc(128, 128, 92, 0, Math.PI * 2, true); ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("WebTok Frame 256x256", 128, 22);
+    ctx.fillStyle = "#d0bcff"; ctx.font = "12px sans-serif";
+    ctx.fillText("Draw around the ring!", 128, 246);
+  } else {
+    c.width = 800; c.height = 180;
+    ctx.fillStyle = "rgba(208,188,255,0.16)";
+    ctx.beginPath(); ctx.roundRect(12, 12, 776, 156, 28); ctx.fill();
+    ctx.strokeStyle = "#d0bcff"; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.roundRect(12, 12, 776, 156, 28); ctx.stroke();
+    ctx.setLineDash([10, 8]); ctx.strokeStyle = "#ffd58a"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(28, 28, 744, 124, 20); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = "#ffffff"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("WebTok Video Banner Template (800 x 180)", 400, 86);
+    ctx.fillStyle = "#d0bcff"; ctx.font = "15px sans-serif";
+    ctx.fillText("Keep art & text inside the dashed safe zone", 400, 118);
+  }
+  c.toBlob(blob => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = type === "frame" ? "webtok-frame-template.png" : "webtok-banner-template.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  }, "image/png");
+}
+$("dlFrameTpl").onclick = () => downloadTemplate("frame");
+$("dlBannerTpl").onclick = () => downloadTemplate("banner");
+
 function makeDecoBlob(file) {
   return new Promise((resolve, reject) => {
     const u = URL.createObjectURL(file), img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(u);
-      const max = 256, sc = Math.min(max / img.width, max / img.height, 1);
+      const max = 512, sc = Math.min(max / img.width, max / img.height, 1);
       const c = document.createElement("canvas");
       c.width = Math.max(1, Math.round(img.width * sc));
       c.height = Math.max(1, Math.round(img.height * sc));
@@ -107,6 +157,12 @@ async function apiShop(url, opts = {}) {
   return j.data;
 }
 
+function videoOptionsHtml(selectedId = "") {
+  const vids = shopState?.myVideos || [];
+  if (!vids.length) return '<option value="">No uploaded videos yet</option>';
+  return vids.map(v => `<option value="${escapeHtml(v.id)}" ${v.id === selectedId ? "selected" : ""}>${escapeHtml(v.title || "Untitled video")}</option>`).join("");
+}
+
 function renderGrid(elId, items, slot) {
   const box = $(elId); box.innerHTML = "";
   const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
@@ -121,21 +177,36 @@ function renderGrid(elId, items, slot) {
     const prevHtml = item.image_url
       ? `<img src="${escapeHtml(item.image_url)}" alt="">`
       : `<span class="ms fill" style="font-size:28px;color:${escapeHtml(item.color || "var(--primary)")}">${escapeHtml(item.icon || "auto_awesome")}</span>`;
+
+    const appliedVid = slot === "banner" ? (shopState.videoBanners || []).find(b => b.item_id === id)?.video_id : "";
+    const vidSelectHtml = slot === "banner"
+      ? `<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>`
+      : "";
+
     card.innerHTML = `
       <div class="s-top">
         <div class="s-prev" style="box-shadow:0 0 0 3px ${escapeHtml(item.color || "var(--primary)")}">${prevHtml}</div>
         <div class="s-meta"><b>${escapeHtml(item.name)}</b><small>${owned ? (item.is_custom ? "Custom · Owned" : "Owned") : `${item.price} Tok Coins`}</small></div>
       </div>
       <div class="s-desc">${escapeHtml(item.desc || (item.is_custom ? "Your custom-made decoration." : ""))}</div>
+      ${vidSelectHtml}
       <div class="s-foot">
-        <span style="font-size:12px;color:var(--muted)">${equipped ? "Currently equipped" : ""}</span>
-        <button type="button" class="btn ${equipped ? "" : "primary"} sm">${equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`}</button>
+        <span style="font-size:12px;color:var(--muted)">${slot === "banner" ? (appliedVid ? "Applied to video" : "Pick video") : (equipped ? "Currently equipped" : "")}</span>
+        <button type="button" class="btn ${(slot !== "banner" && equipped) ? "" : "primary"} sm">${slot === "banner" ? (owned ? "Apply Banner" : `Buy (${item.price})`) : (equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`)}</button>
       </div>`;
+
     card.querySelector("button").onclick = async () => {
       try {
-        if (equipped) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: null }) });
-        else if (owned) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: id }) });
-        else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id }) });
+        if (slot === "banner") {
+          const videoId = card.querySelector(".s-vid-sel")?.value || "";
+          if (!videoId) throw new Error("Upload a video first to apply a banner!");
+          if (owned) await apiShop("/api/shop/equip-banner", { method: "POST", body: JSON.stringify({ videoId, itemId: id }) });
+          else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id, videoId }) });
+        } else {
+          if (equipped) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: null }) });
+          else if (owned) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: id }) });
+          else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id }) });
+        }
         await loadShop();
       } catch (e) {
         if (window.wtAlert) await wtAlert({ title: "Shop", message: e.message });
@@ -147,17 +218,25 @@ function renderGrid(elId, items, slot) {
 
 async function loadShop() {
   shopState = await apiShop("/api/shop/me");
-  $("coinBal").textContent = shopState.balance;
+  $("coinBal").textContent = shopState.balance.toLocaleString();
   $("earnStats").textContent = `${shopState.likesCount} likes + ${shopState.commentsCount} comments · ${shopState.earned} earned · ${shopState.spent} spent`;
+  $("custVideo").innerHTML = videoOptionsHtml();
   const customAv = (shopState.owned || []).filter(x => x.is_custom && x.slot === "avatar");
   const customPr = (shopState.owned || []).filter(x => x.is_custom && x.slot === "profile");
+  const customBn = (shopState.owned || []).filter(x => x.is_custom && x.slot === "banner");
   renderGrid("avatarGrid", [...customAv, ...shopState.catalog.filter(x => x.slot === "avatar")], "avatar");
   renderGrid("profileGrid", [...customPr, ...shopState.catalog.filter(x => x.slot === "profile")], "profile");
+  renderGrid("bannerGrid", [...customBn, ...shopState.catalog.filter(x => x.slot === "banner")], "banner");
 }
+
+$("custSlot").onchange = () => {
+  $("custVideo").classList.toggle("hidden", $("custSlot").value !== "banner");
+};
 
 $("custCreate").onclick = async () => {
   const name = $("custName").value.trim();
   const slot = $("custSlot").value;
+  const videoId = slot === "banner" ? $("custVideo").value : null;
   const color = $("custColor").value;
   const f = $("custFile").files?.[0];
   const hint = $("custHint");
@@ -172,7 +251,7 @@ $("custCreate").onclick = async () => {
       if (up?.error) throw up.error;
       image_url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
     }
-    await apiShop("/api/shop/custom", { method: "POST", body: JSON.stringify({ name, slot, color, image_url }) });
+    await apiShop("/api/shop/custom", { method: "POST", body: JSON.stringify({ name, slot, videoId, color, image_url }) });
     $("custName").value = ""; $("custFile").value = "";
     hint.textContent = "Custom decoration created & equipped!";
     await loadShop();

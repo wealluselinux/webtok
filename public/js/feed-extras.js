@@ -1,4 +1,4 @@
-/* Global User Search + Sounds Link on Feed */
+/* Global User Search + Sounds Link + Feed Rail Avatar, Sound Label & Video Banners */
 (function initExtrasBar() {
   const page = document.body.dataset.page || "";
   if (page !== "scroll" && page !== "home") return;
@@ -14,6 +14,11 @@
     .wt-sres{max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-top:10px}
     .wt-srow{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:18px;background:var(--surface);text-decoration:none;color:inherit}
     .wt-srow:hover{background:var(--card)}
+    .rail-av{order:-10!important;clip-path:var(--m3-cookie-7)!important;background:var(--card) center/cover;color:var(--primary);font-weight:700;font-size:18px;text-decoration:none}
+    .rail-snd{order:99!important;text-decoration:none;color:var(--text);padding:4px}
+    .rail-snd small{max-width:54px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+    .wt-vid-banner{position:absolute;top:12px;left:12px;right:12px;z-index:3;padding:8px 14px;border-radius:18px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#16121e;box-shadow:0 6px 20px #0005;pointer-events:none;overflow:hidden}
+    .wt-vid-banner img{height:28px;width:auto;border-radius:8px;object-fit:contain}
   `;
   document.head.appendChild(style);
 
@@ -55,4 +60,97 @@
       });
     }, 220);
   };
+
+  // Enhance feed slides: Profile picture above Like/Comment, Sound label under Share, Video Banners
+  let soundsCache = null;
+  async function getSounds() {
+    if (soundsCache) return soundsCache;
+    try { const r = await fetch("/api/sounds"); soundsCache = (await r.json())?.data || []; }
+    catch { soundsCache = []; }
+    return soundsCache;
+  }
+
+  async function enhanceSlides() {
+    const feed = document.getElementById("feed");
+    if (!feed) return;
+    const slides = [...feed.querySelectorAll(".slide:not([data-wt-enh])")];
+    if (!slides.length) return;
+    slides.forEach(s => { s.dataset.wtEnh = "1"; });
+
+    const usernames = [];
+    const vids = [];
+    slides.forEach(s => {
+      if (s.dataset.vid) vids.push(s.dataset.vid);
+      const a = s.querySelector('.cap a[href^="/profile?u="]');
+      if (a) {
+        try { usernames.push(decodeURIComponent(a.getAttribute("href").split("u=")[1])); } catch {}
+      }
+    });
+
+    const [profMap, bannerMap, sounds] = await Promise.all([
+      (async () => {
+        const m = {};
+        if (usernames.length && typeof sb !== "undefined") {
+          const { data } = await sb.from("profiles").select("username,display_name,avatar_url").in("username", [...new Set(usernames)]);
+          (data || []).forEach(p => { m[p.username] = p; });
+        }
+        return m;
+      })(),
+      (async () => {
+        if (!vids.length) return {};
+        try { const r = await fetch("/api/shop/banners?ids=" + encodeURIComponent(vids.join(","))); return (await r.json())?.data || {}; }
+        catch { return {}; }
+      })(),
+      getSounds()
+    ]);
+
+    slides.forEach(s => {
+      const rail = s.querySelector(".rail");
+      const capLink = s.querySelector('.cap a[href^="/profile?u="]');
+      const uname = capLink ? decodeURIComponent(capLink.getAttribute("href").split("u=")[1]) : "";
+      const p = profMap[uname];
+
+      if (rail && uname && !rail.querySelector(".rail-av")) {
+        const av = document.createElement("a");
+        av.className = "fab rail-av";
+        av.href = "/profile?u=" + encodeURIComponent(uname);
+        av.title = "@" + uname;
+        if (p?.avatar_url) av.style.backgroundImage = `url(${p.avatar_url})`;
+        else av.textContent = (p?.display_name || uname || "U")[0].toUpperCase();
+        rail.insertBefore(av, rail.firstChild);
+      }
+
+      if (rail && !rail.querySelector(".rail-snd")) {
+        const capTxt = (s.querySelector(".cap-t")?.textContent || "").toLowerCase();
+        const match = sounds.find(sn => sn.title && capTxt.includes(sn.title.toLowerCase()));
+        const sndLabel = match ? match.title : "Original sound";
+        const snd = document.createElement("a");
+        snd.className = "fab rail-snd";
+        snd.href = "/sounds";
+        snd.title = sndLabel;
+        snd.innerHTML = `<span class="ms">music_note</span><small>${sndLabel.replace(/</g, "&lt;")}</small>`;
+        rail.appendChild(snd);
+      }
+
+      const bn = bannerMap[s.dataset.vid];
+      const player = s.querySelector(".player");
+      if (bn && player && !player.querySelector(".wt-vid-banner")) {
+        const el = document.createElement("div");
+        el.className = "wt-vid-banner";
+        el.style.background = bn.style === "cyber"
+          ? "linear-gradient(90deg,#00e5ff,#ff4081)"
+          : `linear-gradient(90deg, ${bn.color || "#d0bcff"}, var(--accent,#ffd8e4))`;
+        el.innerHTML = bn.image_url
+          ? `<img src="${bn.image_url}" alt=""><span>${bn.name.replace(/</g, "&lt;")}</span>`
+          : `<span class="ms fill" style="font-size:18px">${bn.icon || "auto_awesome"}</span><span>${bn.name.replace(/</g, "&lt;")}</span>`;
+        player.appendChild(el);
+      }
+    });
+  }
+
+  const feedEl = document.getElementById("feed");
+  if (feedEl) {
+    new MutationObserver(() => enhanceSlides()).observe(feedEl, { childList: true });
+    setTimeout(enhanceSlides, 300);
+  }
 })();
