@@ -1,5 +1,7 @@
-/* Profile page: full-screen sectioned settings (Theme, Spin Shapes, Account with current-password verification, Security) */
+/* Profile page: full-screen sectioned settings (Theme, Wallpaper Match, Spin Shapes, Layout & Reorder, Account, Security) */
 let origAcctEmail = "";
+const SB_LABELS = { explore: "Explore", fyp: "For You", following: "Following", friends: "Friends", upload: "Upload", games: "Games", activity: "Activity", messages: "Messages", profile: "Profile" };
+const RAIL_LABELS = { follow: "Follow", like: "Like", comment: "Comment", share: "Share" };
 
 function setThemeHint(msg, bad = false) {
   const el = $("st-theme-hint");
@@ -35,11 +37,35 @@ function updateVerifyState() {
   $("st-verify-box")?.classList.toggle("req", needsVerify);
 }
 
+function renderOrderList(containerId, list, labels, key) {
+  const box = $(containerId); if (!box) return;
+  box.innerHTML = "";
+  list.forEach((id, idx) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:16px;background:var(--surface)";
+    row.innerHTML = `<span style="font-size:13px;font-weight:700">${labels[id] || id}</span>
+      <div style="display:flex;gap:4px">
+        <button type="button" class="btn icon" style="width:32px;height:32px" ${idx === 0 ? "disabled" : ""} data-d="-1"><span class="ms" style="font-size:16px">arrow_upward</span></button>
+        <button type="button" class="btn icon" style="width:32px;height:32px" ${idx === list.length - 1 ? "disabled" : ""} data-d="1"><span class="ms" style="font-size:16px">arrow_downward</span></button>
+      </div>`;
+    row.querySelectorAll("button").forEach(btn => btn.onclick = async () => {
+      const d = Number(btn.dataset.d), next = [...list], swap = idx + d;
+      if (swap < 0 || swap >= next.length) return;
+      [next[idx], next[swap]] = [next[swap], next[idx]];
+      await saveTheme({ [key]: next });
+      renderSettings();
+    });
+    box.appendChild(row);
+  });
+}
+
 function renderSettings() {
   const t = getTheme();
   $("st-mode").value = t.mode || "auto";
   $("st-custom-color").value = t.color || "#6750a4";
   if ($("st-spin-shapes")) $("st-spin-shapes").checked = !!t.spinShapes;
+  if ($("st-sb-pos")) $("st-sb-pos").value = t.sbPos || "left";
+  if ($("st-radius")) $("st-radius").value = t.radius || "round";
   setThemeHint("");
   setDelHint("");
   const sw = $("st-swatches"); sw.innerHTML = "";
@@ -63,12 +89,14 @@ function renderSettings() {
     if (w.css) b.style.backgroundImage = w.css;
     b.textContent = w.label;
     b.onclick = async () => {
-      await saveTheme({ wallpaper: w.css });
+      await saveTheme({ wallpaper: w.css, wpColor: "" });
       renderSettings();
       if (window.lastThemeError) setThemeHint(window.lastThemeError, true);
     };
     wps.appendChild(b);
   });
+  renderOrderList("st-sb-order", (Array.isArray(t.sbOrder) && t.sbOrder.length) ? t.sbOrder : (window.WT_DEFAULT_SB_ORDER || Object.keys(SB_LABELS)), SB_LABELS, "sbOrder");
+  renderOrderList("st-rail-order", (Array.isArray(t.railOrder) && t.railOrder.length) ? t.railOrder : (window.WT_DEFAULT_RAIL_ORDER || Object.keys(RAIL_LABELS)), RAIL_LABELS, "railOrder");
 }
 
 async function loadAccountSettings() {
@@ -157,6 +185,17 @@ $("st-mode").onchange = async e => {
   if (window.lastThemeError) setThemeHint(window.lastThemeError, true);
 };
 $("st-custom-color").oninput = e => saveTheme({ color: e.target.value });
+if ($("st-wp-match")) {
+  $("st-wp-match").onclick = async () => {
+    const t = getTheme();
+    if (!t.wallpaper) { setThemeHint("Pick or upload a wallpaper first!", true); return; }
+    setThemeHint("Generating Material You palette from wallpaper…");
+    const hex = t.wpColor || (window.wtExtractWallpaperColor ? await window.wtExtractWallpaperColor(t.wallpaper, t.color) : "#6750a4");
+    await saveTheme({ color: hex });
+    renderSettings();
+    setThemeHint(`Matched wallpaper palette (${hex})!`);
+  };
+}
 if ($("st-spin-shapes")) {
   $("st-spin-shapes").onchange = async e => {
     const on = !!e.target.checked;
@@ -165,6 +204,11 @@ if ($("st-spin-shapes")) {
     if (window.lastThemeError) setThemeHint(window.lastThemeError, true);
   };
 }
+if ($("st-sb-pos")) $("st-sb-pos").onchange = e => saveTheme({ sbPos: e.target.value });
+if ($("st-radius")) $("st-radius").onchange = e => saveTheme({ radius: e.target.value });
+if ($("st-sb-reset")) $("st-sb-reset").onclick = async () => { await saveTheme({ sbOrder: null }); renderSettings(); };
+if ($("st-rail-reset")) $("st-rail-reset").onclick = async () => { await saveTheme({ railOrder: null }); renderSettings(); };
+
 $("st-wp-upload").onclick = () => $("st-wp-file").click();
 $("st-wp-file").onchange = e => {
   const f = e.target.files?.[0];
@@ -177,6 +221,7 @@ $("st-wp-file").onchange = e => {
     const c = document.createElement("canvas");
     c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    const extracted = window.wtExtractColorFromCanvas ? window.wtExtractColorFromCanvas(c) : "";
     $("st-wp-upload").disabled = true;
     setThemeHint("Uploading wallpaper…");
     c.toBlob(async blob => {
@@ -193,9 +238,9 @@ $("st-wp-file").onchange = e => {
         } else {
           wpValue = c.toDataURL("image/jpeg", 0.72);
         }
-        await saveTheme({ wallpaper: wpValue });
+        await saveTheme({ wallpaper: wpValue, wpColor: extracted });
         renderSettings();
-        setThemeHint(window.lastThemeError || "Wallpaper saved!", !!window.lastThemeError);
+        setThemeHint(window.lastThemeError || "Wallpaper saved! Click 'Match wallpaper' to generate its palette.", !!window.lastThemeError);
       } catch (err) {
         setThemeHint(err?.message || "Could not upload wallpaper.", true);
       } finally {
@@ -214,6 +259,7 @@ $("st-reset").onclick = async () => {
   localStorage.removeItem("wt_theme");
   activeProfileTheme = {};
   if (window.wtApplySpinShapes) window.wtApplySpinShapes(false);
+  if (window.wtApplyLayoutPrefs) window.wtApplyLayoutPrefs({});
   applyTheme({});
   if (sb && user) { try { await sb.from("profiles").update({ theme: {} }).eq("id", user.id); } catch {} }
   renderSettings();

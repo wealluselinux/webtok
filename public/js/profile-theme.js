@@ -1,15 +1,26 @@
-/* Profile page: Material You theme engine (loads m3-dialogs.js) */
+/* Profile page: Material You theme engine (14 presets, applyTheme, saveTheme) */
 const PRESETS = [
   { name: "Berry", hex: "#7b3f8c" },
+  { name: "Purple", hex: "#6750a4" },
   { name: "Sage", hex: "#386a4b" },
-  { name: "Ocean", hex: "#25638f" },
-  { name: "Terracotta", hex: "#9b4534" },
-  { name: "Lavender", hex: "#5b5399" }
+  { name: "Teal", hex: "#006a6a" },
+  { name: "Ocean", hex: "#00639b" },
+  { name: "Indigo", hex: "#3f51b5" },
+  { name: "Sunset", hex: "#9c4146" },
+  { name: "Coral", hex: "#c04838" },
+  { name: "Amber", hex: "#8c5000" },
+  { name: "Rose", hex: "#984061" },
+  { name: "Crimson", hex: "#b3261e" },
+  { name: "Mint", hex: "#1b6d4f" },
+  { name: "Plum", hex: "#6b2d5c" },
+  { name: "Slate", hex: "#4a5d73" }
 ];
 const WP_PRESETS = [
-  { id: "none", label: "None", css: "" },
-  { id: "rose", label: "Rose Aura", css: "radial-gradient(circle at 20% 20%, #ffd58a99, transparent 50%), radial-gradient(circle at 80% 80%, #e7b6f299, transparent 55%), linear-gradient(135deg, #fff0ee, #fbd5de)" },
-  { id: "mint", label: "Mint Mist", css: "radial-gradient(circle at 80% 20%, #cfe8d5, transparent 55%), linear-gradient(135deg, #eefaf2, #d3ecdc)" },
+  { id: "", label: "None", css: "" },
+  { id: "aurora", label: "Aurora", css: "radial-gradient(circle at 20% 20%, #e7b6f2, transparent 50%), radial-gradient(circle at 80% 80%, #a8dab5, transparent 50%), linear-gradient(135deg, #2d1b36, #1b2838)" },
+  { id: "sunset", label: "Sunset", css: "radial-gradient(circle at 75% 20%, #ffd58a, transparent 45%), linear-gradient(155deg, #9c4146, #7b3f8c 65%, #3b1f2b)" },
+  { id: "ocean", label: "Ocean", css: "radial-gradient(circle at 20% 80%, #93c5fd, transparent 50%), linear-gradient(145deg, #0c4a6e, #1e293b)" },
+  { id: "forest", label: "Forest", css: "radial-gradient(circle at 70% 30%, #86efac, transparent 45%), linear-gradient(145deg, #14532d, #1c1917)" },
   { id: "dusk", label: "Dusk", css: "radial-gradient(circle at 30% 20%, #7b3f8c88, transparent 55%), linear-gradient(135deg, #22141b, #47303c)" },
   { id: "sky", label: "Sky", css: "radial-gradient(circle at 75% 25%, #bae6fd, transparent 50%), linear-gradient(135deg, #f0f9ff, #dbeafe)" }
 ];
@@ -42,11 +53,9 @@ async function saveTheme(patch) {
       const res = await sb.from("profiles").update({ theme: next }).eq("id", user.id);
       if (res?.error) {
         window.lastThemeError = res.error.message || "Could not save theme.";
-        console.warn("Theme save error:", res.error);
       }
     } catch (e) {
       window.lastThemeError = e?.message || "Could not save theme.";
-      console.warn("Theme save exception:", e);
     }
   }
   return next;
@@ -77,13 +86,17 @@ function applyTheme(t = activeProfileTheme || getTheme()) {
     root.style.setProperty("--accent", `hsl(${(h+45)%360}, 85%, 78%)`);
   }
   const wp = $("wp-layer");
-  if (t.wallpaper) {
-    document.body.classList.add("has-wp");
-    wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url("${t.wallpaper}")`;
-  } else {
-    document.body.classList.remove("has-wp");
-    wp.style.backgroundImage = "";
+  if (wp) {
+    if (t.wallpaper) {
+      document.body.classList.add("has-wp");
+      wp.style.backgroundImage = t.wallpaper.startsWith("url(") || t.wallpaper.includes("gradient") ? t.wallpaper : `url("${t.wallpaper}")`;
+    } else {
+      document.body.classList.remove("has-wp");
+      wp.style.backgroundImage = "";
+    }
   }
+  if (window.wtApplySpinShapes) window.wtApplySpinShapes(!!t.spinShapes);
+  if (window.wtApplyLayoutPrefs) window.wtApplyLayoutPrefs(t);
 }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();

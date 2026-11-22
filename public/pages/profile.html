@@ -141,12 +141,12 @@
   </div>
   <div class="st-shell">
     <nav class="st-nav" aria-label="Settings sections">
-      <button type="button" class="st-nav-btn on" data-sec="theme"><span class="ms">palette</span>Theme</button>
+      <button type="button" class="st-nav-btn on" data-sec="theme"><span class="ms">palette</span>Theme &amp; Layout</button>
       <button type="button" class="st-nav-btn" data-sec="account"><span class="ms">manage_accounts</span>Account</button>
       <button type="button" class="st-nav-btn" data-sec="security"><span class="ms">shield</span>Security &amp; Privacy</button>
     </nav>
     <div class="st-main">
-      <!-- Theme Section -->
+      <!-- Theme & Layout Section -->
       <section class="st-sec" id="st-sec-theme">
         <div class="st-card">
           <h3>Material You Theme</h3>
@@ -159,9 +159,12 @@
 
           <label class="fld">Color palette</label>
           <div class="swatches" id="st-swatches"></div>
-          <div class="color-row">
-            <input type="color" id="st-custom-color" value="#6750a4">
-            <span style="font-size:14px">Custom accent color</span>
+          <div class="color-row" style="justify-content:space-between;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="color" id="st-custom-color" value="#6750a4">
+              <span style="font-size:14px">Custom accent color</span>
+            </div>
+            <button type="button" class="btn primary sm" id="st-wp-match"><span class="ms" style="font-size:16px">colorize</span>Match wallpaper</button>
           </div>
 
           <label class="fld" style="margin-top:16px">Wallpaper</label>
@@ -181,6 +184,35 @@
           </div>
 
           <div class="hint" id="st-theme-hint"></div>
+        </div>
+
+        <div class="st-card">
+          <h3>Layout &amp; Navigation</h3>
+          <label class="fld">Sidebar position &amp; style</label>
+          <select id="st-sb-pos">
+            <option value="left">Left sidebar (Default)</option>
+            <option value="right">Right sidebar</option>
+            <option value="compact">Compact icon rail</option>
+          </select>
+
+          <label class="fld" style="margin-top:12px">Card &amp; button roundness</label>
+          <select id="st-radius">
+            <option value="round">Rounded Expressive (Default)</option>
+            <option value="pill">Extra Pill</option>
+            <option value="sharp">Sharp</option>
+          </select>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+            <label class="fld" style="margin:0">Rearrange sidebar buttons</label>
+            <button type="button" class="btn sm" id="st-sb-reset">Reset</button>
+          </div>
+          <div id="st-sb-order" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+            <label class="fld" style="margin:0">Rearrange video action buttons</label>
+            <button type="button" class="btn sm" id="st-rail-reset">Reset</button>
+          </div>
+          <div id="st-rail-order" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
         </div>
       </section>
 

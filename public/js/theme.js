@@ -1,4 +1,4 @@
-/* Material You theme + wallpaper + security alerts + Capri Pet & Spin Shapes loader (loads m3-dialogs & feed-extras) */
+/* Material You theme + wallpaper + security alerts + Capri Pet, Spin Shapes & Layout Prefs loader */
 function hexToHsl(hex) {
   let r = parseInt(hex.slice(1,3),16)/255, g = parseInt(hex.slice(3,5),16)/255, b = parseInt(hex.slice(5,7),16)/255;
   const max = Math.max(r,g,b), min = Math.min(r,g,b);
@@ -52,6 +52,7 @@ function applyTheme(t) {
     }
   }
   if (window.wtApplySpinShapes) window.wtApplySpinShapes(!!t.spinShapes);
+  if (window.wtApplyLayoutPrefs) window.wtApplyLayoutPrefs(t);
 }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
@@ -66,6 +67,7 @@ if (!window.wtConfirm) loadSubScript("/js/m3-dialogs.js");
 if (["scroll", "home"].includes(document.body.dataset.page || "")) loadSubScript("/js/feed-extras.js");
 loadSubScript("/js/capri-pet.js");
 loadSubScript("/js/spin-shapes.js");
+loadSubScript("/js/layout-prefs.js");
 if ((document.body.dataset.page || "") === "landing") loadSubScript("/js/secret-settings.js");
 
 /* ---------- Theme sync + New-device Security Alert ---------- */

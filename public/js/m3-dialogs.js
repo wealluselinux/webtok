@@ -1,10 +1,9 @@
-/* Custom Material You Dialogs (replaces browser alert / confirm / prompt) + global Capri & Spin Shapes loader */
+/* Custom Material You Dialogs (replaces browser alert / confirm / prompt) + global Capri, Spin Shapes & Layout Prefs loader */
 (function initM3Dialogs() {
-  if (!document.querySelector('script[src="/js/capri-pet.js"]')) {
-    const cs = document.createElement("script"); cs.src = "/js/capri-pet.js"; document.head.appendChild(cs);
-  }
-  if (!document.querySelector('script[src="/js/spin-shapes.js"]')) {
-    const ss = document.createElement("script"); ss.src = "/js/spin-shapes.js"; document.head.appendChild(ss);
+  for (const src of ["/js/capri-pet.js", "/js/spin-shapes.js", "/js/layout-prefs.js"]) {
+    if (!document.querySelector(`script[src="${src}"]`)) {
+      const s = document.createElement("script"); s.src = src; document.head.appendChild(s);
+    }
   }
   if (window.wtConfirm) return;
   const M3_COOKIE_4 = "polygon(99.5% 50.0%,98.8% 54.8%,96.8% 59.3%,93.8% 63.3%,90.2% 66.6%,86.3% 69.4%,82.6% 71.8%,79.3% 74.1%,76.5% 76.5%,74.1% 79.3%,71.8% 82.6%,69.4% 86.3%,66.6% 90.2%,63.3% 93.8%,59.3% 96.8%,54.8% 98.8%,50.0% 99.5%,45.2% 98.8%,40.7% 96.8%,36.7% 93.8%,33.4% 90.2%,30.6% 86.3%,28.2% 82.6%,25.9% 79.3%,23.5% 76.5%,20.7% 74.1%,17.4% 71.8%,13.7% 69.4%,9.8% 66.6%,6.2% 63.3%,3.2% 59.3%,1.2% 54.8%,0.5% 50.0%,1.2% 45.2%,3.2% 40.7%,6.2% 36.7%,9.8% 33.4%,13.7% 30.6%,17.4% 28.2%,20.7% 25.9%,23.5% 23.5%,25.9% 20.7%,28.2% 17.4%,30.6% 13.7%,33.4% 9.8%,36.7% 6.2%,40.7% 3.2%,45.2% 1.2%,50.0% 0.5%,54.8% 1.2%,59.3% 3.2%,63.3% 6.2%,66.6% 9.8%,69.4% 13.7%,71.8% 17.4%,74.1% 20.7%,76.5% 23.5%,79.3% 25.9%,82.6% 28.2%,86.3% 30.6%,90.2% 33.4%,93.8% 36.7%,96.8% 40.7%,98.8% 45.2%)";
