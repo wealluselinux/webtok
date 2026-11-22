@@ -104,5 +104,6 @@ applyTheme();
 if (!window.wtConfirm) {
   const s = document.createElement("script");
   s.src = "/js/m3-dialogs.js";
+  s.onload = () => applyTheme();
   document.head.appendChild(s);
 }

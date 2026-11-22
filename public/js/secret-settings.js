@@ -5,8 +5,9 @@
     catch { return { enabled: false, size: "md", cursor: false, gravityBtn: false, prompt: "" }; }
   }
   function saveCfg(c) {
+    localStorage.setItem("wt_capri_cfg", JSON.stringify(c));
     if (window.wtCapri?.save) window.wtCapri.save(c);
-    else { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); window.wtCapri?.sync(); }
+    else window.wtCapri?.sync();
     window.wtGravity?.sync();
   }
 

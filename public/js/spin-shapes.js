@@ -33,9 +33,10 @@
       makeKf("wtSpinC4", P4, 90) +
       makeKf("wtSpinC9", P9, 40) +
       makeKf("wtSpinSunny", PS, 30) +
-      `.pfp,.u-av,.act-av,#sb .srch-av,.mini-av,.av:not(.grp),.st-ring,.st-in,.swatch.on{animation:wtSpinC7 2.4s linear infinite}` +
-      `.av.grp,.g-ic,.wt-m3-ic,.swatch,.ss-ic{animation:wtSpinC4 3.0s linear infinite}` +
-      `.snd-ic{animation:wtSpinC9 2.2s linear infinite}`;
+      `.pfp,.u-av,.act-av,#sb .srch-av,.mini-av,.av:not(.grp),.st-ring,.st-in,.swatch.on,.sh-av:not(.grp),.fab[data-a="follow"]{animation:wtSpinC7 2.4s linear infinite}` +
+      `.av.grp,.g-ic,.wt-m3-ic,.swatch,.ss-ic,.sh-av.grp,.vid-share-ic,.fab{animation:wtSpinC4 3.0s linear infinite}` +
+      `.snd-ic,.fab[data-a="share"]{animation:wtSpinC9 2.2s linear infinite}` +
+      `.fab.on{animation:wtSpinSunny 2.2s linear infinite}`;
     return cachedCss;
   }
 

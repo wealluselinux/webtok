@@ -10,7 +10,7 @@
   }
   function saveLocal(c) { localStorage.setItem("wt_capri_cfg", JSON.stringify(c)); }
 
-  let _sbClient = null;
+  let _sbClient = null, localDirty = false;
   function getSbClient() {
     if (window.sb) return window.sb;
     if (!_sbClient && window.supabase && window.WT_CONFIG?.SUPABASE_URL) {
@@ -40,6 +40,7 @@
       const tok = await getToken(); if (!tok) return;
       const r = await fetch("/api/secret-settings", { headers: { Authorization: "Bearer " + tok } });
       const j = await r.json().catch(() => ({}));
+      if (localDirty) return;
       if (j?.data) {
         saveLocal({ enabled: !!j.data.enabled, size: j.data.size || "md", cursor: !!j.data.cursor, gravityBtn: !!j.data.gravityBtn, prompt: j.data.prompt || "" });
         sync();
@@ -67,15 +68,18 @@
     if (cursorUrl) return inject(cursorUrl);
     const ci = new Image();
     ci.onload = () => {
-      const c = document.createElement("canvas");
-      c.width = c.height = 36;
-      const ctx = c.getContext("2d");
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
-      ctx.drawImage(ci, 0, 0, 36, 36);
-      cursorUrl = c.toDataURL("image/png");
+      try {
+        const c = document.createElement("canvas");
+        c.width = c.height = 36;
+        const ctx = c.getContext("2d");
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(ci, 0, 0, 36, 36);
+        cursorUrl = c.toDataURL("image/png");
+      } catch { cursorUrl = BASE + "cursor.png"; }
       if (getCfg().cursor) inject(cursorUrl);
     };
+    ci.onerror = () => { if (getCfg().cursor) inject(BASE + "cursor.png"); };
     ci.src = BASE + "cursor.png";
   }
 
@@ -316,6 +320,7 @@
   }
 
   function saveAndSync(c) {
+    localDirty = true;
     saveLocal(c);
     sync();
     pushToServer(c);
@@ -333,6 +338,6 @@
   setTimeout(syncFromServer, 200);
   const client = getSbClient();
   if (client?.auth?.onAuthStateChange) {
-    client.auth.onAuthStateChange(ev => { if (ev === "SIGNED_IN") syncFromServer(); });
+    client.auth.onAuthStateChange(ev => { if (ev === "SIGNED_IN") { localDirty = false; syncFromServer(); } });
   }
 })();

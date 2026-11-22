@@ -57,18 +57,19 @@ function applyTheme(t) {
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyTheme());
 applyTheme();
 
-function loadSubScript(src) {
-  if (document.querySelector(`script[src="${src}"]`)) return;
+function loadSubScript(src, onload) {
+  if (document.querySelector(`script[src="${src}"]`)) { if (onload) onload(); return; }
   const s = document.createElement("script");
   s.src = src;
+  if (onload) s.onload = onload;
   document.head.appendChild(s);
 }
 if (!window.wtConfirm) loadSubScript("/js/m3-dialogs.js");
 if (["scroll", "home"].includes(document.body.dataset.page || "")) loadSubScript("/js/feed-extras.js");
 loadSubScript("/js/capri-pet.js");
 loadSubScript("/js/gravity-mode.js");
-loadSubScript("/js/spin-shapes.js");
-loadSubScript("/js/layout-prefs.js");
+loadSubScript("/js/spin-shapes.js", () => applyTheme());
+loadSubScript("/js/layout-prefs.js", () => applyTheme());
 if ((document.body.dataset.page || "") === "landing") loadSubScript("/js/secret-settings.js");
 
 /* ---------- Theme sync + New-device Security Alert ---------- */
