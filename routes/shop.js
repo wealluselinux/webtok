@@ -1,4 +1,4 @@
-/* Tok Coins & Profile Decorations Shop API (Turso) */
+/* Tok Coins & Profile Decorations Shop API (Turso) + Admin/Owner Coin Grants */
 const crypto = require("crypto");
 
 const LIKE_REWARD = 10;
@@ -42,24 +42,53 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
         profile_deco TEXT,
         updated_at TEXT NOT NULL
       )`,
-      "CREATE INDEX IF NOT EXISTS idx_shop_user ON user_shop_items(user_id, created_at DESC)"
+      `CREATE TABLE IF NOT EXISTS user_coin_grants (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        granted_by TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+      "CREATE INDEX IF NOT EXISTS idx_shop_user ON user_shop_items(user_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_grants_user ON user_coin_grants(user_id)"
     ], "write");
     ready = true;
   }
 
   async function getWallet(uid) {
     await ensureTables();
-    const [likesRow, cmtsRow, spentRow] = await Promise.all([
+    const [likesRow, cmtsRow, spentRow, grantRow] = await Promise.all([
       run("SELECT COUNT(*) AS c FROM likes l JOIN videos v ON v.id = l.video_id WHERE v.user_id = ?", [uid]),
       run("SELECT COUNT(*) AS c FROM comments c JOIN videos v ON v.id = c.video_id WHERE v.user_id = ?", [uid]),
-      run("SELECT COALESCE(SUM(price), 0) AS s FROM user_shop_items WHERE user_id = ?", [uid])
+      run("SELECT COALESCE(SUM(price), 0) AS s FROM user_shop_items WHERE user_id = ?", [uid]),
+      run("SELECT COALESCE(SUM(amount), 0) AS g FROM user_coin_grants WHERE user_id = ?", [uid])
     ]);
     const likesCount = Number(likesRow[0]?.c || 0);
     const commentsCount = Number(cmtsRow[0]?.c || 0);
-    const earned = likesCount * LIKE_REWARD + commentsCount * COMMENT_REWARD;
+    const granted = Number(grantRow[0]?.g || 0);
+    const earned = likesCount * LIKE_REWARD + commentsCount * COMMENT_REWARD + granted;
     const spent = Number(spentRow[0]?.s || 0);
-    return { balance: Math.max(0, earned - spent), earned, spent, likesCount, commentsCount };
+    return { balance: Math.max(0, earned - spent), earned, spent, granted, likesCount, commentsCount };
   }
+
+  app.post("/api/admin/tok-coins", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (!req.wt || !["admin", "owner"].includes(req.wt.role)) {
+      throw new HttpError(403, "Admin or owner access required.");
+    }
+    const amount = Math.floor(Number(req.body?.amount));
+    if (!Number.isFinite(amount) || amount < 1 || amount > 1000000000) {
+      throw new HttpError(400, "Enter a valid amount of Tok Coins (1 to 1,000,000,000).");
+    }
+    const targetId = String(req.body?.targetUserId || uid).trim() || uid;
+    await ensureTables();
+    await db.execute({
+      sql: "INSERT INTO user_coin_grants (id, user_id, amount, granted_by, created_at) VALUES (?,?,?,?,?)",
+      args: [crypto.randomUUID(), targetId, amount, uid, nowIso()]
+    });
+    const wallet = await getWallet(targetId);
+    return { data: { amount, targetUserId: targetId, balance: wallet.balance }, error: null };
+  }));
 
   app.get("/api/shop/me", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");

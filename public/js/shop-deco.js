@@ -1,4 +1,4 @@
-/* Sidebar More-menu links (Admin panel + Tok Coins Shop) & Profile Decorations renderer */
+/* Sidebar More-menu links (Admin panel + Tok Coins Shop), Admin Tok Coins grant UI & Profile Decorations renderer */
 (function () {
   if (window.wtShopDecoInit) return;
   window.wtShopDecoInit = true;
@@ -28,7 +28,55 @@
   else wireMoreMenu();
   setTimeout(wireMoreMenu, 250);
 
-  // 2. Render equipped Tok Coins decorations on /profile
+  // 2. Admin Panel (/admin): allow admins & owners to give themselves any amount of Tok Coins
+  if (location.pathname === "/admin" && document.getElementById("app")) {
+    const appEl = document.getElementById("app");
+    const card = document.createElement("div");
+    card.className = "card";
+    card.id = "admCoinsCard";
+    card.innerHTML = `
+      <div class="name" style="margin-bottom:8px">Give Yourself Tok Coins (Admin / Owner)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <input id="admCoinsAmt" type="number" min="1" max="1000000000" placeholder="Amount of Tok Coins (e.g. 500)" style="flex:1;min-width:180px;margin:0;padding:12px 16px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font:inherit">
+        <button type="button" class="btn" data-q="100">+100</button>
+        <button type="button" class="btn" data-q="500">+500</button>
+        <button type="button" class="btn" data-q="1000">+1,000</button>
+        <button type="button" class="btn p" id="admCoinsBtn">Give Myself Coins</button>
+      </div>
+      <div class="line" style="margin-top:8px">
+        <span id="admCoinsHint" class="sub"></span>
+        <a href="/shop" style="font-size:13px;font-weight:700">Open Tok Coins Shop →</a>
+      </div>`;
+    appEl.insertBefore(card, appEl.firstChild);
+
+    card.querySelectorAll("[data-q]").forEach(b => {
+      b.onclick = () => { document.getElementById("admCoinsAmt").value = b.dataset.q; };
+    });
+    document.getElementById("admCoinsBtn").onclick = async () => {
+      const amt = Math.floor(Number(document.getElementById("admCoinsAmt").value));
+      const hint = document.getElementById("admCoinsHint");
+      const btn = document.getElementById("admCoinsBtn");
+      if (!amt || amt < 1) { hint.textContent = "Enter an amount of 1 or more."; return; }
+      btn.disabled = true; hint.textContent = "Adding Tok Coins…";
+      try {
+        const c = window.supabase.createClient(WT_CONFIG.SUPABASE_URL, WT_CONFIG.SUPABASE_ANON_KEY);
+        const { data } = await c.auth.getSession();
+        const tok = data?.session?.access_token;
+        if (!tok) throw new Error("Sign in required.");
+        const r = await fetch("/api/admin/tok-coins", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
+          body: JSON.stringify({ amount: amt })
+        });
+        const j = await r.json();
+        if (!r.ok || j.error) throw new Error(j.error?.message || "Failed");
+        hint.textContent = `Added +${j.data.amount.toLocaleString()} Tok Coins! New balance: ${j.data.balance.toLocaleString()} Tok Coins.`;
+      } catch (e) { hint.textContent = e.message; }
+      finally { btn.disabled = false; }
+    };
+  }
+
+  // 3. Render equipped Tok Coins decorations on /profile
   function injectDecoCss() {
     if (document.getElementById("wt-deco-css")) return;
     const st = document.createElement("style");
