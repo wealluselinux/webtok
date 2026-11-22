@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Web Tok · Talk Coins Shop</title>
+<title>Web Tok · Tok Coins Shop</title>
 <link rel="icon" href="/images/logo.png">
 <link rel="stylesheet" href="/css/base.css">
 <style>
@@ -35,22 +35,22 @@ body{overflow:auto;padding:24px 16px 96px}
 <div id="wp-scrim"></div>
 <main class="wrap">
   <div class="head-row">
-    <h1><span class="ms fill" style="font-size:30px;color:var(--primary)">storefront</span>Talk Coins Shop</h1>
+    <h1><span class="ms fill" style="font-size:30px;color:var(--primary)">storefront</span>Tok Coins Shop</h1>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div class="coin-pill"><span class="ms fill" style="font-size:20px">monetization_on</span><span id="coinBal">0</span> Talk Coins</div>
+      <div class="coin-pill"><span class="ms fill" style="font-size:20px">monetization_on</span><span id="coinBal">0</span> Tok Coins</div>
       <a class="btn sm" href="/profile"><span class="ms" style="font-size:18px">account_circle</span>My Profile</a>
     </div>
   </div>
 
   <div class="earn-bar">
-    <span>Earn <b>+10 Talk Coins</b> for every like and <b>+15 Talk Coins</b> for every comment on your videos.</span>
+    <span>Earn <b>+10 Tok Coins</b> for every like and <b>+15 Tok Coins</b> for every comment on your videos.</span>
     <span id="earnStats">Loading stats…</span>
   </div>
 
   <div class="custom-box">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
       <b style="font-size:17px;display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">brush</span>Make Your Own Decoration</b>
-      <span class="coin-pill" style="padding:6px 14px;font-size:13px">130 Talk Coins</span>
+      <span class="coin-pill" style="padding:6px 14px;font-size:13px">130 Tok Coins</span>
     </div>
     <p style="font-size:13px;color:var(--muted)">Design your own custom profile picture frame or profile card decoration (costs a little bit more than buying a ready-made one).</p>
     <div class="c-row">
@@ -124,7 +124,7 @@ function renderGrid(elId, items, slot) {
     card.innerHTML = `
       <div class="s-top">
         <div class="s-prev" style="box-shadow:0 0 0 3px ${escapeHtml(item.color || "var(--primary)")}">${prevHtml}</div>
-        <div class="s-meta"><b>${escapeHtml(item.name)}</b><small>${owned ? (item.is_custom ? "Custom · Owned" : "Owned") : `${item.price} Talk Coins`}</small></div>
+        <div class="s-meta"><b>${escapeHtml(item.name)}</b><small>${owned ? (item.is_custom ? "Custom · Owned" : "Owned") : `${item.price} Tok Coins`}</small></div>
       </div>
       <div class="s-desc">${escapeHtml(item.desc || (item.is_custom ? "Your custom-made decoration." : ""))}</div>
       <div class="s-foot">

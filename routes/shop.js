@@ -1,4 +1,4 @@
-/* Talk Coins & Profile Decorations Shop API (Turso) */
+/* Tok Coins & Profile Decorations Shop API (Turso) */
 const crypto = require("crypto");
 
 const LIKE_REWARD = 10;
@@ -88,7 +88,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     const wallet = await getWallet(uid);
     const already = await run("SELECT 1 FROM user_shop_items WHERE user_id = ? AND item_id = ?", [uid, item.id]);
     if (already.length) throw new HttpError(409, "You already own this decoration!");
-    if (wallet.balance < item.price) throw new HttpError(400, `Not enough Talk Coins (need ${item.price}, have ${wallet.balance}).`);
+    if (wallet.balance < item.price) throw new HttpError(400, `Not enough Tok Coins (need ${item.price}, have ${wallet.balance}).`);
 
     const id = crypto.randomUUID(), ts = nowIso();
     const col = item.slot === "avatar" ? "avatar_deco" : "profile_deco";
@@ -116,7 +116,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     if (image_url && !/^https?:\/\//i.test(image_url)) throw new HttpError(400, "Invalid image URL.");
 
     const wallet = await getWallet(uid);
-    if (wallet.balance < CUSTOM_PRICE) throw new HttpError(400, `Making your own decoration costs ${CUSTOM_PRICE} Talk Coins (you have ${wallet.balance}).`);
+    if (wallet.balance < CUSTOM_PRICE) throw new HttpError(400, `Making your own decoration costs ${CUSTOM_PRICE} Tok Coins (you have ${wallet.balance}).`);
 
     const id = crypto.randomUUID(), itemId = "custom_" + id.slice(0, 8), ts = nowIso();
     const col = slot === "avatar" ? "avatar_deco" : "profile_deco";

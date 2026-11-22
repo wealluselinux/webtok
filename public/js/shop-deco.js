@@ -1,4 +1,4 @@
-/* Sidebar More-menu links (Admin panel + Talk Coins Shop) & Profile Decorations renderer */
+/* Sidebar More-menu links (Admin panel + Tok Coins Shop) & Profile Decorations renderer */
 (function () {
   if (window.wtShopDecoInit) return;
   window.wtShopDecoInit = true;
@@ -28,7 +28,7 @@
   else wireMoreMenu();
   setTimeout(wireMoreMenu, 250);
 
-  // 2. Render equipped Talk Coins decorations on /profile
+  // 2. Render equipped Tok Coins decorations on /profile
   function injectDecoCss() {
     if (document.getElementById("wt-deco-css")) return;
     const st = document.createElement("style");
