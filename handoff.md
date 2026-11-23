@@ -98,10 +98,14 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Added full-screen sign-in loading & 3-2-1 countdown overlay, converted Secret Settings to full-screen, and made Edit Profile / Followers / Switch Account / NPC Drawer full-screen.
 
-### 9. Role-Gate Admin Panel Link in Sidebar More Menu (2026-11-23)
+### 9. Role-Gate Admin Panel Link & Hard-Block `/admin` for Guests
 
-* **Files:** `public/js/shop-deco.js`, `handoff.md`
+* **Commits:** `8fc4343b9b486f62e22c955c2e2117a05137aca1`
+
+* **Files:** `public/js/shop-deco.js`, `public/js/admin.js`, `handoff.md`
 
 * **Summary:**
 
   * Fixed `wireMoreMenu()` in `public/js/shop-deco.js` so `#sbadmin` stays hidden for guests and regular users and is only revealed after `/api/admin/me` confirms `admin` or `owner`.
+
+  * Hardened `public/js/admin.js` so guests and non-admins who visit `/admin` directly have `#app` removed from the DOM and see a clear **"Guest accounts can't access the Admin panel"** / **"Sign in"** screen (while all `/api/admin/*` endpoints continue enforcing `needAdmin(req)` on the server).

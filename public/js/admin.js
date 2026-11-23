@@ -13,7 +13,7 @@ function h(tag, attrs, ...kids) {
 }
 async function api(path, body) {
   const { data } = await sbc.auth.getSession(), s = data.session;
-  if (!s) { location.href = "/login"; return { error: { message: "Sign in" } }; }
+  if (!s) return { data: null, error: { message: "Guest session — sign in required", guest: true } };
   const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + s.access_token }, body: JSON.stringify(body) }
                                    : { headers: { Authorization: "Bearer " + s.access_token } });
   const j = await r.json().catch(() => ({}));
@@ -135,7 +135,19 @@ let qt = null; $("q").oninput = () => { clearTimeout(qt); qt = setTimeout(loadUs
 
 (async () => {
   const r = await api("/api/admin/me");
-  if (r.error || !["admin", "owner"].includes(r.data.role)) { $("denied").classList.remove("hidden"); return; }
+  if (r.error || !["admin", "owner"].includes(r.data?.role)) {
+    $("app")?.remove();
+    const denied = $("denied");
+    denied.replaceChildren(
+      h("div", { class: "name", text: r.error?.guest ? "Guest accounts can't access the Admin panel." : "You don't have access to this page." }),
+      h("div", { class: "sub", style: "margin:8px 0 14px", text: r.error?.guest ? "This is a guest session. Sign in with an admin or owner account to use this feature." : "Only admins and the owner can open the Admin panel." }),
+      h("div", { style: "display:flex;gap:10px;flex-wrap:wrap" },
+        h("a", { class: "btn p", href: "/login", text: "Sign in" }),
+        h("a", { class: "btn", href: "/scroll", text: "Back to Feed" }))
+    );
+    denied.classList.remove("hidden");
+    return;
+  }
   me = r.data.role; $("app").classList.remove("hidden");
   if (me === "owner") $("logTab").classList.remove("hidden");
   loadUsers();
