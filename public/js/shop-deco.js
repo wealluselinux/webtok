@@ -1,20 +1,12 @@
-/* Sidebar More-menu links (Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Capri/Profile Frames renderer */
+/* Sidebar More-menu links (role-gated Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Capri/Profile Frames renderer */
 (function () {
   if (window.wtShopDecoInit) return;
   window.wtShopDecoInit = true;
 
-  // 1. Ensure Admin panel is visible and Shop is in the Sidebar More menu
-  function wireMoreMenu() {
+  // 1. Ensure Shop is in the Sidebar More menu and Admin panel is ONLY visible to admins/owners
+  async function wireMoreMenu() {
     const menu = document.getElementById("sbmenu");
     if (!menu) return;
-    const adm = document.getElementById("sbadmin");
-    if (adm) adm.classList.remove("hidden");
-    else {
-      const a = document.createElement("a");
-      a.className = "it"; a.id = "sbadmin"; a.href = "/admin";
-      a.innerHTML = '<span class="ms">admin_panel_settings</span>Admin panel';
-      menu.insertBefore(a, menu.firstChild);
-    }
     if (!document.getElementById("sbshop")) {
       const s = document.createElement("a");
       s.className = "it"; s.id = "sbshop"; s.href = "/shop";
@@ -23,6 +15,25 @@
       if (dev) menu.insertBefore(s, dev);
       else menu.insertBefore(s, menu.firstChild);
     }
+
+    const adm = document.getElementById("sbadmin");
+    if (adm) adm.classList.add("hidden");
+    try {
+      const client = window.sb || (window.supabase?.createClient ? window.supabase.createClient() : null);
+      const tok = client ? (await client.auth.getSession())?.data?.session?.access_token : null;
+      if (!tok) return;
+      const r = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + tok } });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && ["admin", "owner"].includes(j?.data?.role)) {
+        if (adm) adm.classList.remove("hidden");
+        else {
+          const a = document.createElement("a");
+          a.className = "it"; a.id = "sbadmin"; a.href = "/admin";
+          a.innerHTML = '<span class="ms">admin_panel_settings</span>Admin panel';
+          menu.insertBefore(a, menu.firstChild);
+        }
+      }
+    } catch {}
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireMoreMenu);
   else wireMoreMenu();
@@ -38,9 +49,9 @@
       <div class="name" style="margin-bottom:8px">Give Yourself Tok Coins (Admin / Owner)</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <input id="admCoinsAmt" type="number" min="1" max="1000000000" placeholder="Amount of Tok Coins (e.g. 500)" style="flex:1;min-width:180px;margin:0;padding:12px 16px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font:inherit">
-        <button type="button" class="btn" data-q="100">+100</button>
-        <button type="button" class="btn" data-q="500">+500</button>
-        <button type="button" class="btn" data-q="1000">+1,000</button>
+        <button type="button" class="btn" data-q="100">100</button>
+        <button type="button" class="btn" data-q="500">500</button>
+        <button type="button" class="btn" data-q="1000">1,000</button>
         <button type="button" class="btn p" id="admCoinsBtn">Give Myself Coins</button>
       </div>
       <div class="line" style="margin-top:8px">

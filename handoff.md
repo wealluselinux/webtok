@@ -88,14 +88,20 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Restored `accepted_terms: true` automatically on `sb.auth.signUp()`, restored `POST /api/admin/set-password`, and hardened `POST /api/admin/announce` + `/admin` announcement button.
 
-### 8. Full-Screen Sign-In Transition & Full-Screen Non-Confirmation Dialogs (2026-11-23)
+### 8. Full-Screen Sign-In Transition & Full-Screen Non-Confirmation Dialogs
+
+* **Commit:** `f263bf627a71df3dfd6e461101077d752dc7b5b6`
 
 * **Files:** `public/pages/login.html`, `public/js/secret-settings.js`, `public/css/profile-dialogs.css`, `public/js/developer-npc.js`, `handoff.md`
 
 * **Summary:**
 
-  * **`public/pages/login.html`:** Added `#auth-overlay` full-screen loading screen with animated progress bar (`"Signing you in…"` -> `"Sign in successful!"` -> `"Taking you to the homepage in 3… 2… 1…"` -> reloads to `/`).
+  * Added full-screen sign-in loading & 3-2-1 countdown overlay, converted Secret Settings to full-screen, and made Edit Profile / Followers / Switch Account / NPC Drawer full-screen.
 
-  * **`public/js/secret-settings.js`:** Converted `#wt-secret-dlg` to a full-screen Material You settings page with grouped cards (`Capri Desktop Pet`, `Physics & Motion`, `Capri AI Prompt`).
+### 9. Role-Gate Admin Panel Link in Sidebar More Menu (2026-11-23)
 
-  * **`public/css/profile-dialogs.css` & `public/js/developer-npc.js`:** Made `#editProfDlg`, `#followListDlg`, `#switchDlg`, and `#npcDrawDlg` full-screen while keeping confirmation/delete modals (`#wt-m3-dlg`) compact.
+* **Files:** `public/js/shop-deco.js`, `handoff.md`
+
+* **Summary:**
+
+  * Fixed `wireMoreMenu()` in `public/js/shop-deco.js` so `#sbadmin` stays hidden for guests and regular users and is only revealed after `/api/admin/me` confirms `admin` or `owner`.
