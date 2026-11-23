@@ -68,15 +68,17 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Follow-up note: Check `public/pages/developer.html` `#prevFrame` `sandbox` attribute if testing pointer-lock games in `/developer` preview.
 
-### 6. Home Screen Redesign & Material Symbols Fix
+### 6. Home Screen Redesign & Feature Showcase
 
-* **Commits:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`, `dff4f4675221f7791ededfffd389512f0d6ee331`
+* **Commit:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`
 
 * **Files:** `public/index.html`, `public/css/landing.css`, `public/js/landing.js`, `handoff.md`
 
 * **Summary:**
 
-  * Added top navigation pills, hero actions, upgraded phone preview, 6-card **Everything inside Web Tok** bento grid, Quick Launch bar, and Material Symbols Outlined font + `.ms` styles.
+  * Added top navigation pills (`Feed`, `Games`, `Shop`, `Studio`, `DMs`, `Sign in`), hero actions (`Start scrolling`, `Play Mini Games`, `Build a Game`), and an upgraded phone preview with 4 floating feature pills.
+
+  * Added a 6-card **Everything inside Web Tok** M3 Expressive bento grid, Quick Launch bar, and footer while preserving `#wtHomeLogo` 10-click Secret Settings and `initAuth()`.
 
 ### 7. Fix Signup TOS Auto-Accept, Admin Password Reset & Notifications
 
@@ -100,12 +102,24 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
 ### 9. Role-Gate Admin Panel Link & Hard-Block `/admin` for Guests
 
-* **Commits:** `8fc4343b9b486f62e22c955c2e2117a05137aca1`
+* **Commits:** `8fc4343b9b486f62e22c955c2e2117a05137aca1`, `89646320b1d16770126406ff18cf4e3eeed510ca`
 
 * **Files:** `public/js/shop-deco.js`, `public/js/admin.js`, `handoff.md`
 
 * **Summary:**
 
-  * Fixed `wireMoreMenu()` in `public/js/shop-deco.js` so `#sbadmin` stays hidden for guests and regular users and is only revealed after `/api/admin/me` confirms `admin` or `owner`.
+  * Role-gated `#sbadmin` in `public/js/shop-deco.js` and removed `#app` DOM on `/admin` when accessed by guests or non-admins.
 
-  * Hardened `public/js/admin.js` so guests and non-admins who visit `/admin` directly have `#app` removed from the DOM and see a clear **"Guest accounts can't access the Admin panel"** / **"Sign in"** screen (while all `/api/admin/*` endpoints continue enforcing `needAdmin(req)` on the server).
+### 10. Fix `@notifications` in Messages, Web Tok AI Errors, Admin Error Reporting & Admin More-Menu Link (2026-11-23)
+
+* **Files:** `public/js/messages-app.js`, `routes/ai.js`, `public/js/admin.js`, `public/js/shop-deco.js`, `handoff.md`
+
+* **Summary:**
+
+  * **`public/js/messages-app.js`:** Added `NOTIF_BOT` (`00000000-0000-0000-0000-000000000001`, `@notifications`) to the Messages sidebar under **Announcements** whenever the user has announcement messages or unread notifications, added read-only chat view + Clear support, and wired `#00000000-0000-0000-0000-000000000001` deep-links and realtime `INSERT` updates.
+
+  * **`routes/ai.js`:** Updated `CHAT_MODELS` to reliable NVIDIA NIM models (`meta/llama-3.3-70b-instruct`, `meta/llama-3.1-8b-instruct`, `nvidia/nemotron-3.5-lightning-30b-a3b`, `qwen/qwen2.5-coder-32b-instruct`), added 25s `AbortSignal.timeout`, and surfaced exact AI/API error details (`Web Tok AI error: ...`) instead of swallowing errors.
+
+  * **`public/js/admin.js`:** Updated `api()` to parse raw responses and return exact HTTP status / server error messages instead of generic `"Request failed"`, and surfaced detailed errors in `resetPw()`.
+
+  * **`public/js/shop-deco.js`:** Fixed `wireMoreMenu()` so it initializes the client with `WT_CONFIG`, checks both `/api/admin/me` and `/api/profiles/:id/badge`, and no longer hides `#sbadmin` for admins/owners.

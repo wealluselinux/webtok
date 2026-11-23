@@ -6,7 +6,7 @@ const bcrypt = require("bcryptjs");
 const AI_ID = "00000000-0000-0000-0000-000000000002";
 const NOTIF_ID = "00000000-0000-0000-0000-000000000001";
 const NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const CHAT_MODELS = ["meta/llama-3.3-70b-instruct", "google/gemma-4-31b-it"];
+const CHAT_MODELS = ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct", "nvidia/nemotron-3.5-lightning-30b-a3b", "qwen/qwen2.5-coder-32b-instruct"];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
 module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 }) {
@@ -58,11 +58,17 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
           body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0.4, stream: false }),
           signal: AbortSignal.timeout(25000)
         });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) { lastErr = new Error(j?.error?.message || j?.detail || `NIM HTTP ${r.status}`); continue; }
+        const raw = await r.text();
+        let j = {};
+        try { j = JSON.parse(raw); } catch {}
+        if (!r.ok) {
+          lastErr = new Error(`${model}: ${j?.error?.message || j?.detail || (raw ? raw.slice(0, 140) : `HTTP ${r.status}`)}`);
+          continue;
+        }
         const text = j?.choices?.[0]?.message?.content;
         if (text) return String(text).trim();
-      } catch (e) { lastErr = e; }
+        lastErr = new Error(`${model}: Empty AI response`);
+      } catch (e) { lastErr = new Error(`${model}: ${e?.message || "Request failed"}`); }
     }
     throw lastErr || new Error("AI service unavailable");
   }
@@ -164,7 +170,7 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     const userMsg = (await run("SELECT * FROM messages WHERE id = ?", [Number(uRs.lastInsertRowid)]))[0];
 
     const key = aiKey();
-    let replyText = "Web Tok AI isn't configured yet (missing API key on the server).";
+    let replyText = "Web Tok AI error: Missing API key on the server (set WEBYOK_AI, WEBTOK_AI, or WEB_TALK_AI).";
     if (key) {
       const hist = await run(
         "SELECT sender_id, body FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?) ORDER BY id DESC LIMIT 12",
@@ -192,7 +198,7 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
       try {
         replyText = await callNim(key, CHAT_MODELS, msgs, 600);
       } catch (e) {
-        replyText = "Sorry, I had trouble reaching Web Tok AI right now. Try again in a moment!";
+        replyText = `Web Tok AI error: ${e?.message || "Unknown error"}`;
         console.warn("Web Tok AI error:", e.message);
       }
     }

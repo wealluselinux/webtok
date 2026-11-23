@@ -4,6 +4,7 @@
   window.wtShopDecoInit = true;
 
   // 1. Ensure Shop is in the Sidebar More menu and Admin panel is ONLY visible to admins/owners
+  let adminChecked = false;
   async function wireMoreMenu() {
     const menu = document.getElementById("sbmenu");
     if (!menu) return;
@@ -16,15 +17,34 @@
       else menu.insertBefore(s, menu.firstChild);
     }
 
+    if (adminChecked) return;
+    adminChecked = true;
     const adm = document.getElementById("sbadmin");
-    if (adm) adm.classList.add("hidden");
     try {
-      const client = window.sb || (window.supabase?.createClient ? window.supabase.createClient() : null);
-      const tok = client ? (await client.auth.getSession())?.data?.session?.access_token : null;
-      if (!tok) return;
-      const r = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + tok } });
-      const j = await r.json().catch(() => ({}));
-      if (r.ok && ["admin", "owner"].includes(j?.data?.role)) {
+      const client = window.sb || (window.supabase?.createClient && window.WT_CONFIG
+        ? window.supabase.createClient(WT_CONFIG.SUPABASE_URL, WT_CONFIG.SUPABASE_ANON_KEY)
+        : (window.supabase?.createClient ? window.supabase.createClient() : null));
+      const sess = client ? (await client.auth.getSession())?.data?.session : null;
+      const tok = sess?.access_token;
+      const uid = sess?.user?.id;
+      if (!tok || !uid) { if (adm) adm.classList.add("hidden"); return; }
+
+      let role = null;
+      try {
+        const r = await fetch("/api/admin/me", { headers: { Authorization: "Bearer " + tok } });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j?.data?.role) role = j.data.role;
+      } catch {}
+
+      if (!role) {
+        try {
+          const r2 = await fetch("/api/profiles/" + encodeURIComponent(uid) + "/badge");
+          const j2 = await r2.json().catch(() => ({}));
+          role = j2?.data?.role || j2?.role || null;
+        } catch {}
+      }
+
+      if (role === "admin" || role === "owner") {
         if (adm) adm.classList.remove("hidden");
         else {
           const a = document.createElement("a");
@@ -32,8 +52,12 @@
           a.innerHTML = '<span class="ms">admin_panel_settings</span>Admin panel';
           menu.insertBefore(a, menu.firstChild);
         }
+      } else if (adm) {
+        adm.classList.add("hidden");
       }
-    } catch {}
+    } catch {
+      if (adm) adm.classList.add("hidden");
+    }
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", wireMoreMenu);
   else wireMoreMenu();

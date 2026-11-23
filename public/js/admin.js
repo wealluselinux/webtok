@@ -14,10 +14,18 @@ function h(tag, attrs, ...kids) {
 async function api(path, body) {
   const { data } = await sbc.auth.getSession(), s = data.session;
   if (!s) return { data: null, error: { message: "Guest session — sign in required", guest: true } };
-  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + s.access_token }, body: JSON.stringify(body) }
-                                   : { headers: { Authorization: "Bearer " + s.access_token } });
-  const j = await r.json().catch(() => ({}));
-  return r.ok ? j : { data: null, error: j.error || { message: "Request failed" } };
+  try {
+    const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + s.access_token }, body: JSON.stringify(body) }
+                                     : { headers: { Authorization: "Bearer " + s.access_token } });
+    const raw = await r.text();
+    let j = {};
+    try { j = JSON.parse(raw); } catch {}
+    if (r.ok && !j.error) return j;
+    const msg = j.error?.message || j.message || (raw ? `HTTP ${r.status}: ${raw.replace(/<[^>]+>/g, " ").trim().slice(0, 160)}` : `HTTP ${r.status} ${r.statusText || "Request failed"}`);
+    return { data: null, error: { message: msg, status: r.status } };
+  } catch (e) {
+    return { data: null, error: { message: e?.message || "Network request failed" } };
+  }
 }
 const when = iso => iso ? new Date(iso).toLocaleString() : "";
 function toast(msg) { const r = $("result"); r.classList.remove("hidden"); r.replaceChildren(h("div", { text: msg }), h("button", { class: "btn", style: "margin-top:8px", text: "Close", onclick: () => r.classList.add("hidden") })); }
@@ -63,7 +71,7 @@ async function resetPw(u) {
   const nextPw = pw.trim();
   if (nextPw.length < 6) return toast("Password must be at least 6 characters.");
   const r = await api("/api/admin/set-password", { userId: u.id, password: nextPw });
-  if (r.error) return toast(r.error.message);
+  if (r.error) return toast(`Password reset failed: ${r.error.message}`);
   toast(`Password updated for @${r.data.username} (${r.data.email}).`);
 }
 async function setRole(u, role) {

@@ -1,8 +1,9 @@
-/* Messages: DMs, Web Tok AI (@webtok_ai), Group Chats, Stickers, Invites, Sidebar */
+/* Messages: DMs, Web Tok AI (@webtok_ai), Notifications (@notifications), Group Chats, Stickers, Invites, Sidebar */
 const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
 const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const NOTIF_BOT={id:"00000000-0000-0000-0000-000000000001",username:"notifications",display_name:"Notifications",isNotif:true};
 const AI_BOT={id:"00000000-0000-0000-0000-000000000002",username:"webtok_ai",display_name:"Web Tok AI",isAi:true};
-let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, activeTab="all", groupPoll=null, lastGroupMsgId=0;
+let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, hasNotifs=false, activeTab="all", groupPoll=null, lastGroupMsgId=0;
 const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
 let lottieP=null;
 function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
@@ -11,7 +12,7 @@ const STK=/^\[sticker:([^\]\/\\]+\.(?:png|gif|webp|jpe?g|svg|json))\]$/i;
 const STKU=/^\[sticker_url:(https?:\/\/[^\]]+)\]$/i;
 const VSHARE=/^\[video_share:([^|\]]+)\|([^\]]*)\](?:\n([\s\S]*))?$/;
 function stickerEl(file){const url="/stickers/"+encodeURIComponent(file);if(/\.json$/i.test(file)){const b=document.createElement("div");b.className="stk-box";lottieIn(b,url);return b}const i=document.createElement("img");i.src=url;i.alt="sticker";i.loading="lazy";return i}
-function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const j=await r.json().catch(()=>({}));if(!r.ok||j.error)throw new Error(j.error?.message||"Request failed");return j.data})}
+function api(url, opts={}){return fetch(url,{...opts,headers:{"Content-Type":"application/json",Authorization:"Bearer "+token,...(opts.headers||{})}}).then(async r=>{const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||j.error)throw new Error(j.error?.message||j.message||(raw?`HTTP ${r.status}: ${raw.slice(0,140)}`:`HTTP ${r.status} ${r.statusText||"Request failed"}`));return j.data})}
 
 function bubble(m, showSender=false){
   if(m.id!=null && $("msgs")?.querySelector(`[data-mid="${CSS.escape(String(m.id))}"]`)) return null;
@@ -53,6 +54,7 @@ function makeStickerBlob(file){
   });
 }
 function wireStickerPicker(sendFn){
+  if(!$("stkBtn")) return;
   $("stkBtn").onclick=async()=>{
     const pn=$("stkPanel");pn.classList.toggle("hidden");
     if(pn.classList.contains("hidden")||pn.dataset.ready)return;
@@ -101,26 +103,39 @@ async function openChat(f){
   cur=f; curType="dm"; document.body.classList.add("chatting");
   delete unreadBySender[f.id];
   renderSidebarList();
-  const avHtml=f.isAi?'<div class="av ai"><span class="ms">smart_toy</span></div>':`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":""}</div></div><div class="head-actions"><button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
+  const avHtml=f.isAi
+    ?'<div class="av ai"><span class="ms">smart_toy</span></div>'
+    :f.isNotif
+    ?'<div class="av ai"><span class="ms">notifications</span></div>'
+    :`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
+  const subText=`@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":f.isNotif?" · Official Announcements":""}`;
+  const bottomHtml=f.isNotif
+    ?'<div style="padding:12px 16px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--surface)">Official Web Tok announcements (read-only)</div>'
+    :`<div id="stkPanel" class="hidden"></div><form id="form"><input id="txt" maxlength="1000" placeholder="${f.isAi?"Ask Web Tok AI anything or share a video…":"Message…"}" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${subText}</div></div><div class="head-actions"><button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
-  <div id="stkPanel" class="hidden"></div>
-  <form id="form"><input id="txt" maxlength="1000" placeholder="${f.isAi?"Ask Web Tok AI anything or share a video…":"Message…"}" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
+  ${bottomHtml}`;
   $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
   $("btnClearChat").onclick=async()=>{
     const ok=await wtConfirm({title:"Clear chat?",message:`Delete all messages with ${f.display_name||"@"+f.username}? This can't be undone.`,icon:"delete_sweep",confirmText:"Clear",danger:true});
     if(!ok)return;
     try{
       await api(`/api/messages/with/${encodeURIComponent(f.id)}`,{method:"DELETE"});
+      if(f.isNotif) hasNotifs=false;
       $("msgs").innerHTML=f.isAi
         ?'<div class="empty">Hi! Ask me anything or share a Web Tok video to ask what it\'s about.</div>'
+        :f.isNotif
+        ?'<div class="empty">No announcements right now.</div>'
         :'<div class="empty">Chat cleared. Say hi!</div>';
+      renderSidebarList();
     }catch(err){await wtAlert({title:"Couldn't clear chat",message:err.message});}
   };
   const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
   $("msgs").innerHTML="";
   if(f.isAi && !(data||[]).length){
     $("msgs").innerHTML='<div class="empty">Hi! Ask me anything or share a Web Tok video to ask what it\'s about.</div>';
+  } else if(f.isNotif && !(data||[]).length){
+    $("msgs").innerHTML='<div class="empty">No announcements right now.</div>';
   }
   (data||[]).forEach(m=>bubble(m,false));
   if(window.wtMarkRead)wtMarkRead(f.id);
@@ -138,7 +153,7 @@ async function openChat(f){
         return true;
       }catch(err){
         typing.remove(); myWrap.remove();
-        await wtAlert({title:"Web Tok AI",message:err.message});
+        await wtAlert({title:"Web Tok AI Error",message:err.message});
         return false;
       }
     }
@@ -146,9 +161,11 @@ async function openChat(f){
     if(error){await wtAlert({title:"Couldn't send",message:error.message});return false}
     bubble(m,false);return true;
   }
-  $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
-  wireStickerPicker(send);
-  $("txt").focus();
+  if($("form")){
+    $("form").onsubmit=async e=>{e.preventDefault();const body=$("txt").value.trim();if(!body)return;$("txt").value="";if(!(await send(body)))$("txt").value=body};
+    wireStickerPicker(send);
+    $("txt").focus();
+  }
 }
 
 async function openGroupChat(g){
@@ -212,6 +229,14 @@ function renderSidebarList(){
   badge.classList.toggle("hidden",!invites.length);
 
   if(activeTab==="all"){
+    if(hasNotifs || unreadBySender[NOTIF_BOT.id]){
+      const nLbl=document.createElement("div"); nLbl.className="sec-lbl"; nLbl.textContent="Announcements"; fl.appendChild(nLbl);
+      const nRow=document.createElement("div");
+      nRow.className="fr"+(curType==="dm"&&cur?.id===NOTIF_BOT.id?" on":"")+(unreadBySender[NOTIF_BOT.id]?" unread":"");
+      nRow.innerHTML=`<div class="av ai"><span class="ms">notifications</span></div><div class="fr-meta"><div class="fr-name">Notifications</div><div class="fr-sub">@notifications · Official updates</div></div><i class="dot"></i>`;
+      nRow.onclick=()=>openChat(NOTIF_BOT);
+      fl.appendChild(nRow);
+    }
     const lbl=document.createElement("div"); lbl.className="sec-lbl"; lbl.textContent="Assistant"; fl.appendChild(lbl);
     const aiRow=document.createElement("div");
     aiRow.className="fr"+(curType==="dm"&&cur?.id===AI_BOT.id?" on":"");
@@ -334,12 +359,26 @@ async function loadGroupsAndInvites(){
   const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
   if(ids.length){const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);friends=ps||[];}
   try{const r=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+token}});unreadBySender=(await r.json()).data?.bySender||{};}catch{}
+  try{
+    const {data:nMsgs}=await sb.from("messages").select("id").or(`and(sender_id.eq.${me},recipient_id.eq.${NOTIF_BOT.id}),and(sender_id.eq.${NOTIF_BOT.id},recipient_id.eq.${me})`).limit(1);
+    hasNotifs=!!(nMsgs&&nMsgs.length)||!!unreadBySender[NOTIF_BOT.id];
+  }catch{}
   await loadGroupsAndInvites();
   setInterval(loadGroupsAndInvites,12000);
-  addEventListener("hashchange",()=>{const f=friends.find(x=>x.id===location.hash.slice(1));if(f)openChat(f)});
+  addEventListener("hashchange",()=>{
+    const w=location.hash.slice(1);
+    if(w===AI_BOT.id) openChat(AI_BOT);
+    else if(w===NOTIF_BOT.id) openChat(NOTIF_BOT);
+    else {const f=friends.find(x=>x.id===w);if(f)openChat(f);}
+  });
   const want=location.hash.slice(1);
   if(want===AI_BOT.id) openChat(AI_BOT);
+  else if(want===NOTIF_BOT.id) openChat(NOTIF_BOT);
   else {const wf=friends.find(x=>x.id===want);if(wf)openChat(wf);}
   sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
-    const m=p.new; if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id)} else{unreadBySender[m.sender_id]=1;renderSidebarList()}}).subscribe();
+    const m=p.new;
+    if(m.sender_id===NOTIF_BOT.id) hasNotifs=true;
+    if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id)}
+    else{unreadBySender[m.sender_id]=1;renderSidebarList()}
+  }).subscribe();
 })();
