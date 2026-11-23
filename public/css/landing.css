@@ -1,4 +1,6 @@
 /* Landing page (index.html) - M3 Expressive */
+.ms{font-family:"Material Symbols Outlined";font-weight:normal;font-style:normal;font-size:22px;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;-webkit-font-smoothing:antialiased;font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24;user-select:none}
+.ms.fill{font-variation-settings:'FILL' 1,'wght' 500,'GRAD' 0,'opsz' 24}
 body[data-page="landing"]{overflow-x:hidden;overflow-y:auto;height:auto;min-height:100dvh}
 #landing{position:relative;min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:20px 24px 36px;gap:48px;overflow:hidden}
 #landing.hidden{display:none!important}
