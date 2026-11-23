@@ -1,10 +1,11 @@
-/* Web Tok Mini Games Arcade: Built-in Snake, Flappy Tok, Brick Breaker + MORE_BUILTINS + Community Games */
+/* Web Tok Mini Games Arcade: Built-in Snake, Flappy Tok, Brick Breaker, Blockland + MORE_BUILTINS + Community Games */
 let stopCurGame = null, currentStarter = null;
 
 const BUILTINS = [
   { id: "snake", title: "Snake", icon: "pest_control", desc: "Eat the glowing berries, grow longer, and avoid the walls or yourself.", dpad: true, start: startSnake },
   { id: "flappy", title: "Flappy Tok", icon: "flutter_dash", desc: "Tap, click, or press Space to flap through the neon pipes.", dpad: false, start: startFlappy },
   { id: "breaker", title: "Brick Breaker", icon: "grid_view", desc: "Slide the paddle with mouse, touch, or arrow keys to smash all bricks.", dpad: false, start: startBreaker },
+  { id: "blockland", title: "Blockland", icon: "view_in_ar", desc: "3D voxel sandbox! Break and place 64 block types, fly around, and explore.", dpad: false, url: "/games/Blockland.html" },
   ...(window.MORE_BUILTINS || [])
 ];
 
@@ -18,9 +19,20 @@ function openBuiltin(g) {
   if (stopCurGame) { stopCurGame(); stopCurGame = null; }
   currentStarter = () => openBuiltin(g);
   $("playTitle").textContent = g.title;
-  $("playScore").textContent = `Score: 0 · Best: ${bestScore(g.id)}`;
   $("dpad").classList.toggle("hidden", !g.dpad);
   $("playDlg").classList.toggle("has-dpad", !!g.dpad);
+  if (g.url) {
+    $("playScore").textContent = "WASD move · Space jump · E inventory · F fly";
+    const frame = document.createElement("iframe");
+    frame.id = "gameFrame";
+    frame.sandbox = "allow-scripts allow-pointer-lock";
+    frame.src = g.url;
+    $("playStage").innerHTML = "";
+    $("playStage").appendChild(frame);
+    $("playDlg").showModal();
+    return;
+  }
+  $("playScore").textContent = `Score: 0 · Best: ${bestScore(g.id)}`;
   $("playStage").innerHTML = '<canvas id="gameCanvas" width="400" height="400"></canvas>';
   $("playDlg").showModal();
   stopCurGame = g.start($("gameCanvas"), sc => {
@@ -156,7 +168,7 @@ function openCommunityGame(g) {
   $("playDlg").classList.remove("has-dpad");
   const frame = document.createElement("iframe");
   frame.id = "gameFrame";
-  frame.sandbox = "allow-scripts";
+  frame.sandbox = "allow-scripts allow-pointer-lock";
   if (g.lang === "python") {
     frame.srcdoc = buildPythonRunnerHtml(g.code);
   } else if (g.lang === "scratch") {
@@ -200,7 +212,7 @@ $("playDlg").addEventListener("close", () => { if (stopCurGame) { stopCurGame();
 const bg = $("builtinGrid");
 BUILTINS.forEach(g => {
   const card = document.createElement("div"); card.className = "g-card";
-  card.innerHTML = `<div class="g-top"><div class="g-ic"><span class="ms">${g.icon}</span></div><div class="g-meta"><b>${g.title}</b><small>Best: ${bestScore(g.id)}</small></div></div>
+  card.innerHTML = `<div class="g-top"><div class="g-ic"><span class="ms">${g.icon}</span></div><div class="g-meta"><b>${g.title}</b><small>${g.url ? "3D Sandbox" : `Best: ${bestScore(g.id)}`}</small></div></div>
     <div class="g-desc">${g.desc}</div>
     <div class="g-foot"><span class="g-badge">Built-in</span><button type="button" class="btn primary sm">Play</button></div>`;
   card.querySelector("button").onclick = () => openBuiltin(g);
