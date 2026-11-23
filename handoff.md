@@ -68,26 +68,34 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Follow-up note: Check `public/pages/developer.html` `#prevFrame` `sandbox` attribute if testing pointer-lock games in `/developer` preview.
 
-### 6. Home Screen Redesign & Feature Showcase
+### 6. Home Screen Redesign & Material Symbols Fix
 
-* **Commit:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`
+* **Commits:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`, `dff4f4675221f7791ededfffd389512f0d6ee331`
 
 * **Files:** `public/index.html`, `public/css/landing.css`, `public/js/landing.js`, `handoff.md`
 
 * **Summary:**
 
-  * Added top navigation pills (`Feed`, `Games`, `Shop`, `Studio`, `DMs`, `Sign in`), hero actions (`Start scrolling`, `Play Mini Games`, `Build a Game`), and an upgraded phone preview with 4 floating feature pills.
+  * Added top navigation pills, hero actions, upgraded phone preview, 6-card **Everything inside Web Tok** bento grid, Quick Launch bar, and Material Symbols Outlined font + `.ms` styles.
 
-  * Added a 6-card **Everything inside Web Tok** M3 Expressive bento grid, Quick Launch bar, and footer while preserving `#wtHomeLogo` 10-click Secret Settings and `initAuth()`.
+### 7. Fix Signup TOS Auto-Accept, Admin Password Reset & Notifications
 
-### 7. Fix Signup TOS Auto-Accept, Admin Password Reset & Notifications (2026-11-23)
+* **Commit:** `f3649c908fe96f1a5f05767f7fae5d1ffbff9d45`
 
 * **Files:** `public/pages/login.html`, `public/pages/admin.html`, `routes/ai.js`, `handoff.md`
 
 * **Summary:**
 
-  * **`public/pages/login.html`:** Restored `accepted_terms: true` automatically on `sb.auth.signUp()` when clicking **Create account** (plus a clear notice above the button linking to `/terms` and `/privacy`), and restored the `Forgot password?` link and footer links that were accidentally dropped in `49b1433`.
+  * Restored `accepted_terms: true` automatically on `sb.auth.signUp()`, restored `POST /api/admin/set-password`, and hardened `POST /api/admin/announce` + `/admin` announcement button.
 
-  * **`routes/ai.js`:** Restored `POST /api/admin/set-password` (which was accidentally dropped in `de1818f8`, causing `"Request failed"` when admins reset user passwords in `/admin`), and added a hardened `POST /api/admin/announce` route that ensures `@notifications` exists in both `users` and `profiles`, selects recipients with `COALESCE(banned, 0) = 0 AND COALESCE(role, 'user') != 'system'`, and safely logs to `admin_log`.
+### 8. Full-Screen Sign-In Transition & Full-Screen Non-Confirmation Dialogs (2026-11-23)
 
-  * **`public/pages/admin.html`:** Switched the `#annSend` handler to use `admin.js`'s `api("/api/admin/announce", ...)` helper instead of instantiating a separate Supabase client.
+* **Files:** `public/pages/login.html`, `public/js/secret-settings.js`, `public/css/profile-dialogs.css`, `public/js/developer-npc.js`, `handoff.md`
+
+* **Summary:**
+
+  * **`public/pages/login.html`:** Added `#auth-overlay` full-screen loading screen with animated progress bar (`"Signing you in…"` -> `"Sign in successful!"` -> `"Taking you to the homepage in 3… 2… 1…"` -> reloads to `/`).
+
+  * **`public/js/secret-settings.js`:** Converted `#wt-secret-dlg` to a full-screen Material You settings page with grouped cards (`Capri Desktop Pet`, `Physics & Motion`, `Capri AI Prompt`).
+
+  * **`public/css/profile-dialogs.css` & `public/js/developer-npc.js`:** Made `#editProfDlg`, `#followListDlg`, `#switchDlg`, and `#npcDrawDlg` full-screen while keeping confirmation/delete modals (`#wt-m3-dlg`) compact.

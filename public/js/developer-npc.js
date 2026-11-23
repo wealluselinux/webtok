@@ -1,4 +1,4 @@
-/* In-studio 16x16 Pixel Art NPC / Enemy Sprite Drawer for Scratch Blocks */
+/* In-studio 16x16 Full-Screen Pixel Art NPC / Enemy Sprite Drawer for Scratch Blocks */
 window.wtNpcs = window.wtNpcs || {};
 
 function openNpcDrawer() {
@@ -6,18 +6,18 @@ function openNpcDrawer() {
   if (!dlg) {
     dlg = document.createElement("dialog");
     dlg.id = "npcDrawDlg";
-    dlg.style.cssText = "border:0;border-radius:32px;padding:22px;width:min(94vw,430px);background:var(--bg);color:var(--text);margin:auto;box-shadow:0 20px 56px #0006";
+    dlg.style.cssText = "border:0;border-radius:0;padding:24px max(20px,calc(50vw - 260px));width:100vw;max-width:none;height:100dvh;max-height:none;background:var(--bg);color:var(--text);margin:0;overflow-y:auto";
     dlg.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <b style="font-size:18px;display:flex;align-items:center;gap:8px"><span class="ms" style="color:var(--primary)">brush</span>Draw NPC / Enemy</b>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--surface)">
+        <b style="font-size:20px;display:flex;align-items:center;gap:8px"><span class="ms" style="color:var(--primary)">brush</span>Draw NPC / Enemy</b>
         <button type="button" class="btn icon" id="npcClose" aria-label="Close"><span class="ms">close</span></button>
       </div>
-      <input id="npcName" maxlength="24" value="enemy" placeholder="NPC name (e.g. enemy, slime)" style="width:100%;padding:10px 14px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font:inherit;margin-bottom:10px">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center" id="npcCols"></div>
-      <canvas id="npcCan" width="256" height="256" style="display:block;margin:0 auto;background:#16121e;border-radius:16px;cursor:crosshair;touch-action:none;image-rendering:pixelated"></canvas>
-      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:12px;flex-wrap:wrap">
-        <button type="button" class="btn sm" id="npcClear">Clear</button>
-        <button type="button" class="btn primary sm" id="npcSave">Save NPC</button>
+      <input id="npcName" maxlength="24" value="enemy" placeholder="NPC name (e.g. enemy, slime)" style="width:100%;padding:12px 16px;border-radius:999px;border:0;background:var(--surface);color:var(--text);font:inherit;margin-bottom:14px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;justify-content:center" id="npcCols"></div>
+      <canvas id="npcCan" width="256" height="256" style="display:block;margin:0 auto;background:#16121e;border-radius:20px;cursor:crosshair;touch-action:none;image-rendering:pixelated;width:min(86vw,340px);height:min(86vw,340px)"></canvas>
+      <div style="display:flex;justify-content:space-between;gap:10px;margin-top:18px;flex-wrap:wrap">
+        <button type="button" class="btn" id="npcClear">Clear</button>
+        <button type="button" class="btn primary" id="npcSave">Save NPC</button>
       </div>`;
     document.body.appendChild(dlg);
 
@@ -52,8 +52,8 @@ function openNpcDrawer() {
     PAL.forEach(p => {
       const b = document.createElement("button"); b.type = "button";
       b.style.cssText = p === "erase"
-        ? "padding:5px 10px;border-radius:999px;background:var(--surface);font-size:12px;font-weight:700"
-        : `width:26px;height:26px;border-radius:50%;background:${p};border:2px solid transparent`;
+        ? "padding:6px 12px;border-radius:999px;background:var(--surface);font-size:12px;font-weight:700"
+        : `width:28px;height:28px;border-radius:50%;background:${p};border:2px solid transparent`;
       if (p === "erase") b.textContent = "Eraser";
       b.onclick = () => {
         curCol = p;

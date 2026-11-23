@@ -1,4 +1,4 @@
-/* Material You Secret Settings Modal (unlocked by 10 clicks on WebTok homepage logo) */
+/* Full-screen Material You Secret Settings (unlocked by 10 clicks on WebTok homepage logo) */
 (function () {
   function getCfg() {
     try { return { enabled: false, size: "md", cursor: false, gravityBtn: false, gravityCollide: true, gravityRotate: true, prompt: "", ...JSON.parse(localStorage.getItem("wt_capri_cfg") || "{}") }; }
@@ -6,9 +6,9 @@
   }
   function saveCfg(c) {
     c._ts = Date.now();
-    localStorage.setItem("wt_capri_cfg", JSON.stringify(c));
     if (window.wtCapri?.save) window.wtCapri.save(c);
-    else window.wtCapri?.sync();
+    else localStorage.setItem("wt_capri_cfg", JSON.stringify(c));
+    window.wtCapri?.sync();
     window.wtGravity?.sync();
   }
   function getSpinShapes() {
@@ -29,12 +29,15 @@
     if (!dlg) {
       const st = document.createElement("style");
       st.textContent = `
-        #wt-secret-dlg{border:0;border-radius:32px;padding:24px;width:min(94vw,470px);background:var(--bg,#f6f1fc);color:var(--text,#1d192b);margin:auto;box-shadow:0 24px 64px #0006;font-family:inherit}
-        #wt-secret-dlg::backdrop{background:#0007;backdrop-filter:blur(6px)}
-        .ss-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}
+        #wt-secret-dlg{border:0;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg,#f6f1fc);color:var(--text,#1d192b);font-family:inherit}
+        #wt-secret-dlg[open]{display:flex;flex-direction:column}
+        .ss-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--surface);background:var(--bg);flex:none}
         .ss-title{display:flex;align-items:center;gap:12px}
         .ss-ic{width:46px;height:46px;clip-path:var(--m3-cookie-4,circle(50%));background:var(--primary);color:var(--on-primary);display:grid;place-items:center;flex:none}
-        .ss-card{background:var(--card,#e2d4f4);border-radius:28px;padding:18px;display:flex;flex-direction:column;gap:14px}
+        .ss-body{flex:1;overflow-y:auto;padding:24px 18px 48px}
+        .ss-wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+        .ss-card{background:var(--card,#e2d4f4);border-radius:28px;padding:20px;display:flex;flex-direction:column;gap:16px}
+        .ss-sec-h{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--primary)}
         .ss-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
         .ss-prev{width:64px;height:64px;border-radius:20px;background:var(--surface);display:grid;place-items:center;overflow:hidden;flex:none}
         .ss-prev img{height:58px;width:auto;object-fit:contain}
@@ -48,75 +51,84 @@
         .ss-chips{display:flex;gap:6px;flex-wrap:wrap}
         .ss-chip{border:0;background:var(--surface);color:var(--text);padding:7px 12px;border-radius:999px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
         .ss-chip:hover{background:var(--primary);color:var(--on-primary)}
-        .ss-ta{width:100%;min-height:68px;border:0;border-radius:18px;padding:10px 12px;background:var(--surface);color:var(--text);font:inherit;font-size:12px;resize:vertical;outline:0}
+        .ss-ta{width:100%;min-height:80px;border:0;border-radius:18px;padding:12px 14px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;resize:vertical;outline:0}
       `;
       document.head.appendChild(st);
 
       dlg = document.createElement("dialog");
       dlg.id = "wt-secret-dlg";
       dlg.innerHTML = `
-        <div class="ss-head">
+        <div class="ss-top">
           <div class="ss-title">
             <div class="ss-ic"><span class="ms fill">auto_awesome</span></div>
             <div><h2 style="font-size:20px;font-weight:700;margin:0">Secret Settings</h2><small style="color:var(--muted)">Material You · Saved to your account</small></div>
           </div>
           <button type="button" class="btn icon" id="ssClose" aria-label="Close"><span class="ms">close</span></button>
         </div>
-        <div class="ss-card">
-          <div class="ss-row">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div class="ss-prev"><img src="/images/capri_assets/idle.webp" alt="Capri"></div>
-              <div><b style="font-size:16px">Mini Desktop Capri Pet</b><div style="font-size:12px;color:var(--muted)">Click her to chat via Web Tok AI!</div></div>
+        <div class="ss-body"><div class="ss-wrap">
+          <div class="ss-card">
+            <div class="ss-sec-h">Capri Desktop Pet</div>
+            <div class="ss-row">
+              <div style="display:flex;align-items:center;gap:12px">
+                <div class="ss-prev"><img src="/images/capri_assets/idle.webp" alt="Capri"></div>
+                <div><b style="font-size:16px">Mini Desktop Capri Pet</b><div style="font-size:12px;color:var(--muted)">Click her to chat via Web Tok AI!</div></div>
+              </div>
+              <button type="button" class="ss-switch" id="ssCapriTog" aria-label="Toggle Capri Pet"></button>
             </div>
-            <button type="button" class="ss-switch" id="ssCapriTog" aria-label="Toggle Capri Pet"></button>
-          </div>
-          <div>
-            <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">Pet Size</div>
-            <div class="ss-seg" id="ssSizeSeg">
-              <button type="button" data-sz="sm">Medium (200px)</button>
-              <button type="button" data-sz="md">Normal (280px)</button>
-              <button type="button" data-sz="lg">Large (360px)</button>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">Pet Size</div>
+              <div class="ss-seg" id="ssSizeSeg">
+                <button type="button" data-sz="sm">Medium (200px)</button>
+                <button type="button" data-sz="md">Normal (280px)</button>
+                <button type="button" data-sz="lg">Large (360px)</button>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">Mood &amp; Actions</div>
+              <div class="ss-chips" id="ssMoods">
+                <button type="button" class="ss-chip" data-st="walk">Walk</button>
+                <button type="button" class="ss-chip" data-st="sleep">Sleep</button>
+                <button type="button" class="ss-chip" data-st="music">Music Vibe</button>
+                <button type="button" class="ss-chip" data-st="glitch">Glitch</button>
+                <button type="button" class="ss-chip" data-st="center">Center Pet</button>
+              </div>
+            </div>
+            <div class="ss-row">
+              <div><b style="font-size:14px">Capri Custom Cursor</b><div style="font-size:12px;color:var(--muted)">Use Capri's custom pointer</div></div>
+              <button type="button" class="ss-switch" id="ssCurTog" aria-label="Toggle Capri Cursor"></button>
             </div>
           </div>
-          <div>
-            <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">Mood &amp; Actions</div>
-            <div class="ss-chips" id="ssMoods">
-              <button type="button" class="ss-chip" data-st="walk">Walk</button>
-              <button type="button" class="ss-chip" data-st="sleep">Sleep</button>
-              <button type="button" class="ss-chip" data-st="music">Music Vibe</button>
-              <button type="button" class="ss-chip" data-st="glitch">Glitch</button>
-              <button type="button" class="ss-chip" data-st="center">Center Pet</button>
+
+          <div class="ss-card">
+            <div class="ss-sec-h">Physics &amp; Motion</div>
+            <div class="ss-row">
+              <div><b style="font-size:14px">Gravity</b><div style="font-size:12px;color:var(--muted)">Show Activate Gravity button at bottom of screen</div></div>
+              <button type="button" class="ss-switch" id="ssGravTog" aria-label="Toggle Gravity Button"></button>
+            </div>
+            <div class="ss-row">
+              <div><b style="font-size:14px">Gravity Collision</b><div style="font-size:12px;color:var(--muted)">Elements &amp; Capri collide and stack</div></div>
+              <button type="button" class="ss-switch" id="ssColTog" aria-label="Toggle Gravity Collision"></button>
+            </div>
+            <div class="ss-row">
+              <div><b style="font-size:14px">Element Rotation</b><div style="font-size:12px;color:var(--muted)">Rotate &amp; spin elements when gravity is active</div></div>
+              <button type="button" class="ss-switch" id="ssRotTog" aria-label="Toggle Element Rotation"></button>
+            </div>
+            <div class="ss-row">
+              <div><b style="font-size:14px">Spin All Shapes</b><div style="font-size:12px;color:var(--muted)">Spin Material You cookie &amp; sunny borders</div></div>
+              <button type="button" class="ss-switch" id="ssSpinTog" aria-label="Toggle Spin All Shapes"></button>
             </div>
           </div>
-          <div class="ss-row">
-            <div><b style="font-size:14px">Capri Custom Cursor</b><div style="font-size:12px;color:var(--muted)">Use Capri's custom pointer</div></div>
-            <button type="button" class="ss-switch" id="ssCurTog" aria-label="Toggle Capri Cursor"></button>
-          </div>
-          <div class="ss-row">
-            <div><b style="font-size:14px">Gravity</b><div style="font-size:12px;color:var(--muted)">Show Activate Gravity button at bottom of screen</div></div>
-            <button type="button" class="ss-switch" id="ssGravTog" aria-label="Toggle Gravity Button"></button>
-          </div>
-          <div class="ss-row">
-            <div><b style="font-size:14px">Gravity Collision</b><div style="font-size:12px;color:var(--muted)">Elements &amp; Capri collide and stack</div></div>
-            <button type="button" class="ss-switch" id="ssColTog" aria-label="Toggle Gravity Collision"></button>
-          </div>
-          <div class="ss-row">
-            <div><b style="font-size:14px">Element Rotation</b><div style="font-size:12px;color:var(--muted)">Rotate &amp; spin elements when gravity is active</div></div>
-            <button type="button" class="ss-switch" id="ssRotTog" aria-label="Toggle Element Rotation"></button>
-          </div>
-          <div class="ss-row">
-            <div><b style="font-size:14px">Spin All Shapes</b><div style="font-size:12px;color:var(--muted)">Spin Material You cookie &amp; sunny borders</div></div>
-            <button type="button" class="ss-switch" id="ssSpinTog" aria-label="Toggle Spin All Shapes"></button>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <span style="font-size:12px;font-weight:700;color:var(--muted)">Capri AI Prompt (optional)</span>
-              <button type="button" class="ss-chip" id="ssSavePrompt" style="padding:4px 10px">Save Prompt</button>
+
+          <div class="ss-card">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="ss-sec-h">Capri AI Prompt (optional)</div>
+              <button type="button" class="ss-chip" id="ssSavePrompt">Save Prompt</button>
             </div>
             <textarea class="ss-ta" id="ssPrompt" maxlength="600" placeholder="Leave blank for default Capri personality, or enter a custom Web Tok AI prompt…"></textarea>
           </div>
-        </div>
-        <div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center">Capri assets © 2026 Lachy (capri-desktop) · PolyForm Noncommercial 1.0.0</div>`;
+
+          <div style="font-size:11px;color:var(--muted);text-align:center">Capri assets © 2026 Lachy (capri-desktop) · PolyForm Noncommercial 1.0.0</div>
+        </div></div>`;
       document.body.appendChild(dlg);
 
       const paint = () => {
