@@ -11,38 +11,152 @@
 <body data-page="landing">
 <div id="wp-layer"></div>
 <div id="wp-scrim"></div>
+
 <section id="landing">
   <i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i>
+
+  <header class="top-nav">
+    <div class="brand-row" id="wtHomeLogo" title="Web Tok">
+      <img src="/images/logo.png" alt="" width="40" height="40">
+      <span class="logo">Web Tok</span>
+    </div>
+    <nav class="nav-links" aria-label="Quick navigation">
+      <a class="nav-pill" href="/scroll"><span class="ms">play_circle</span>Feed</a>
+      <a class="nav-pill" href="/games"><span class="ms">sports_esports</span>Games</a>
+      <a class="nav-pill" href="/shop"><span class="ms">storefront</span>Shop</a>
+      <a class="nav-pill" href="/developer"><span class="ms">code</span>Studio</a>
+      <a class="nav-pill" href="/messages"><span class="ms">chat</span>DMs</a>
+      <a class="nav-pill primary" id="signin" href="/login">Sign in</a>
+    </nav>
+  </header>
+
   <div class="hero">
     <div class="copy">
-      <div class="brand-row" id="wtHomeLogo" style="cursor:pointer;user-select:none;transition:transform .1s"><img src="/images/logo.png" alt="" width="40" height="40"><span class="logo">Web Tok</span></div>
+      <div class="eyebrow"><span class="ms fill">auto_awesome</span>Material You Social + Arcade</div>
       <h1>Short videos.<br><em>Big</em> vibes.</h1>
-      <p class="tag">Scroll for free. Make an account to like, comment, follow, chat with friends and post your own.</p>
+      <p class="tag">Scroll the For You feed, play 3D Blockland &amp; arcade games, build your own games with AI or Scratch blocks, earn Tok Coins, and customize everything.</p>
       <div class="row">
-        <a class="btn primary big" href="/scroll"><span class="ms">play_arrow</span>Start scrolling</a>
-        <a class="btn big" id="signin" href="/login">Sign in</a>
+        <a class="btn primary big" id="start" href="/scroll#fyp"><span class="ms">play_arrow</span>Start scrolling</a>
+        <a class="btn big" href="/games"><span class="ms">sports_esports</span>Play Mini Games</a>
+        <a class="btn big" href="/developer"><span class="ms">code</span>Build a Game</a>
       </div>
       <div class="chips">
-        <span><span class="ms">bolt</span>Instant feed</span>
+        <span><span class="ms">bolt</span>For You Feed</span>
+        <span><span class="ms">view_in_ar</span>3D Blockland</span>
+        <span><span class="ms">toll</span>Tok Coins &amp; Shop</span>
         <span><span class="ms">chat</span>Friends &amp; DMs</span>
-        <span><span class="ms">palette</span>Material You themes</span>
+        <span><span class="ms">palette</span>Material You</span>
       </div>
     </div>
+
     <div class="art">
       <div class="phone">
+        <div class="phone-top"><span>For You</span><span>Following</span></div>
         <span class="ms play">play_arrow</span>
+        <div class="phone-rail">
+          <i class="ms fill">favorite</i>
+          <i class="ms fill">chat_bubble</i>
+          <i class="ms fill">music_note</i>
+        </div>
         <div class="bars"><i></i><i></i><i></i></div>
       </div>
-      <div class="fl f1"><span class="ms">favorite</span>Likes</div>
-      <div class="fl f2"><span class="ms">auto_awesome</span>Custom themes</div>
-      <div class="fl f3"><span class="ms">group</span>Friends</div>
+      <div class="fl f1"><span class="ms">favorite</span>Stickers &amp; Banners</div>
+      <div class="fl f2"><span class="ms">sports_esports</span>11+ Mini Games</div>
+      <div class="fl f3"><span class="ms">toll</span>Send Tok Coins</div>
+      <div class="fl f4"><span class="ms">auto_awesome</span>Custom Themes</div>
     </div>
   </div>
-  <div class="legal"><a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></div>
+
+  <section class="showcase" aria-label="Everything inside Web Tok">
+    <div class="sec-head">
+      <h2>Everything inside <em>Web Tok</em></h2>
+      <p>More than just a video feed — jump straight into any corner of the app.</p>
+    </div>
+
+    <div class="bento">
+      <a class="b-card wide accent-a" href="/scroll#fyp">
+        <div class="b-ic"><span class="ms fill">smart_display</span></div>
+        <div class="b-body">
+          <div class="b-tag">Video Feed</div>
+          <h3>For You, Following &amp; Friends</h3>
+          <p>Watch vertical &amp; landscape clips, drop animated Lottie stickers in comments, equip video banners, and search by #hashtags.</p>
+        </div>
+        <span class="b-go"><span class="ms">arrow_forward</span></span>
+      </a>
+
+      <a class="b-card accent-b" href="/games">
+        <div class="b-ic"><span class="ms fill">sports_esports</span></div>
+        <div class="b-body">
+          <div class="b-tag">Arcade</div>
+          <h3>Mini Games &amp; 3D Blockland</h3>
+          <p>Play Blockland, Target Range, Snake, Flappy Tok, 2048, Meteor Dodge, and community-made games.</p>
+        </div>
+        <span class="b-go"><span class="ms">arrow_forward</span></span>
+      </a>
+
+      <a class="b-card accent-c" href="/developer">
+        <div class="b-ic"><span class="ms fill">code</span></div>
+        <div class="b-body">
+          <div class="b-tag">Creator Studio</div>
+          <h3>Build &amp; Publish Games</h3>
+          <p>Code in Python Turtle, Scratch Blocks + pixel NPC drawer, HTML/JS, or let the Developer AI build for you.</p>
+        </div>
+        <span class="b-go"><span class="ms">arrow_forward</span></span>
+      </a>
+
+      <a class="b-card accent-d" href="/shop">
+        <div class="b-ic"><span class="ms fill">storefront</span></div>
+        <div class="b-body">
+          <div class="b-tag">Economy</div>
+          <h3>Tok Coins &amp; Item Shop</h3>
+          <p>Unlock profile frames, sprites, and video banners — or transfer Tok Coins directly to friends.</p>
+        </div>
+        <span class="b-go"><span class="ms">arrow_forward</span></span>
+      </a>
+
+      <a class="b-card accent-e" href="/messages">
+        <div class="b-ic"><span class="ms fill">forum</span></div>
+        <div class="b-body">
+          <div class="b-tag">Social</div>
+          <h3>Messages &amp; Calls</h3>
+          <p>DM friends, start group chats, and stay connected right inside Web Tok.</p>
+        </div>
+        <span class="b-go"><span class="ms">arrow_forward</span></span>
+      </a>
+
+      <a class="b-card wide accent-f" href="/profile">
+        <div class="b-ic"><span class="ms fill">palette</span></div>
+        <div class="b-body">
+          <div class="b-tag">Personalize</div>
+          <h3>Material You Themes, Wallpapers &amp; Sounds</h3>
+          <p>Pick any color palette, light or dark mode, custom wallpapers, and discover hidden Easter eggs like the Capri desktop pet.</p>
+        </div>
+        <span class="b-go"><span class="ms">arrow_forward</span></span>
+      </a>
+    </div>
+  </section>
+
+  <section class="quick-strip" aria-label="Quick launch">
+    <span>Quick launch:</span>
+    <a href="/scroll#fyp">For You</a>
+    <a href="/scroll#following">Following</a>
+    <a href="/games">Mini Games</a>
+    <a href="/developer">Developer Studio</a>
+    <a href="/shop">Tok Shop</a>
+    <a href="/sounds">Sounds</a>
+    <a href="/activity">Activity</a>
+    <a href="/messages">Messages</a>
+  </section>
+
+  <footer class="legal">
+    <span>Web Tok · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span>
+    <span class="egg-hint">Tip: tap the Web Tok logo 10 times for a surprise</span>
+  </footer>
 </section>
+
 <script src="/config.js"></script>
 <script src="/js/wt-local.js"></script>
-<script src="/js/sidebar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="/js/core.js"></script>
 <script src="/js/theme.js"></script>
 <script src="/js/auth.js"></script>

@@ -54,28 +54,28 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Removed the temporary `recordLoginDevice` wrapper and startup SQL workaround from `routes/shop.js`.
 
-## Pending / Latest Prepared Update (2026-11-22)
-
 ### 5. Blockland & Mini Games Pointer Lock / Iframe Fix
 
-* **Files:**
+* **Commit:** `3bb3e01c023831592bd37a11c187de2e2c4c4aee`
 
-  * `public/games/Blockland.html` (new / updated game file)
+* **Files:** `public/games/Blockland.html`, `public/js/games.js`, `handoff.md`
 
-  * `public/js/games.js` (updated)
+* **Summary:**
 
-* **Root Cause:**
+  * Fixed `Blockland.html` "Click to play" so it enters gameplay immediately, focuses the canvas (`tabIndex = 0`), safely requests Pointer Lock, and falls back to click-and-drag look when Pointer Lock is blocked.
 
-  1. `public/js/games.js` created `#gameFrame` with `frame.sandbox = "allow-scripts"`, which blocks `requestPointerLock()` inside the iframe.
+  * Updated `frame.sandbox` to `"allow-scripts allow-pointer-lock"` in `public/js/games.js`, added `g.url` iframe support in `openBuiltin()`, and registered **Blockland** in `BUILTINS`.
 
-  2. `Blockland.html` only hid `#menu` inside `pointerlockchange`, so when Pointer Lock was blocked or rejected in an iframe, clicking "Click to play" did nothing.
+  * Follow-up note: Check `public/pages/developer.html` `#prevFrame` `sandbox` attribute if testing pointer-lock games in `/developer` preview.
 
-* **Changes Prepared:**
+### 6. Home Screen Redesign & Feature Showcase
 
-  * **`Blockland.html`:** Clicking `#menu` now immediately enters gameplay (`playing = true`), focuses the canvas (`tabIndex = 0`) for keyboard input, safely attempts `requestPointerLock()` (catching Promise rejections), and falls back to **click-and-drag to look** (with normal clicks to break/place) whenever Pointer Lock is unavailable.
+* **Files:** `public/index.html`, `public/css/landing.css`, `public/js/landing.js`, `handoff.md`
 
-  * **`public/js/games.js`:** Updated `frame.sandbox` to `"allow-scripts allow-pointer-lock"` in `openCommunityGame()`, added `g.url` iframe support to `openBuiltin()`, and registered **Blockland** (`url: "/games/Blockland.html"`) in `BUILTINS`.
+* **Summary:**
 
-* **Follow-up Note for Claude / Next Session:**
+  * Added top navigation pills (`Feed`, `Games`, `Shop`, `Studio`, `DMs`, `Sign in`), hero actions (`Start scrolling`, `Play Mini Games`, `Build a Game`), and an upgraded phone preview with 4 floating feature pills.
 
-  * Check `developer.html` (not yet inspected) to verify whether `#prevFrame` also needs `allow-pointer-lock` in its `sandbox` attribute when previewing 3D/pointer-lock games in `/developer`.
+  * Added a 6-card **Everything inside Web Tok** M3 Expressive bento grid highlighting Video Feed, Mini Games & 3D Blockland, Developer Studio, Tok Coins & Shop, Messages & Calls, and Material You Themes/Wallpapers.
+
+  * Added a Quick Launch bar and footer while preserving `#wtHomeLogo` 10-click Secret Settings and `initAuth()`.
