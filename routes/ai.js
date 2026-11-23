@@ -1,8 +1,10 @@
 /* Web Tok AI (@webtok_ai via NVIDIA NIM) & AI Content Safety Checker (videos + stickers) */
 const path = require("path");
 const crypto = require("crypto");
+const bcrypt = require("bcryptjs");
 
 const AI_ID = "00000000-0000-0000-0000-000000000002";
+const NOTIF_ID = "00000000-0000-0000-0000-000000000001";
 const NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
 const CHAT_MODELS = ["meta/llama-3.3-70b-instruct", "google/gemma-4-31b-it"];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
@@ -27,6 +29,24 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     ], "write");
   }
   ensureAiAccount().catch(e => console.warn("AI account setup:", e.message));
+
+  async function ensureNotifAccount() {
+    const u = await run("SELECT 1 FROM users WHERE id = ?", [NOTIF_ID]);
+    const p = await run("SELECT 1 FROM profiles WHERE id = ?", [NOTIF_ID]);
+    if (u.length && p.length) return;
+    const ts = nowIso();
+    const lockedHash = "$2a$10$" + crypto.randomBytes(24).toString("hex");
+    await db.batch([
+      {
+        sql: "INSERT OR IGNORE INTO users (id, email, encrypted_password, raw_user_meta_data, role, created_at) VALUES (?,?,?,?,?,?)",
+        args: [NOTIF_ID, "notifications@webtok.system", lockedHash, JSON.stringify({ username: "notifications", display_name: "Notifications" }), "system", ts]
+      },
+      {
+        sql: "INSERT OR IGNORE INTO profiles (id, username, display_name, bio, avatar_url, theme, created_at) VALUES (?,?,?,?,NULL,'{}',?)",
+        args: [NOTIF_ID, "notifications", "Notifications", "Official Web Tok announcements", ts]
+      }
+    ], "write");
+  }
 
   async function callNim(key, models, messages, maxTokens = 512) {
     let lastErr = null;
@@ -88,6 +108,46 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
       throw new HttpError(403, `Upload blocked by safety filter: ${res.reason}`);
     }
     return { data: { safe: true }, error: null };
+  }));
+
+  app.post("/api/admin/set-password", wrap(async req => {
+    if (!req.wt) throw new HttpError(401, "Sign in required");
+    if (!["admin", "owner"].includes(req.wt.role)) throw new HttpError(403, "Admins only");
+    const t = (await run("SELECT u.id, u.email, u.role, p.username FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [String(req.body?.userId || "")]))[0];
+    if (!t) throw new HttpError(404, "User not found");
+    if (t.role === "owner" || t.role === "system" || t.id === req.wt.uid) throw new HttpError(403, "You can't change this account");
+    if (req.wt.role !== "owner" && t.role !== "user") throw new HttpError(403, "Only the owner can change admins");
+    const pw = String(req.body?.password || "");
+    if (pw.length < 6 || pw.length > 128) throw new HttpError(400, "Password must be 6 to 128 characters.");
+    await db.execute({ sql: "UPDATE users SET encrypted_password = ?, sessions_valid_after = ? WHERE id = ?", args: [await bcrypt.hash(pw, 10), nowIso(), t.id] });
+    if (app.locals.forgetUser) app.locals.forgetUser(t.id);
+    await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [req.wt.uid, "reset_password", `@${t.username || "?"} (${t.email})`, nowIso()] }).catch(() => {});
+    return { data: { username: t.username, email: t.email }, error: null };
+  }));
+
+  app.post("/api/admin/announce", wrap(async req => {
+    if (!req.wt) throw new HttpError(401, "Sign in required");
+    if (!["admin", "owner"].includes(req.wt.role)) throw new HttpError(403, "Admins only");
+    const message = String(req.body?.message || "").trim();
+    if (!message || message.length > 1000) throw new HttpError(400, "Announcement must be 1 to 1000 characters.");
+    await ensureNotifAccount();
+    const recipients = await run(
+      "SELECT id FROM users WHERE id != ? AND COALESCE(banned, 0) = 0 AND COALESCE(role, 'user') != 'system'",
+      [NOTIF_ID]
+    );
+    const ts = nowIso();
+    const stmts = recipients.map(r => ({
+      sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
+      args: [NOTIF_ID, r.id, message, ts]
+    }));
+    for (let i = 0; i < stmts.length; i += 50) {
+      await db.batch(stmts.slice(i, i + 50), "write");
+    }
+    await db.execute({
+      sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)",
+      args: [req.wt.uid, "announce", `Sent to ${recipients.length} user(s): ${message.slice(0, 80)}`, ts]
+    }).catch(() => {});
+    return { data: { sentCount: recipients.length }, error: null };
   }));
 
   app.post("/api/ai/chat", wrap(async req => {

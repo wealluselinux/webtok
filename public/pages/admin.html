@@ -57,7 +57,6 @@ input:focus,textarea:focus{outline:0;border-color:var(--primary)}
 <script src="/js/theme.js"></script>
 <script src="/js/admin.js"></script>
 <script>
-const adminClient = supabase.createClient(WT_CONFIG.SUPABASE_URL, WT_CONFIG.SUPABASE_ANON_KEY);
 document.getElementById("annSend").onclick = async () => {
   const tx = document.getElementById("annText").value.trim();
   const hint = document.getElementById("annHint");
@@ -65,17 +64,11 @@ document.getElementById("annSend").onclick = async () => {
   if (!tx) { hint.textContent = "Write a message first."; return; }
   btn.disabled = true; hint.textContent = "Sending…";
   try {
-    const tok = (await adminClient.auth.getSession()).data?.session?.access_token;
-    const r = await fetch("/api/admin/announce", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
-      body: JSON.stringify({ message: tx })
-    });
-    const j = await r.json();
-    if (!r.ok || j.error) throw new Error(j.error?.message || "Failed");
+    const r = await api("/api/admin/announce", { message: tx });
+    if (r.error) throw new Error(r.error.message || "Failed to send");
     document.getElementById("annText").value = "";
-    hint.textContent = `Sent to ${j.data.sentCount} user(s)!`;
-  } catch (e) { hint.textContent = e.message; }
+    hint.textContent = `Sent to ${r.data?.sentCount ?? 0} user(s)!`;
+  } catch (e) { hint.textContent = e.message || "Failed to send"; }
   finally { btn.disabled = false; }
 };
 </script>

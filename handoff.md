@@ -70,12 +70,24 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
 ### 6. Home Screen Redesign & Feature Showcase
 
+* **Commit:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`
+
 * **Files:** `public/index.html`, `public/css/landing.css`, `public/js/landing.js`, `handoff.md`
 
 * **Summary:**
 
   * Added top navigation pills (`Feed`, `Games`, `Shop`, `Studio`, `DMs`, `Sign in`), hero actions (`Start scrolling`, `Play Mini Games`, `Build a Game`), and an upgraded phone preview with 4 floating feature pills.
 
-  * Added a 6-card **Everything inside Web Tok** M3 Expressive bento grid highlighting Video Feed, Mini Games & 3D Blockland, Developer Studio, Tok Coins & Shop, Messages & Calls, and Material You Themes/Wallpapers.
+  * Added a 6-card **Everything inside Web Tok** M3 Expressive bento grid, Quick Launch bar, and footer while preserving `#wtHomeLogo` 10-click Secret Settings and `initAuth()`.
 
-  * Added a Quick Launch bar and footer while preserving `#wtHomeLogo` 10-click Secret Settings and `initAuth()`.
+### 7. Fix Signup TOS Auto-Accept, Admin Password Reset & Notifications (2026-11-23)
+
+* **Files:** `public/pages/login.html`, `public/pages/admin.html`, `routes/ai.js`, `handoff.md`
+
+* **Summary:**
+
+  * **`public/pages/login.html`:** Restored `accepted_terms: true` automatically on `sb.auth.signUp()` when clicking **Create account** (plus a clear notice above the button linking to `/terms` and `/privacy`), and restored the `Forgot password?` link and footer links that were accidentally dropped in `49b1433`.
+
+  * **`routes/ai.js`:** Restored `POST /api/admin/set-password` (which was accidentally dropped in `de1818f8`, causing `"Request failed"` when admins reset user passwords in `/admin`), and added a hardened `POST /api/admin/announce` route that ensures `@notifications` exists in both `users` and `profiles`, selects recipients with `COALESCE(banned, 0) = 0 AND COALESCE(role, 'user') != 'system'`, and safely logs to `admin_log`.
+
+  * **`public/pages/admin.html`:** Switched the `#annSend` handler to use `admin.js`'s `api("/api/admin/announce", ...)` helper instead of instantiating a separate Supabase client.
