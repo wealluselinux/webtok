@@ -18,8 +18,8 @@ h1{font-size:28px;letter-spacing:-.3px}a{color:var(--primary);font-weight:700;te
 .btn:hover{transform:translateY(-1px)}
 .btn:active{transform:scale(.96)}
 .btn.p,.btn.on{background:var(--primary);color:var(--on-primary)}.btn.bad{background:var(--bad);color:#fff}.btn:disabled{opacity:.4;cursor:default;transform:none}
-input[type=text],input[type=search],textarea{width:100%;padding:14px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;margin-bottom:12px}
-input:focus,textarea:focus{outline:0;border-color:var(--primary)}
+input[type=text],input[type=search],textarea,select{width:100%;padding:14px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;margin-bottom:12px}
+input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .card{background:var(--card);border-radius:28px;padding:18px 20px;margin-bottom:12px;box-shadow:0 4px 16px #0001}
 .line{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
 .name{font-weight:700}.sub{color:var(--muted);font-size:14px;word-break:break-all}
@@ -30,6 +30,8 @@ input:focus,textarea:focus{outline:0;border-color:var(--primary)}
 #result{position:sticky;top:8px;z-index:5;background:var(--primary);color:var(--on-primary);border-radius:28px;padding:18px 20px;margin-bottom:14px;box-shadow:0 8px 24px #0003}
 #result code{display:block;font-size:20px;margin:8px 0;word-break:break-all;background:#0003;border-radius:14px;padding:10px}
 .hidden{display:none!important}.msg{color:var(--muted);padding:10px 4px}
+.tk-rep{background:var(--surface);border-radius:18px;padding:10px 14px;margin-top:8px;font-size:13px;line-height:1.45}
+.tk-rep.adm{border:2px solid var(--primary)}
 </style></head><body>
 <div id="wp-layer"></div>
 <div id="wp-scrim"></div>
@@ -46,9 +48,15 @@ input:focus,textarea:focus{outline:0;border-color:var(--primary)}
         <button class="btn p" id="annSend">Send to everyone</button>
       </div>
     </div>
-    <div class="tabs"><button class="btn on" data-tab="users">Users</button><button class="btn" data-tab="content">Content</button><button class="btn hidden" data-tab="log" id="logTab">Log</button></div>
+    <div class="tabs">
+      <button class="btn on" data-tab="users">Users</button>
+      <button class="btn" data-tab="content">Content</button>
+      <button class="btn" data-tab="support">Support</button>
+      <button class="btn hidden" data-tab="log" id="logTab">Log</button>
+    </div>
     <section id="users"><input id="q" type="search" placeholder="Search by email, username or name"><div id="ulist"></div></section>
     <section id="content" class="hidden"></section>
+    <section id="support" class="hidden"></section>
     <section id="log" class="hidden"></section>
   </div>
 </div>

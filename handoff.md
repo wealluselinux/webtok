@@ -64,21 +64,19 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Fixed `Blockland.html` "Click to play" so it enters gameplay immediately, focuses the canvas (`tabIndex = 0`), safely requests Pointer Lock, and falls back to click-and-drag look when Pointer Lock is blocked.
 
-  * Updated `frame.sandbox` to `"allow-scripts allow-pointer-lock"` in `public/js/games.js`, added `g.url` iframe support in `openBuiltin()`, and registered **Blockland** in `BUILTINS`.
+  * Updated `frame.sandbox` to `"allow-scripts allow-pointer-lock"` in `public/js/games.js`, added `g.url` iframe support in `openBuiltin()`, and registered **Blockland** (`url: "/games/Blockland.html"`) in `BUILTINS`.
 
   * Follow-up note: Check `public/pages/developer.html` `#prevFrame` `sandbox` attribute if testing pointer-lock games in `/developer` preview.
 
-### 6. Home Screen Redesign & Feature Showcase
+### 6. Home Screen Redesign & Material Symbols Fix
 
-* **Commit:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`
+* **Commits:** `4bf32f9dd6d0ae2f7dbeabfca972c311f28cd14c`, `dff4f4675221f7791ededfffd389512f0d6ee331`
 
 * **Files:** `public/index.html`, `public/css/landing.css`, `public/js/landing.js`, `handoff.md`
 
 * **Summary:**
 
-  * Added top navigation pills (`Feed`, `Games`, `Shop`, `Studio`, `DMs`, `Sign in`), hero actions (`Start scrolling`, `Play Mini Games`, `Build a Game`), and an upgraded phone preview with 4 floating feature pills.
-
-  * Added a 6-card **Everything inside Web Tok** M3 Expressive bento grid, Quick Launch bar, and footer while preserving `#wtHomeLogo` 10-click Secret Settings and `initAuth()`.
+  * Added top navigation pills, hero actions, upgraded phone preview, 6-card **Everything inside Web Tok** bento grid, Quick Launch bar, and Material Symbols Outlined font + `.ms` styles.
 
 ### 7. Fix Signup TOS Auto-Accept, Admin Password Reset & Notifications
 
@@ -90,15 +88,17 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
   * Restored `accepted_terms: true` automatically on `sb.auth.signUp()`, restored `POST /api/admin/set-password`, and hardened `POST /api/admin/announce` + `/admin` announcement button.
 
-### 8. Full-Screen Sign-In Transition & Full-Screen Non-Confirmation Dialogs
-
-* **Commit:** `f263bf627a71df3dfd6e461101077d752dc7b5b6`
+### 8. Full-Screen Sign-In Transition & Full-Screen Non-Confirmation Dialogs (2026-11-23)
 
 * **Files:** `public/pages/login.html`, `public/js/secret-settings.js`, `public/css/profile-dialogs.css`, `public/js/developer-npc.js`, `handoff.md`
 
 * **Summary:**
 
-  * Added full-screen sign-in loading & 3-2-1 countdown overlay, converted Secret Settings to full-screen, and made Edit Profile / Followers / Switch Account / NPC Drawer full-screen.
+  * **`public/pages/login.html`:** Added `#auth-overlay` full-screen loading screen with animated progress bar (`"Signing you in…"` -> `"Sign in successful!"` -> `"Taking you to the homepage in 3… 2… 1…"` -> reloads to `/`).
+
+  * **`public/js/secret-settings.js`:** Converted `#wt-secret-dlg` to a full-screen Material You settings page with grouped cards (`Capri Desktop Pet`, `Physics & Motion`, `Capri AI Prompt`).
+
+  * **`public/css/profile-dialogs.css` & `public/js/developer-npc.js`:** Made `#editProfDlg`, `#followListDlg`, `#switchDlg`, and `#npcDrawDlg` full-screen while keeping confirmation/delete modals (`#wt-m3-dlg`) compact.
 
 ### 9. Role-Gate Admin Panel Link & Hard-Block `/admin` for Guests
 
@@ -112,6 +112,8 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
 
 ### 10. Fix `@notifications` in Messages, Web Tok AI Errors, Admin Error Reporting & Admin More-Menu Link (2026-11-23)
 
+* **Commit:** `8466a87c88f3bde379d66c213e8150b37a2e4973`
+
 * **Files:** `public/js/messages-app.js`, `routes/ai.js`, `public/js/admin.js`, `public/js/shop-deco.js`, `handoff.md`
 
 * **Summary:**
@@ -123,3 +125,19 @@ Purpose: Shared changelog and handoff notes for **Gemini** and **Claude** so bot
   * **`public/js/admin.js`:** Updated `api()` to parse raw responses and return exact HTTP status / server error messages instead of generic `"Request failed"`, and surfaced detailed errors in `resetPw()`.
 
   * **`public/js/shop-deco.js`:** Fixed `wireMoreMenu()` so it initializes the client with `WT_CONFIG`, checks both `/api/admin/me` and `/api/profiles/:id/badge`, and no longer hides `#sbadmin` for admins/owners.
+
+### 11. Group Collage, Group Kick/Delete, Support Tickets, DM Calling + WebRTC Fix + Speaking Ring + Mic Test, Owner Account Deletion (2026-11-24)
+
+* **Files:** `routes/extras.js`, `public/pages/messages.html`, `public/js/messages-app.js`, `public/js/messages-call.js`, `public/pages/support.html`, `public/index.html`, `public/pages/admin.html`, `public/js/admin.js`, `handoff.md`
+
+* **Summary:**
+
+  * **Group Chat 3-Avatar Collage:** Added `.av-collage` (`c1`/`c2`/`c3`) and `groupAvatarHtml()` in `public/pages/messages.html` and `public/js/messages-app.js` to display up to 3 member avatars/initials in both the sidebar and chat header.
+
+  * **Group Owner Kick & Delete:** Added `POST /api/groups/:id/kick` and `DELETE /api/groups/:id` in `routes/extras.js` (owner-only, with WebSocket room cleanup and `kicked`/`group-deleted` notifications), plus **Members** (with Kick) and **Delete** buttons in `public/js/messages-app.js`.
+
+  * **Support Ticket System:** Added `support_tickets` & `support_replies` tables, `/support` route, `/api/support/tickets` endpoints, and `/api/admin/support` endpoints in `routes/extras.js`; created `public/pages/support.html` (linked from the `public/index.html` footer, not in sidebar); added the **Support** tab to `public/pages/admin.html` & `public/js/admin.js`.
+
+  * **DM Calling + WebRTC Fix + Green Speaking Ring + Mic Test:** Enabled `dm:` call rooms and `dm-call-ring` notifications in `routes/extras.js`; fixed WebRTC ICE candidate queuing (`pendingIce`), peer cleanup on disconnect, and audio playback in `public/js/messages-call.js`; added `AudioContext` + `AnalyserNode` green speaking rings (`.speaking`) and the **Test Mic** modal (`#micTestDlg`).
+
+  * **Owner-Only Account Deletion:** Added `POST /api/admin/delete-user` in `routes/extras.js` (strictly `owner` role, protecting owner/system/self) and the **Delete account** button in `public/js/admin.js`.

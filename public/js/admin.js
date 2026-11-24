@@ -1,9 +1,8 @@
-/* Admin panel. Every action is checked again on the server, so hiding buttons here is only for convenience. */
+/* Admin panel: users, owner-only account deletion, content moderation, support tickets, log */
 const sbc = window.supabase.createClient();
 const $ = id => document.getElementById(id);
 let me = null;
 
-// Builds elements safely (text is never treated as HTML)
 function h(tag, attrs, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -54,7 +53,8 @@ function userCard(u) {
     h("div", { class: "acts" },
       h("button", { class: "btn", disabled: !canAct, text: "Reset password", onclick: () => resetPw(u) }),
       me === "owner" && !isOwner ? h("button", { class: "btn", text: u.role === "admin" ? "Remove admin" : "Make admin", onclick: () => setRole(u, u.role === "admin" ? "user" : "admin") }) : "",
-      h("button", { class: "btn " + (u.banned ? "" : "bad"), disabled: !canAct, text: u.banned ? "Unsuspend" : "Suspend", onclick: () => ban(u) })),
+      h("button", { class: "btn " + (u.banned ? "" : "bad"), disabled: !canAct, text: u.banned ? "Unsuspend" : "Suspend", onclick: () => ban(u) }),
+      me === "owner" && !isOwner && u.role !== "system" ? h("button", { class: "btn bad", text: "Delete account", onclick: () => deleteUser(u) }) : ""),
     h("div", { class: "acts" }, ...boxes, h("button", { class: "btn p", disabled: !canAct, text: "Save limits", onclick: () => saveLimits(u, card) })));
   return card;
 }
@@ -100,6 +100,20 @@ async function ban(u) {
   }
   const r = await api("/api/admin/ban", { userId: u.id, banned: !u.banned, reason }); if (r.error) toast(r.error.message); loadUsers();
 }
+async function deleteUser(u) {
+  const ok = await wtConfirm({
+    title: `Delete @${u.username}?`,
+    message: `Permanently delete @${u.username || "?"} (${u.email}) and all of their videos, comments, messages, and data? This cannot be undone.`,
+    icon: "delete_forever",
+    confirmText: "Delete account",
+    danger: true
+  });
+  if (!ok) return;
+  const r = await api("/api/admin/delete-user", { userId: u.id });
+  if (r.error) return toast(`Delete failed: ${r.error.message}`);
+  toast(`Deleted account @${r.data.username || "?"} (${r.data.email}).`);
+  loadUsers();
+}
 async function saveLimits(u, card) {
   const list = [...card.querySelectorAll("input[type=checkbox]:checked")].map(x => x.value);
   const r = await api("/api/admin/restrict", { userId: u.id, restrictions: list }); toast(r.error ? r.error.message : `Saved limits for @${u.username}.`); loadUsers();
@@ -125,6 +139,50 @@ async function loadContent() {
     h("button", { class: "btn bad", text: "Delete", onclick: async () => { const x = await api("/api/admin/delete-comment", { commentId: c.id }); if (x.error) toast(x.error.message); loadContent(); } }))));
 }
 
+/* ----- support tickets ----- */
+async function loadSupport() {
+  const box = $("support"); box.replaceChildren(h("div", { class: "msg", text: "Loading support tickets…" }));
+  const r = await api("/api/admin/support");
+  box.replaceChildren();
+  if (r.error) { box.append(h("div", { class: "msg", text: r.error.message })); return; }
+  if (!r.data.length) { box.append(h("div", { class: "msg", text: "No support tickets yet." })); return; }
+  r.data.forEach(t => {
+    const sel = h("select", { style: "width:auto;margin:0;padding:8px 14px" },
+      ...["open", "resolved", "closed"].map(s => h("option", { value: s, selected: t.status === s || null, text: s }))
+    );
+    sel.onchange = async () => {
+      const x = await api(`/api/admin/support/${encodeURIComponent(t.id)}/status`, { status: sel.value });
+      if (x.error) toast(x.error.message);
+      else loadSupport();
+    };
+    const repIn = h("textarea", { rows: 2, maxlength: 2000, placeholder: "Write a response to this ticket…", style: "margin-top:10px" });
+    const sendBtn = h("button", { class: "btn p", text: "Send reply & mark resolved" });
+    sendBtn.onclick = async () => {
+      const body = repIn.value.trim();
+      if (!body) return toast("Write a reply first.");
+      sendBtn.disabled = true;
+      const x = await api(`/api/admin/support/${encodeURIComponent(t.id)}/reply`, { body, status: "resolved" });
+      if (x.error) { toast(x.error.message); sendBtn.disabled = false; return; }
+      toast("Support reply sent.");
+      loadSupport();
+    };
+    const repliesEl = (t.replies || []).map(rep => h("div", { class: "tk-rep" + (rep.is_admin ? " adm" : "") },
+      h("div", { class: "sub", text: `${rep.is_admin ? "Admin (@" + (rep.username || "staff") + ")" : "@" + (rep.username || "user")} · ${when(rep.created_at)}` }),
+      h("div", { text: rep.body, style: "white-space:pre-wrap;margin-top:3px" })
+    ));
+    box.append(h("div", { class: "card" },
+      h("div", { class: "line" },
+        h("div", {}, h("span", { class: "name", text: t.subject }), h("span", { class: "badge " + (t.status === "open" ? "role" : ""), text: t.status })),
+        sel),
+      h("div", { class: "sub", style: "margin:4px 0 8px", text: `@${t.username || "?"} (${t.email || ""}) · ${when(t.created_at)}` }),
+      h("div", { text: t.message, style: "white-space:pre-wrap;line-height:1.45" }),
+      ...repliesEl,
+      repIn,
+      h("div", { class: "acts", style: "margin-top:0" }, sendBtn)
+    ));
+  });
+}
+
 /* ----- log (owner only) ----- */
 async function loadLog() {
   const box = $("log"); box.replaceChildren();
@@ -136,8 +194,10 @@ async function loadLog() {
 
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
   document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x === b));
-  ["users", "content", "log"].forEach(t => $(t).classList.toggle("hidden", t !== b.dataset.tab));
-  if (b.dataset.tab === "content") loadContent(); if (b.dataset.tab === "log") loadLog();
+  ["users", "content", "support", "log"].forEach(t => $(t).classList.toggle("hidden", t !== b.dataset.tab));
+  if (b.dataset.tab === "content") loadContent();
+  if (b.dataset.tab === "support") loadSupport();
+  if (b.dataset.tab === "log") loadLog();
 });
 let qt = null; $("q").oninput = () => { clearTimeout(qt); qt = setTimeout(loadUsers, 300); };
 

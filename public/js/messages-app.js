@@ -1,10 +1,24 @@
-/* Messages: DMs, Web Tok AI (@webtok_ai), Notifications (@notifications), Group Chats, Stickers, Invites, Sidebar */
+/* Messages: DMs, Web Tok AI (@webtok_ai), Notifications (@notifications), Group Chats (3-avatar collage, owner kick/delete), Stickers, Invites, Sidebar */
 const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPABASE_URL,WT_CONFIG.SUPABASE_ANON_KEY);
 const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const NOTIF_BOT={id:"00000000-0000-0000-0000-000000000001",username:"notifications",display_name:"Notifications",isNotif:true};
 const AI_BOT={id:"00000000-0000-0000-0000-000000000002",username:"webtok_ai",display_name:"Web Tok AI",isAi:true};
 let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, hasNotifs=false, activeTab="all", groupPoll=null, lastGroupMsgId=0;
 const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
+const dmRoomId=(a,b)=>"dm:"+[String(a),String(b)].sort().join(":");
+
+function groupAvatarHtml(g){
+  const ms=(g&&Array.isArray(g.members)?g.members:[]).slice(0,3);
+  if(!ms.length) return `<div class="av grp"><span class="ms">groups</span></div>`;
+  const cls=ms.length===1?"c1":ms.length===2?"c2":"c3";
+  const tiles=ms.map((m,i)=>{
+    const init=esc((m.display_name||m.username||"?")[0].toUpperCase());
+    const bg=m.avatar_url?`style="background-image:url(${esc(m.avatar_url)})"`:"";
+    return `<div class="av-tile t${i}" ${bg}>${m.avatar_url?"":init}</div>`;
+  }).join("");
+  return `<div class="av-collage ${cls}">${tiles}</div>`;
+}
+
 let lottieP=null;
 function ensureLottie(){if(window.lottie)return Promise.resolve(window.lottie);return lottieP||(lottieP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";s.onload=()=>ok(window.lottie);s.onerror=no;document.head.appendChild(s)}))}
 async function lottieIn(el,path){try{(await ensureLottie()).loadAnimation({container:el,renderer:"svg",loop:true,autoplay:true,path})}catch(e){console.warn(e)}}
@@ -103,19 +117,33 @@ async function openChat(f){
   cur=f; curType="dm"; document.body.classList.add("chatting");
   delete unreadBySender[f.id];
   renderSidebarList();
+  const isFriend=!f.isAi && !f.isNotif;
   const avHtml=f.isAi
     ?'<div class="av ai"><span class="ms">smart_toy</span></div>'
     :f.isNotif
     ?'<div class="av ai"><span class="ms">notifications</span></div>'
     :`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
   const subText=`@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":f.isNotif?" · Official Announcements":""}`;
+  const callActions=isFriend
+    ?`<button type="button" class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button type="button" class="head-chip" id="btnMicTest" title="Test microphone"><span class="ms" style="font-size:16px">mic</span>Test Mic</button>`
+    :"";
   const bottomHtml=f.isNotif
     ?'<div style="padding:12px 16px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--surface)">Official Web Tok announcements (read-only)</div>'
     :`<div id="stkPanel" class="hidden"></div><form id="form"><input id="txt" maxlength="1000" placeholder="${f.isAi?"Ask Web Tok AI anything or share a video…":"Message…"}" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${subText}</div></div><div class="head-actions"><button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${subText}</div></div><div class="head-actions">${callActions}<button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
+  <div id="callBar" class="hidden"></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
   ${bottomHtml}`;
   $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
+  if(isFriend){
+    const rid=dmRoomId(me,f.id);
+    $("btnCall").onclick=()=>{if(callGroupId===rid)leaveCall();else joinCall(rid);};
+    $("btnMicTest").onclick=()=>openMicTest();
+    if(callGroupId!==rid){
+      try{callState=await api(`/api/groups/${encodeURIComponent(rid)}/call`);}catch{callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};}
+    }
+    renderCallUI();
+  }
   $("btnClearChat").onclick=async()=>{
     const ok=await wtConfirm({title:"Clear chat?",message:`Delete all messages with ${f.display_name||"@"+f.username}? This can't be undone.`,icon:"delete_sweep",confirmText:"Clear",danger:true});
     if(!ok)return;
@@ -173,13 +201,17 @@ async function openGroupChat(g){
   cur=g; curType="group"; lastGroupMsgId=0; g.unread_count=0;
   document.body.classList.add("chatting");
   renderSidebarList();
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button><div class="av grp"><span class="ms">groups</span></div><div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.name)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}</div></div><div class="head-actions"><button class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button class="head-chip" id="btnInvMore"><span class="ms" style="font-size:16px">person_add</span>Invite</button><button class="head-chip" id="btnLeaveGrp">Leave</button></div></div>
+  const isOwner=g.created_by===me;
+  const ownerDelBtn=isOwner?`<button class="head-chip bad" id="btnDeleteGrp"><span class="ms" style="font-size:16px">delete</span>Delete</button>`:"";
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${groupAvatarHtml(g)}<div style="min-width:0"><div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.name)}</div><div id="grpSubCount" style="font-size:12px;color:var(--muted);font-weight:500">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}</div></div><div class="head-actions"><button class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button class="head-chip" id="btnMicTest" title="Test microphone"><span class="ms" style="font-size:16px">mic</span>Test Mic</button><button class="head-chip" id="btnMembers"><span class="ms" style="font-size:16px">group</span>Members</button><button class="head-chip" id="btnInvMore"><span class="ms" style="font-size:16px">person_add</span>Invite</button><button class="head-chip" id="btnLeaveGrp">Leave</button>${ownerDelBtn}</div></div>
   <div id="callBar" class="hidden"></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
   <div id="stkPanel" class="hidden"></div>
   <form id="form"><input id="txt" maxlength="1000" placeholder="Message ${esc(g.name)}…" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
   $("back").onclick=()=>{stopGroupPoll();document.body.classList.remove("chatting");cur=null;curType=null};
   $("btnCall").onclick=()=>{if(callGroupId===g.id)leaveCall();else joinCall(g.id);};
+  $("btnMicTest").onclick=()=>openMicTest();
+  $("btnMembers").onclick=()=>openGroupMembers(g);
   $("btnLeaveGrp").onclick=async()=>{
     const ok=await wtConfirm({title:"Leave group?",message:`Are you sure you want to leave "${g.name}"?`,icon:"logout",confirmText:"Leave",danger:true});
     if(!ok)return;
@@ -189,6 +221,19 @@ async function openGroupChat(g){
     $("chat").innerHTML='<div class="empty">Left group chat.</div>';
     await loadGroupsAndInvites();
   };
+  if($("btnDeleteGrp")){
+    $("btnDeleteGrp").onclick=async()=>{
+      const ok=await wtConfirm({title:"Delete group chat?",message:`Permanently delete "${g.name}" and all its messages for everyone?`,icon:"delete_forever",confirmText:"Delete group",danger:true});
+      if(!ok)return;
+      try{
+        if(callGroupId===g.id) leaveCall();
+        await api(`/api/groups/${encodeURIComponent(g.id)}`,{method:"DELETE"});
+        stopGroupPoll(); cur=null; curType=null; document.body.classList.remove("chatting");
+        $("chat").innerHTML='<div class="empty">Group chat deleted.</div>';
+        await loadGroupsAndInvites();
+      }catch(err){await wtAlert({title:"Couldn't delete group",message:err.message});}
+    };
+  }
   $("btnInvMore").onclick=()=>openInviteMore(g);
   if(callGroupId!==g.id){ try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{} }
   renderCallUI();
@@ -220,6 +265,40 @@ async function openGroupChat(g){
       }
     }catch{}
   },3000);
+}
+
+function openGroupMembers(g){
+  const isOwner=g.created_by===me;
+  $("gmTitle").textContent=`Members · ${g.name}`;
+  $("gmHint").textContent="";
+  const list=$("gmList"); list.innerHTML="";
+  (g.members||[]).forEach(m=>{
+    const row=document.createElement("div"); row.className="pick-row"; row.style.cursor="default";
+    const isGrpOwner=m.id===g.created_by;
+    const kickBtn=(isOwner && m.id!==me)
+      ?`<button type="button" class="head-chip bad" style="margin-left:auto">Kick</button>`
+      :"";
+    row.innerHTML=`<div class="av" style="width:36px;height:36px" ${avStyle(m)}>${m.avatar_url?"":esc((m.display_name||m.username||"?")[0].toUpperCase())}</div>
+      <div style="min-width:0;flex:1"><b>${esc(m.display_name||m.username)}</b>${isGrpOwner?' <span class="seg-badge" style="margin-left:4px">Owner</span>':""}<div style="font-size:12px;color:var(--muted)">@${esc(m.username)}</div></div>${kickBtn}`;
+    const btn=row.querySelector("button");
+    if(btn){
+      btn.onclick=async()=>{
+        const ok=await wtConfirm({title:`Kick @${m.username}?`,message:`Remove ${m.display_name||"@"+m.username} from "${g.name}"?`,icon:"person_remove",confirmText:"Kick",danger:true});
+        if(!ok)return;
+        btn.disabled=true;
+        try{
+          await api(`/api/groups/${encodeURIComponent(g.id)}/kick`,{method:"POST",body:JSON.stringify({userId:m.id})});
+          g.members=(g.members||[]).filter(x=>x.id!==m.id);
+          g.member_count=Math.max(1,(g.member_count||1)-1);
+          if($("grpSubCount")) $("grpSubCount").textContent=`${g.member_count} member${g.member_count===1?"":"s"}`;
+          row.remove();
+          await loadGroupsAndInvites();
+        }catch(err){$("gmHint").textContent=err.message;btn.disabled=false;}
+      };
+    }
+    list.appendChild(row);
+  });
+  $("grpMembersDlg").showModal();
 }
 
 function renderSidebarList(){
@@ -272,7 +351,7 @@ function renderSidebarList(){
         const e=document.createElement("div");
         e.className="fr"+(curType==="group"&&cur?.id===g.id?" on":"");
         const callTag=g.call_count?` · ${g.call_count} in call`:"";
-        e.innerHTML=`<div class="av grp"><span class="ms">groups</span></div><div class="fr-meta"><div class="fr-name">${esc(g.name)}</div><div class="fr-sub">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}${callTag}</div></div>${g.unread_count?`<span class="u-badge">${g.unread_count}</span>`:""}`;
+        e.innerHTML=`${groupAvatarHtml(g)}<div class="fr-meta"><div class="fr-name">${esc(g.name)}</div><div class="fr-sub">${g.member_count||1} member${(g.member_count||1)===1?"":"s"}${callTag}</div></div>${g.unread_count?`<span class="u-badge">${g.unread_count}</span>`:""}`;
         e.onclick=()=>openGroupChat(g);
         fl.appendChild(e);
       });
@@ -355,6 +434,7 @@ async function loadGroupsAndInvites(){
 (async()=>{
   const {data}=await sb.auth.getSession(); if(!data.session){location.href="/login";return}
   me=data.session.user.id; token=data.session.access_token;
+  if(typeof ensureWs==="function") ensureWs().catch(()=>{});
   const [a,b]=await Promise.all([sb.from("follows").select("following_id").eq("follower_id",me),sb.from("follows").select("follower_id").eq("following_id",me)]);
   const mine=new Set((a.data||[]).map(r=>r.following_id)), ids=(b.data||[]).map(r=>r.follower_id).filter(id=>mine.has(id));
   if(ids.length){const {data:ps}=await sb.from("profiles").select("id,username,display_name,avatar_url").in("id",ids);friends=ps||[];}

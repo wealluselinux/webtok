@@ -150,7 +150,7 @@
   </section>
 
   <footer class="legal">
-    <span>Web Tok · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></span>
+    <span>Web Tok · <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/support">Support</a></span>
     <span class="egg-hint">Tip: tap the Web Tok logo 10 times for a surprise</span>
   </footer>
 </section>
@@ -162,20 +162,24 @@
 <script src="/js/theme.js"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/landing.js"></script>
+<script src="/js/secret-settings.js"></script>
+<script src="/js/capri-pet.js"></script>
+<script src="/js/gravity-mode.js"></script>
+<script src="/js/spin-shapes.js"></script>
 <script>
-(function(){
+(() => {
   const logo = document.getElementById("wtHomeLogo");
   if (!logo) return;
-  let taps = 0, tmr = 0;
+  let taps = 0, timer = null;
   logo.addEventListener("click", () => {
-    clearTimeout(tmr);
     taps++;
-    logo.style.transform = "scale(0.95)";
+    logo.style.transform = "scale(0.94)";
     setTimeout(() => logo.style.transform = "", 90);
-    tmr = setTimeout(() => { taps = 0; }, 3500);
+    clearTimeout(timer);
+    timer = setTimeout(() => { taps = 0; }, 3500);
     if (taps >= 10) {
       taps = 0;
-      if (window.openSecretSettings) window.openSecretSettings();
+      if (typeof openSecretSettings === "function") openSecretSettings();
     }
   });
 })();

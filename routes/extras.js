@@ -1,14 +1,15 @@
 /* Extra server features, mounted from server.js:
    1) Unread messages
    2) Roles, bans, per-user restrictions, forced sign-out, role_since tenure
-   3) Admin panel API (/api/admin/*) + /api/admin/announce via @notifications account
+   3) Admin panel API (/api/admin/*) + /api/admin/announce + owner-only account deletion
    4) Sign-up accepted_terms
-   5) Group chats with friend invites & acceptance
+   5) Group chats with friend invites, acceptance, owner kick & delete
    6) Custom user stickers & comment replies
-   7) Group Voice Calls, Group Watch, Shared Whiteboard
+   7) Group & DM Voice Calls (WebRTC signaling), Group Watch, Shared Whiteboard
    8) Security hardening: new-device login alerts
    9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds)
-   10) Account credentials update & Web Tok AI / Content Safety Checker (routes/ai.js) */
+   10) Account credentials update & Web Tok AI / Content Safety Checker (routes/ai.js)
+   11) Support Ticket System (/support, /api/support/*, /api/admin/support/*) */
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
@@ -52,12 +53,16 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS login_alerts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL, user_agent TEXT NOT NULL, ip TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, media_url TEXT NOT NULL, media_type TEXT NOT NULL, caption TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS sounds (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, storage_path TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_alerts_user ON login_alerts(user_id, seen, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_stories_exp ON stories(expires_at, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_sounds_created ON sounds(created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_tickets_user ON support_tickets(user_id, updated_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_ticket_replies ON support_replies(ticket_id, id)",
     ], "write");
 
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
@@ -268,6 +273,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.get("/terms", page("terms.html"));
   app.get("/privacy", page("privacy.html"));
   app.get("/sounds", page("sounds.html"));
+  app.get("/support", page("support.html"));
 
   /* ---------- 24-hour Stories ---------- */
   app.get("/api/stories", wrap(async () => {
@@ -373,7 +379,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: true, error: null };
   }));
 
-  /* ---------- unread messages ---------- */
+  /* ---------- unread messages & clear chat ---------- */
   app.get("/api/messages/unread", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const rows = await run(`SELECT m.id, m.sender_id, m.body, m.created_at, p.username, p.display_name
@@ -390,6 +396,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     await db.execute({ sql: "UPDATE messages SET read_at = ? WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL", args: [nowIso(), uid, from] });
     return { data: true, error: null };
   }));
+  app.delete("/api/messages/with/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const other = String(req.params.id || "");
+    if (!other) throw new HttpError(400, "Missing user");
+    await db.execute({ sql: "DELETE FROM messages WHERE (sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)", args: [uid, other, other, uid] });
+    return { data: true, error: null };
+  }));
 
   /* ---------- group chats & friend invites ---------- */
   async function areFriends(a, b) {
@@ -402,9 +415,21 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     if (!m || m.status !== "accepted") throw new HttpError(403, "You are not a member of this group");
     return m;
   }
+  async function requireCallRoomAccess(roomId, uid) {
+    if (roomId.startsWith("dm:")) {
+      const parts = roomId.slice(3).split(":");
+      if (parts.length !== 2 || !parts.includes(uid)) throw new HttpError(403, "Not part of this DM call");
+      const other = parts[0] === uid ? parts[1] : parts[0];
+      if (!(await areFriends(uid, other))) throw new HttpError(403, "You can only call mutual friends");
+      return true;
+    }
+    await requireMember(roomId, uid);
+    return true;
+  }
 
-  /* ---------- Group Call / Watch / Whiteboard rooms (WebSocket) ---------- */
+  /* ---------- Group & DM Call / Watch / Whiteboard rooms (WebSocket) ---------- */
   const rooms = new Map();
+  const userSockets = new Map();
   function getRoom(gid) {
     let r = rooms.get(gid);
     if (!r) {
@@ -428,6 +453,15 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const participants = [...r.peers.values()].map(p => ({ uid: p.uid, username: p.username, display_name: p.display_name, avatar_url: p.avatar_url, muted: !!p.muted }));
     return { participants, activity: r.activity, watch: r.watch };
   }
+  function removeUserFromRoom(gid, uid, extraMsg = null) {
+    const r = rooms.get(gid);
+    if (!r) return;
+    const p = r.peers.get(uid);
+    if (p && extraMsg) sendWs(p.ws, extraMsg);
+    r.peers.delete(uid);
+    broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
+    if (!r.peers.size) rooms.delete(gid);
+  }
 
   if (server) {
     const wss = new WebSocketServer({ server, path: "/ws" });
@@ -442,6 +476,9 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         uid = tok.sub;
       } catch { ws.close(); return; }
 
+      if (!userSockets.has(uid)) userSockets.set(uid, new Set());
+      userSockets.get(uid).add(ws);
+
       const prof = (await run("SELECT id, username, display_name, avatar_url FROM profiles WHERE id = ?", [uid]))[0] || { id: uid, username: "user", display_name: "User", avatar_url: null };
 
       ws.on("message", async raw => {
@@ -449,26 +486,32 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         const type = msg.type;
         if (type === "join-call") {
           const gid = String(msg.groupId || "");
-          try { await requireMember(gid, uid); } catch { sendWs(ws, { type: "error", message: "Not a member" }); return; }
+          try { await requireCallRoomAccess(gid, uid); } catch (e) { sendWs(ws, { type: "error", message: e.message || "Access denied" }); return; }
           if (currentGroup && currentGroup !== gid) {
-            const oldR = rooms.get(currentGroup);
-            if (oldR) { oldR.peers.delete(uid); broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) }); if (!oldR.peers.size) rooms.delete(currentGroup); }
+            removeUserFromRoom(currentGroup, uid);
           }
           currentGroup = gid;
           const r = getRoom(gid);
+          if (r.peers.has(uid)) r.peers.delete(uid);
           const existing = [...r.peers.keys()].filter(k => k !== uid);
           r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
           sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
           broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
+          if (gid.startsWith("dm:") && existing.length === 0) {
+            const parts = gid.slice(3).split(":");
+            const other = parts[0] === uid ? parts[1] : parts[0];
+            const socks = userSockets.get(other);
+            if (socks) {
+              for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url } });
+            }
+          }
           return;
         }
         if (!currentGroup) return;
         const r = rooms.get(currentGroup); if (!r || !r.peers.has(uid)) return;
 
         if (type === "leave-call") {
-          r.peers.delete(uid);
-          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
-          if (!r.peers.size) rooms.delete(currentGroup);
+          removeUserFromRoom(currentGroup, uid);
           currentGroup = null;
         } else if (type === "mute") {
           const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
@@ -498,12 +541,15 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       });
 
       ws.on("close", () => {
+        const socks = userSockets.get(uid);
+        if (socks) {
+          socks.delete(ws);
+          if (!socks.size) userSockets.delete(uid);
+        }
         if (currentGroup) {
           const r = rooms.get(currentGroup);
-          if (r) {
-            r.peers.delete(uid);
-            broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
-            if (!r.peers.size) rooms.delete(currentGroup);
+          if (r && r.peers.get(uid)?.ws === ws) {
+            removeUserFromRoom(currentGroup, uid);
           }
         }
       });
@@ -513,7 +559,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.get("/api/groups/:id/call", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const gid = String(req.params.id || "");
-    await requireMember(gid, uid);
+    await requireCallRoomAccess(gid, uid);
     return { data: roomSnapshot(gid), error: null };
   }));
 
@@ -611,8 +657,39 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.post("/api/groups/:id/leave", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const gid = String(req.params.id || "");
+    removeUserFromRoom(gid, uid);
     await db.execute({ sql: "DELETE FROM group_members WHERE group_id = ? AND user_id = ?", args: [gid, uid] });
     return { data: true, error: null };
+  }));
+
+  app.post("/api/groups/:id/kick", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    const targetId = String(req.body?.userId || "").trim();
+    if (!targetId) throw new HttpError(400, "Missing user to kick");
+    const grp = (await run("SELECT id, created_by FROM group_chats WHERE id = ?", [gid]))[0];
+    if (!grp) throw new HttpError(404, "Group not found");
+    if (grp.created_by !== uid) throw new HttpError(403, "Only the group owner can kick members.");
+    if (targetId === uid) throw new HttpError(400, "You can't kick yourself. Use Leave or Delete instead.");
+    await db.execute({ sql: "DELETE FROM group_members WHERE group_id = ? AND user_id = ?", args: [gid, targetId] });
+    removeUserFromRoom(gid, targetId, { type: "kicked", groupId: gid });
+    return { data: { kicked: targetId }, error: null };
+  }));
+
+  app.delete("/api/groups/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    const grp = (await run("SELECT id, created_by FROM group_chats WHERE id = ?", [gid]))[0];
+    if (!grp) throw new HttpError(404, "Group not found");
+    if (grp.created_by !== uid) throw new HttpError(403, "Only the group owner can delete this group.");
+    broadcastRoom(gid, { type: "group-deleted", groupId: gid });
+    rooms.delete(gid);
+    await db.batch([
+      { sql: "DELETE FROM group_messages WHERE group_id = ?", args: [gid] },
+      { sql: "DELETE FROM group_members WHERE group_id = ?", args: [gid] },
+      { sql: "DELETE FROM group_chats WHERE id = ?", args: [gid] }
+    ], "write");
+    return { data: { deleted: gid }, error: null };
   }));
 
   app.get("/api/groups/:id/messages", wrap(async req => {
@@ -653,6 +730,52 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: row, error: null };
   }));
 
+  /* ---------- Support Tickets (user) ---------- */
+  app.get("/api/support/tickets", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const tickets = await run(
+      "SELECT id, user_id, subject, message, status, created_at, updated_at FROM support_tickets WHERE user_id = ? ORDER BY updated_at DESC LIMIT 50",
+      [uid]
+    );
+    for (const t of tickets) {
+      t.replies = await run(`
+        SELECT r.id, r.ticket_id, r.user_id, r.is_admin, r.body, r.created_at, p.username, p.display_name
+        FROM support_replies r LEFT JOIN profiles p ON p.id = r.user_id
+        WHERE r.ticket_id = ? ORDER BY r.id ASC LIMIT 100`, [t.id]);
+    }
+    return { data: tickets, error: null };
+  }));
+
+  app.post("/api/support/tickets", limit(10, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const subject = String(req.body?.subject || "").trim().slice(0, 120);
+    const message = String(req.body?.message || "").trim().slice(0, 2000);
+    if (subject.length < 3) throw new HttpError(400, "Subject must be at least 3 characters.");
+    if (message.length < 5) throw new HttpError(400, "Message must be at least 5 characters.");
+    const id = crypto.randomUUID(), ts = nowIso();
+    await db.execute({
+      sql: "INSERT INTO support_tickets (id, user_id, subject, message, status, created_at, updated_at) VALUES (?,?,?,?, 'open', ?,?)",
+      args: [id, uid, subject, message, ts, ts]
+    });
+    return { data: { id, user_id: uid, subject, message, status: "open", created_at: ts, updated_at: ts, replies: [] }, error: null };
+  }));
+
+  app.post("/api/support/tickets/:id/reply", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const tid = String(req.params.id || "");
+    const t = (await run("SELECT id, user_id, status FROM support_tickets WHERE id = ?", [tid]))[0];
+    if (!t) throw new HttpError(404, "Ticket not found");
+    if (t.user_id !== uid) throw new HttpError(403, "You can only reply to your own tickets.");
+    const body = String(req.body?.body || "").trim().slice(0, 2000);
+    if (!body) throw new HttpError(400, "Write a reply first.");
+    const ts = nowIso();
+    await db.batch([
+      { sql: "INSERT INTO support_replies (ticket_id, user_id, is_admin, body, created_at) VALUES (?,?,0,?,?)", args: [tid, uid, body, ts] },
+      { sql: "UPDATE support_tickets SET status = 'open', updated_at = ? WHERE id = ?", args: [ts, tid] }
+    ], "write");
+    return { data: true, error: null };
+  }));
+
   /* ---------- admin API ---------- */
   const needAdmin = req => {
     if (!req.wt) throw new HttpError(401, "Sign in required");
@@ -674,23 +797,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     for (let i = c.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [c[i], c[j]] = [c[j], c[i]]; }
     return c.join("");
   };
-
-  app.post("/api/admin/announce", wrap(async req => {
-    const me = needAdmin(req);
-    const message = String(req.body?.message || "").trim();
-    if (!message || message.length > 1000) throw new HttpError(400, "Announcement must be 1 to 1000 characters.");
-    const recipients = await run("SELECT id FROM users WHERE id != ? AND banned = 0 AND role != 'system'", [NOTIF_ID]);
-    const ts = nowIso();
-    const stmts = recipients.map(r => ({
-      sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
-      args: [NOTIF_ID, r.id, message, ts]
-    }));
-    for (let i = 0; i < stmts.length; i += 50) {
-      await db.batch(stmts.slice(i, i + 50), "write");
-    }
-    await log(me, "announce", `Sent to ${recipients.length} user(s): ${message.slice(0, 80)}`);
-    return { data: { sentCount: recipients.length }, error: null };
-  }));
 
   app.get("/api/admin/me", wrap(async req => {
     if (!req.wt) throw new HttpError(401, "Sign in required");
@@ -733,6 +839,102 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     forget(t.id); await log(me, banned ? "ban" : "unban", `${label(t)}${banned && reason ? ": " + reason : ""}`);
     return { data: true, error: null };
   }));
+
+  /* ---------- Owner-only account deletion ---------- */
+  app.post("/api/admin/delete-user", wrap(async req => {
+    const me = needAdmin(req);
+    if (me.role !== "owner") throw new HttpError(403, "Only the owner can delete user accounts.");
+    const t = await targetOf(req.body?.userId);
+    mayAct(me, t);
+    const uid = t.id;
+    const vids = await run("SELECT id, storage_path FROM videos WHERE user_id = ?", [uid]);
+    const snds = await run("SELECT storage_path FROM sounds WHERE user_id = ?", [uid]);
+    const r2Keys = [
+      ...vids.filter(v => v.storage_path).map(v => `videos/${v.storage_path}`),
+      ...snds.filter(s => s.storage_path).map(s => `sounds/${s.storage_path}`)
+    ];
+    for (const v of vids) {
+      await db.batch([
+        { sql: "DELETE FROM likes WHERE video_id = ?", args: [v.id] },
+        { sql: "DELETE FROM comments WHERE video_id = ?", args: [v.id] },
+        { sql: "DELETE FROM video_views WHERE video_id = ?", args: [v.id] }
+      ], "write");
+    }
+    const userTickets = await run("SELECT id FROM support_tickets WHERE user_id = ?", [uid]);
+    for (const tk of userTickets) {
+      await db.execute({ sql: "DELETE FROM support_replies WHERE ticket_id = ?", args: [tk.id] });
+    }
+    await db.batch([
+      { sql: "DELETE FROM likes WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM comments WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM video_views WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM videos WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM follows WHERE follower_id = ? OR following_id = ?", args: [uid, uid] },
+      { sql: "DELETE FROM messages WHERE sender_id = ? OR recipient_id = ?", args: [uid, uid] },
+      { sql: "DELETE FROM group_members WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM group_messages WHERE sender_id = ?", args: [uid] },
+      { sql: "DELETE FROM user_stickers WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM known_devices WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM login_alerts WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM stories WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM sounds WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM support_replies WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM support_tickets WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM profiles WHERE id = ?", args: [uid] },
+      { sql: "DELETE FROM users WHERE id = ?", args: [uid] }
+    ], "write");
+    if (r2Keys.length && removeFromR2) await removeFromR2(r2Keys).catch(() => {});
+    forget(uid);
+    await log(me, "delete_user", label(t));
+    return { data: { username: t.username, email: t.email }, error: null };
+  }));
+
+  /* ---------- Admin Support Tickets ---------- */
+  app.get("/api/admin/support", wrap(async req => {
+    needAdmin(req);
+    const tickets = await run(`
+      SELECT t.id, t.user_id, t.subject, t.message, t.status, t.created_at, t.updated_at,
+        p.username, p.display_name, u.email
+      FROM support_tickets t
+      LEFT JOIN profiles p ON p.id = t.user_id
+      LEFT JOIN users u ON u.id = t.user_id
+      ORDER BY CASE WHEN t.status = 'open' THEN 0 ELSE 1 END, t.updated_at DESC LIMIT 100`);
+    for (const t of tickets) {
+      t.replies = await run(`
+        SELECT r.id, r.ticket_id, r.user_id, r.is_admin, r.body, r.created_at, p.username, p.display_name
+        FROM support_replies r LEFT JOIN profiles p ON p.id = r.user_id
+        WHERE r.ticket_id = ? ORDER BY r.id ASC LIMIT 100`, [t.id]);
+    }
+    return { data: tickets, error: null };
+  }));
+
+  app.post("/api/admin/support/:id/reply", wrap(async req => {
+    const me = needAdmin(req);
+    const tid = String(req.params.id || "");
+    const t = (await run("SELECT id, subject FROM support_tickets WHERE id = ?", [tid]))[0];
+    if (!t) throw new HttpError(404, "Ticket not found");
+    const body = String(req.body?.body || "").trim().slice(0, 2000);
+    if (!body) throw new HttpError(400, "Write a reply first.");
+    const status = ["open", "resolved", "closed"].includes(req.body?.status) ? req.body.status : "resolved";
+    const ts = nowIso();
+    await db.batch([
+      { sql: "INSERT INTO support_replies (ticket_id, user_id, is_admin, body, created_at) VALUES (?,?,1,?,?)", args: [tid, me.uid, body, ts] },
+      { sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, ts, tid] }
+    ], "write");
+    await log(me, "support_reply", `${t.subject.slice(0, 60)} (${status})`);
+    return { data: { status }, error: null };
+  }));
+
+  app.post("/api/admin/support/:id/status", wrap(async req => {
+    const me = needAdmin(req);
+    const tid = String(req.params.id || "");
+    const status = ["open", "resolved", "closed"].includes(req.body?.status) ? req.body.status : null;
+    if (!status) throw new HttpError(400, "Invalid status");
+    await db.execute({ sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, nowIso(), tid] });
+    await log(me, "support_status", `${tid}: ${status}`);
+    return { data: { status }, error: null };
+  }));
+
   app.get("/api/admin/content", wrap(async req => {
     needAdmin(req);
     const videos = await run(`SELECT v.id, v.title, v.video_url, v.created_at, p.username FROM videos v LEFT JOIN profiles p ON p.id = v.user_id ORDER BY v.created_at DESC LIMIT 40`);

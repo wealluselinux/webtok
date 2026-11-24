@@ -6,9 +6,7 @@
 :root{
   --bg:#f6f1fc;--surface:#ede5f7;--card:#e2d4f4;--primary:#6750a4;--on-primary:#fff;
   --text:#1d192b;--muted:#625b71;--accent:#ffd8e4;--on-accent:#31111d;--bad:#b3261e;
-  --spring:cubic-bezier(.2,.9,.3,1.1);
-  --m3-cookie-7:polygon(94.8% 50.0%,97.1% 53.5%,98.4% 57.3%,98.4% 61.0%,96.8% 64.4%,93.9% 67.2%,90.4% 69.4%,86.7% 71.2%,83.6% 72.9%,81.3% 74.9%,79.8% 77.6%,78.8% 81.1%,77.9% 85.0%,76.6% 89.0%,74.5% 92.4%,71.5% 94.7%,67.9% 95.6%,63.9% 95.1%,60.0% 93.7%,56.3% 91.9%,53.0% 90.5%,50.0% 90.0%,47.0% 90.5%,43.7% 91.9%,40.0% 93.7%,36.1% 95.1%,32.1% 95.6%,28.5% 94.7%,25.5% 92.4%,23.4% 89.0%,22.1% 85.0%,21.2% 81.1%,20.2% 77.6%,18.7% 74.9%,16.4% 72.9%,13.3% 71.2%,9.6% 69.4%,6.1% 67.2%,3.2% 64.4%,1.6% 61.0%,1.6% 57.3%,2.9% 53.5%,5.2% 50.0%,7.7% 46.8%,9.8% 43.9%,11.0% 41.1%,11.2% 38.0%,10.5% 34.5%,9.6% 30.6%,9.1% 26.4%,9.5% 22.4%,11.2% 19.1%,14.1% 16.7%,17.9% 15.4%,22.1% 15.0%,26.1% 15.0%,29.7% 14.8%,32.6% 14.0%,35.2% 12.2%,37.5% 9.5%,40.0% 6.3%,43.0% 3.3%,46.3% 1.2%,50.0% 0.4%,53.7% 1.2%,57.0% 3.3%,60.0% 6.3%,62.5% 9.5%,64.8% 12.2%,67.4% 14.0%,70.3% 14.8%,73.9% 15.0%,77.9% 15.0%,82.1% 15.4%,85.9% 16.7%,88.8% 19.1%,90.5% 22.4%,90.9% 26.4%,90.4% 30.6%,89.5% 34.5%,88.8% 38.0%,89.0% 41.1%,90.2% 43.9%,92.3% 46.8%);
-  --m3-cookie-4:polygon(99.5% 50.0%,98.8% 54.8%,96.8% 59.3%,93.8% 63.3%,90.2% 66.6%,86.3% 69.4%,82.6% 71.8%,79.3% 74.1%,76.5% 76.5%,74.1% 79.3%,71.8% 82.6%,69.4% 86.3%,66.6% 90.2%,63.3% 93.8%,59.3% 96.8%,54.8% 98.8%,50.0% 99.5%,45.2% 98.8%,40.7% 96.8%,36.7% 93.8%,33.4% 90.2%,30.6% 86.3%,28.2% 82.6%,25.9% 79.3%,23.5% 76.5%,20.7% 74.1%,17.4% 71.8%,13.7% 69.4%,9.8% 66.6%,6.2% 63.3%,3.2% 59.3%,1.2% 54.8%,0.5% 50.0%,1.2% 45.2%,3.2% 40.7%,6.2% 36.7%,9.8% 33.4%,13.7% 30.6%,17.4% 28.2%,20.7% 25.9%,23.5% 23.5%,25.9% 20.7%,28.2% 17.4%,30.6% 13.7%,33.4% 9.8%,36.7% 6.2%,40.7% 3.2%,45.2% 1.2%,50.0% 0.5%,54.8% 1.2%,59.3% 3.2%,63.3% 6.2%,66.6% 9.8%,69.4% 13.7%,71.8% 17.4%,74.1% 20.7%,76.5% 23.5%,79.3% 25.9%,82.6% 28.2%,86.3% 30.6%,90.2% 33.4%,93.8% 36.7%,96.8% 40.7%,98.8% 45.2%)
+  --spring:cubic-bezier(.2,.9,.3,1.1)
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#16121e;--surface:#221c2e;--card:#312842;--primary:#d0bcff;--on-primary:#381e72;
@@ -40,10 +38,20 @@ body.has-wp #wp-scrim{opacity:.74}
 .fr-meta{min-width:0;flex:1}
 .fr-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fr-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.av{width:46px;height:46px;clip-path:var(--m3-cookie-7);background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex:none;transition:transform .25s var(--spring)}
+.av{width:46px;height:46px;clip-path:var(--m3-cookie-7);background:var(--card) center/cover;display:grid;place-items:center;font-weight:700;color:var(--primary);flex:none;transition:transform .25s var(--spring),box-shadow .15s}
 .fr:hover .av{transform:scale(1.06)}
 .av.grp{background:var(--accent);color:var(--on-accent);clip-path:var(--m3-cookie-4)}
 .av.ai{background:var(--primary);color:var(--on-primary);clip-path:var(--m3-cookie-4)}
+
+/* 3-Avatar Group Collage */
+.av-collage{width:46px;height:46px;border-radius:16px;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;background:var(--surface);flex:none;box-shadow:0 2px 8px #0001}
+.av-collage.c2{grid-template-rows:1fr}
+.av-collage.c1{grid-template-columns:1fr;grid-template-rows:1fr}
+.av-tile{background:var(--card) center/cover;display:grid;place-items:center;font-size:12px;font-weight:800;color:var(--primary)}
+.av-collage.c3 .av-tile:first-child{grid-row:1/3;font-size:15px}
+.av-tile.t1{background-color:var(--accent);color:var(--on-accent)}
+.av-tile.t2{background-color:var(--primary);color:var(--on-primary)}
+
 .dot{width:10px;height:10px;border-radius:50%;background:var(--primary);margin-left:auto;display:none;flex:none}
 .fr.unread .dot{display:block}
 .u-badge{margin-left:auto;background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;flex:none}
@@ -63,8 +71,9 @@ body.has-wp #wp-scrim{opacity:.74}
 .head-chip.bad{background:var(--bad);color:#fff}
 #callBar{background:var(--card);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--surface)}
 .call-peers{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:140px}
-.peer-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:4px 10px 4px 5px;border-radius:999px;font-size:12px;font-weight:700}
+.peer-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface);padding:4px 10px 4px 5px;border-radius:999px;font-size:12px;font-weight:700;border:2px solid transparent;transition:border-color .15s,box-shadow .15s}
 .peer-pill .av{width:26px;height:26px;font-size:11px}
+.peer-pill.speaking{border-color:#22c55e;box-shadow:0 0 10px #22c55e55}
 .call-ctrls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 
 /* Full-screen Call + Web Tok Group Watch + Chat Sidebar */
@@ -74,8 +83,10 @@ body.has-wp #wp-scrim{opacity:.74}
 .cs-stage{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;background:var(--bg)}
 .cs-chat{width:340px;flex:none;border-left:1px solid var(--surface);display:flex;flex-direction:column;background:var(--bg);min-height:0}
 .cs-grid{flex:1;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,200px));gap:16px;place-content:center;padding:24px}
-.cs-tile{background:var(--card);border-radius:28px;padding:22px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 6px 20px #0002}
-.cs-tile .av{width:76px;height:76px;font-size:28px}
+.cs-tile{background:var(--card);border-radius:28px;padding:22px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;box-shadow:0 6px 20px #0002;border:3px solid transparent;transition:border-color .15s,box-shadow .15s}
+.cs-tile .av{width:76px;height:76px;font-size:28px;clip-path:none;border-radius:50%}
+.cs-tile.speaking{border-color:#22c55e;box-shadow:0 0 22px #22c55e66}
+.cs-tile.speaking .av{box-shadow:0 0 0 4px #22c55e,0 0 16px #22c55e99}
 .gw-feed{flex:1;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;position:relative}
 .gw-feed::-webkit-scrollbar{display:none}
 .gw-slide{height:100%;scroll-snap-align:start;scroll-snap-stop:always;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:14px;position:relative}
@@ -91,6 +102,13 @@ body.has-wp #wp-scrim{opacity:.74}
 .wb-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .wb-swatch{width:28px;height:28px;border-radius:50%;border:2px solid transparent;cursor:pointer}
 .wb-swatch.on{border-color:var(--text);transform:scale(1.15)}
+
+/* Mic Test Meter */
+.mic-meter{height:14px;width:100%;background:var(--surface);border-radius:999px;overflow:hidden;margin:10px 0}
+.mic-fill{height:100%;width:0%;background:#22c55e;border-radius:999px;transition:width .08s linear}
+.mic-status{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--muted)}
+.mic-status.ok{color:#16a34a}
+.mic-status.bad{color:var(--bad)}
 
 #msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:8px}
 .m-wrap{display:flex;flex-direction:column;max-width:78%;align-self:flex-start;gap:3px}
@@ -127,7 +145,7 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
 .dlg-head h3{font-size:20px;font-weight:700}
 .dlg-in{width:100%;padding:14px 16px;border-radius:20px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;outline:0;margin-bottom:12px}
 .dlg-in:focus{border-color:var(--primary)}
-.pick-list{max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.pick-list{max-height:260px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
 .pick-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:18px;background:var(--surface);cursor:pointer}
 .pick-row input{accent-color:var(--primary);width:18px;height:18px}
 .dlg-foot{display:flex;gap:8px;justify-content:flex-end}
@@ -185,6 +203,29 @@ dialog::backdrop{background:#0006;backdrop-filter:blur(4px)}
   <div class="dlg-foot">
     <button class="pill-btn t" style="flex:0" onclick="document.getElementById('invMoreDlg').close()">Cancel</button>
     <button class="pill-btn p" style="flex:0;white-space:nowrap" id="imSubmit">Send invites</button>
+  </div>
+</dialog>
+
+<dialog id="grpMembersDlg">
+  <div class="dlg-head"><h3 id="gmTitle">Members</h3><button class="head-chip" aria-label="Close" onclick="document.getElementById('grpMembersDlg').close()"><span class="ms" style="font-size:18px">close</span></button></div>
+  <div class="pick-list" id="gmList"></div>
+  <div id="gmHint" style="font-size:12px;color:var(--bad);min-height:16px;margin-bottom:8px"></div>
+  <div class="dlg-foot">
+    <button class="pill-btn p" style="flex:0" onclick="document.getElementById('grpMembersDlg').close()">Done</button>
+  </div>
+</dialog>
+
+<dialog id="micTestDlg">
+  <div class="dlg-head"><h3>Microphone Test</h3><button class="head-chip" aria-label="Close" id="mtCloseBtn"><span class="ms" style="font-size:18px">close</span></button></div>
+  <div class="mic-status" id="mtStatus">Click Start Test to check your microphone.</div>
+  <div class="mic-meter"><div class="mic-fill" id="mtFill"></div></div>
+  <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer">
+    <input type="checkbox" id="mtLoop" style="accent-color:var(--primary);width:17px;height:17px"> Hear myself (may echo on speakers)
+  </label>
+  <audio id="mtAudio" playsinline class="hidden"></audio>
+  <div class="dlg-foot">
+    <button class="pill-btn t" style="flex:0" id="mtDoneBtn">Close</button>
+    <button class="pill-btn p" style="flex:0;white-space:nowrap" id="mtStartBtn">Start test</button>
   </div>
 </dialog>
 

@@ -1,38 +1,129 @@
-/* Messages: Full-screen Group Voice Calls, Web Tok-style Group Watch scroll feed, and Shared Whiteboard */
-let ws=null, callGroupId=null, callFull=true, localStream=null, isMuted=false, peers={};
+/* Messages: Full-screen Group & DM Voice Calls, Revised WebRTC, Green Speaking Ring, Mic Test, Group Watch & Whiteboard */
+let ws=null, callGroupId=null, callFull=true, localStream=null, isMuted=false, peers={}, pendingIce={};
 let callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};
 let wbColor="#6750a4", wbSize=4, wbDrawing=false, wbLast=null, ignoreSync=false, videoFeedCache=null;
 
+/* Speaking Ring Audio Analysers */
+let audioCtx=null, speakTimer=null, analysers={}, speakingUntil={};
+function getAudioCtx(){
+  if(!audioCtx){
+    const Ctx=window.AudioContext||window.webkitAudioContext;
+    if(Ctx) audioCtx=new Ctx();
+  }
+  if(audioCtx && audioCtx.state==="suspended") audioCtx.resume().catch(()=>{});
+  return audioCtx;
+}
+function attachAnalyser(uid, stream){
+  detachAnalyser(uid);
+  try{
+    const ctx=getAudioCtx();
+    if(!ctx || !stream || !stream.getAudioTracks().length) return;
+    const src=ctx.createMediaStreamSource(stream);
+    const an=ctx.createAnalyser();
+    an.fftSize=256;
+    src.connect(an);
+    analysers[uid]={src,an,data:new Uint8Array(an.frequencyBinCount)};
+    ensureSpeakLoop();
+  }catch{}
+}
+function detachAnalyser(uid){
+  if(analysers[uid]){
+    try{analysers[uid].src.disconnect();}catch{}
+    delete analysers[uid];
+  }
+  delete speakingUntil[uid];
+}
+function ensureSpeakLoop(){
+  if(speakTimer) return;
+  speakTimer=setInterval(()=>{
+    const now=Date.now();
+    for(const [uid,obj] of Object.entries(analysers)){
+      const p=callState.participants.find(x=>x.uid===uid);
+      const muted=uid===me ? isMuted : !!p?.muted;
+      let active=false;
+      if(!muted){
+        obj.an.getByteFrequencyData(obj.data);
+        let sum=0;
+        for(let i=0;i<obj.data.length;i++) sum+=obj.data[i];
+        const avg=sum/obj.data.length;
+        if(avg>10) speakingUntil[uid]=now+280;
+        active=(speakingUntil[uid]||0)>now;
+      }
+      document.querySelectorAll(`[data-uid="${CSS.escape(uid)}"]`).forEach(el=>el.classList.toggle("speaking",active));
+    }
+  },90);
+}
+function stopSpeakLoop(){
+  if(speakTimer){clearInterval(speakTimer);speakTimer=null;}
+  Object.keys(analysers).forEach(detachAnalyser);
+}
+
 function ensureWs(){
-  if(ws && (ws.readyState===0 || ws.readyState===1)) return Promise.resolve(ws);
+  if(ws && ws.readyState===1) return Promise.resolve(ws);
+  if(ws && ws.readyState===0) return new Promise((res,rej)=>{
+    ws.addEventListener("open",()=>res(ws),{once:true});
+    ws.addEventListener("error",()=>rej(new Error("WebSocket failed")),{once:true});
+  });
   return new Promise((resolve,reject)=>{
     const proto=location.protocol==="https:"?"wss:":"ws:";
     ws=new WebSocket(`${proto}//${location.host}/ws?token=${encodeURIComponent(token)}`);
     ws.onopen=()=>resolve(ws);
     ws.onerror=()=>reject(new Error("WebSocket failed"));
     ws.onmessage=e=>{try{handleWs(JSON.parse(e.data))}catch{}};
-    ws.onclose=()=>{if(callGroupId) leaveCall(true);};
+    ws.onclose=()=>{ws=null;if(callGroupId) leaveCall(true);};
   });
 }
 function wsSend(obj){if(ws&&ws.readyState===1)ws.send(JSON.stringify(obj));}
 
 async function createPeer(remoteUid, initiator){
   if(peers[remoteUid]) return peers[remoteUid];
-  const pc=new RTCPeerConnection({iceServers:[{urls:"stun:stun.l.google.com:19302"}]});
+  const pc=new RTCPeerConnection({
+    iceServers:[
+      {urls:"stun:stun.l.google.com:19302"},
+      {urls:"stun:stun1.l.google.com:19302"}
+    ]
+  });
   peers[remoteUid]=pc;
+  pendingIce[remoteUid]=[];
   if(localStream) localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
   pc.onicecandidate=e=>{if(e.candidate)wsSend({type:"rtc-ice",to:remoteUid,candidate:e.candidate});};
   pc.ontrack=e=>{
+    const stream=(e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
     let a=document.getElementById("aud-"+remoteUid);
-    if(!a){a=document.createElement("audio");a.id="aud-"+remoteUid;a.autoplay=true;$("audioBin").appendChild(a);}
-    a.srcObject=e.streams[0];
+    if(!a){
+      a=document.createElement("audio");
+      a.id="aud-"+remoteUid;
+      a.autoplay=true;
+      a.playsInline=true;
+      $("audioBin").appendChild(a);
+    }
+    a.srcObject=stream;
+    a.play().catch(()=>{});
+    attachAnalyser(remoteUid, stream);
   };
   if(initiator){
     const offer=await pc.createOffer();
     await pc.setLocalDescription(offer);
-    wsSend({type:"rtc-offer",to:remoteUid,sdp:offer});
+    wsSend({type:"rtc-offer",to:remoteUid,sdp:pc.localDescription});
   }
   return pc;
+}
+
+async function flushIce(remoteUid){
+  const pc=peers[remoteUid], q=pendingIce[remoteUid];
+  if(!pc || !pc.remoteDescription || !q || !q.length) return;
+  while(q.length){
+    const cand=q.shift();
+    try{await pc.addIceCandidate(new RTCIceCandidate(cand));}catch{}
+  }
+}
+
+function closePeer(remoteUid){
+  if(peers[remoteUid]){try{peers[remoteUid].close();}catch{} delete peers[remoteUid];}
+  delete pendingIce[remoteUid];
+  detachAnalyser(remoteUid);
+  const a=document.getElementById("aud-"+remoteUid);
+  if(a) a.remove();
 }
 
 async function handleWs(m){
@@ -45,17 +136,59 @@ async function handleWs(m){
     callState.participants=m.participants||[];
     if(m.activity) callState.activity=m.activity;
     if(m.watch) callState.watch=m.watch;
+    const activeIds=new Set(callState.participants.map(p=>p.uid));
+    Object.keys(peers).forEach(uid=>{if(!activeIds.has(uid)) closePeer(uid);});
     renderCallUI();
   } else if(m.type==="rtc-offer"){
     const pc=await createPeer(m.from,false);
     await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+    await flushIce(m.from);
     const ans=await pc.createAnswer();
     await pc.setLocalDescription(ans);
-    wsSend({type:"rtc-answer",to:m.from,sdp:ans});
+    wsSend({type:"rtc-answer",to:m.from,sdp:pc.localDescription});
   } else if(m.type==="rtc-answer"){
-    const pc=peers[m.from]; if(pc) await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+    const pc=peers[m.from];
+    if(pc){
+      await pc.setRemoteDescription(new RTCSessionDescription(m.sdp));
+      await flushIce(m.from);
+    }
   } else if(m.type==="rtc-ice"){
-    const pc=peers[m.from]; if(pc&&m.candidate) try{await pc.addIceCandidate(new RTCIceCandidate(m.candidate))}catch{}
+    const pc=peers[m.from];
+    if(m.candidate){
+      if(pc && pc.remoteDescription){
+        try{await pc.addIceCandidate(new RTCIceCandidate(m.candidate));}catch{}
+      } else {
+        (pendingIce[m.from] ||= []).push(m.candidate);
+      }
+    }
+  } else if(m.type==="dm-call-ring"){
+    if(callGroupId===m.groupId) return;
+    const f=m.from||{};
+    const ok=await wtConfirm({
+      title:`Incoming call from ${f.display_name||"@"+(f.username||"friend")}`,
+      message:"Join the voice call?",
+      icon:"call",
+      confirmText:"Answer",
+      cancelText:"Decline"
+    });
+    if(ok){
+      const friendObj=friends.find(x=>x.id===f.id);
+      if(friendObj && (!cur || curType!=="dm" || cur.id!==f.id)) await openChat(friendObj);
+      joinCall(m.groupId);
+    }
+  } else if(m.type==="kicked" || m.type==="group-deleted"){
+    const gid=m.groupId;
+    if(callGroupId===gid) leaveCall(true);
+    await wtAlert({
+      title:m.type==="kicked"?"Removed from group":"Group deleted",
+      message:m.type==="kicked"?"You were removed from this group chat by the owner.":"This group chat was deleted by the owner."
+    });
+    if(curType==="group" && cur?.id===gid){
+      stopGroupPoll(); cur=null; curType=null;
+      document.body.classList.remove("chatting");
+      $("chat").innerHTML='<div class="empty">Select a chat to continue.</div>';
+    }
+    loadGroupsAndInvites();
   } else if(m.type==="activity"){
     callState.activity=m.activity;
     renderCallUI();
@@ -70,34 +203,28 @@ async function handleWs(m){
     drawStroke(m);
   } else if(m.type==="wb-clear"){
     const c=$("wbCanvas"); if(c) c.getContext("2d").clearRect(0,0,c.width,c.height);
+  } else if(m.type==="error" && m.message){
+    await wtAlert({title:"Call error",message:m.message});
   }
-}
-
-function dockChatTo(inFullScreen){
-  const msgs=$("msgs"), stk=$("stkPanel"), form=$("form");
-  const target=inFullScreen ? $("csChat") : $("chat");
-  if(!target || !msgs || !form) return;
-  target.appendChild(msgs);
-  if(stk) target.appendChild(stk);
-  target.appendChild(form);
-  msgs.scrollTop=1e9;
 }
 
 async function joinCall(gid){
   try{
-    localStream=await navigator.mediaDevices.getUserMedia({audio:true});
-  }catch{
-    await wtAlert({title:"Microphone needed",message:"Microphone access is needed for voice calls. Check your browser permissions."});
+    localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+  }catch(err){
+    await wtAlert({title:"Microphone needed",message:"Microphone access is needed for voice calls ("+(err?.message||"permission denied")+")."});
     return;
   }
   await ensureWs();
   callGroupId=gid; isMuted=false; callFull=true;
+  attachAnalyser(me, localStream);
   wsSend({type:"join-call",groupId:gid});
 }
 function leaveCall(silent=false){
   if(!silent) wsSend({type:"leave-call"});
-  Object.values(peers).forEach(pc=>pc.close());
-  peers={};
+  Object.keys(peers).forEach(closePeer);
+  peers={}; pendingIce={};
+  stopSpeakLoop();
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
   $("audioBin").innerHTML="";
   callGroupId=null;
@@ -110,6 +237,16 @@ function toggleMute(){
   isMuted=!isMuted;
   if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=!isMuted);
   wsSend({type:"mute",muted:isMuted});
+}
+
+function dockChatTo(inFullScreen){
+  const msgs=$("msgs"), stk=$("stkPanel"), form=$("form");
+  const target=inFullScreen ? $("csChat") : $("chat");
+  if(!target || !msgs || !form) return;
+  target.appendChild(msgs);
+  if(stk) target.appendChild(stk);
+  target.appendChild(form);
+  msgs.scrollTop=1e9;
 }
 
 function spawnReaction(m){
@@ -203,18 +340,28 @@ function syncWatchFeed(){
   setTimeout(()=>{ignoreSync=false;},350);
 }
 
+function activeRoomId(){
+  if(!cur) return null;
+  if(curType==="group") return cur.id;
+  if(curType==="dm" && !cur.isAi && !cur.isNotif) return dmRoomId(me, cur.id);
+  return null;
+}
+
 function renderCallUI(){
   const callBtn=$("btnCall"), bar=$("callBar"), scr=$("callScreen");
-  if(!bar || !scr || curType!=="group" || !cur) return;
-  const inThisCall = callGroupId===cur.id;
+  const roomId=activeRoomId();
+  if(!bar || !scr || !roomId) return;
+  const inThisCall = callGroupId===roomId;
   if(callBtn){
     callBtn.innerHTML=inThisCall?'<span class="ms" style="font-size:16px">call_end</span>Leave call':`<span class="ms" style="font-size:16px">call</span>${callState.participants.length?`Join (${callState.participants.length})`:"Call"}`;
     callBtn.className="head-chip "+(inThisCall?"bad":"p");
   }
   if(!inThisCall){ bar.classList.add("hidden"); scr.classList.add("hidden"); return; }
 
-  const peersHtml=callState.participants.map(p=>`<div class="peer-pill"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`).join("");
+  const title=curType==="group" ? cur.name : (cur.display_name||"@"+cur.username);
+  const peersHtml=callState.participants.map(p=>`<div class="peer-pill" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`).join("");
   const ctrlsHtml=`<button class="head-chip" id="btnMute"><span class="ms" style="font-size:16px">${isMuted?"mic_off":"mic"}</span>${isMuted?"Unmute":"Mute"}</button>
+    <button class="head-chip" id="btnCallMicTest"><span class="ms" style="font-size:16px">graphic_eq</span>Test Mic</button>
     <button class="head-chip ${callState.activity==="watch"?"p":""}" id="btnWatch"><span class="ms" style="font-size:16px">smart_display</span>Group Watch</button>
     <button class="head-chip ${callState.activity==="whiteboard"?"p":""}" id="btnBoard"><span class="ms" style="font-size:16px">draw</span>Whiteboard</button>`;
 
@@ -227,7 +374,7 @@ function renderCallUI(){
   } else {
     bar.classList.add("hidden");
     scr.classList.remove("hidden");
-    $("csTop").innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:17px">${esc(cur.name)}</b><div class="call-peers">${peersHtml}</div></div>
+    $("csTop").innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:17px">${esc(title)}</b><div class="call-peers">${peersHtml}</div></div>
       <div class="call-ctrls">${ctrlsHtml}<button class="head-chip" id="btnMinCall"><span class="ms" style="font-size:16px">close_fullscreen</span>Minimize</button><button class="head-chip bad" id="btnEndFull"><span class="ms" style="font-size:16px">call_end</span>Leave</button></div>`;
     $("btnMinCall").onclick=()=>{callFull=false;renderCallUI();};
     $("btnEndFull").onclick=()=>leaveCall();
@@ -253,10 +400,73 @@ function renderCallUI(){
       }
     } else {
       stage.dataset.mode="grid";
-      stage.innerHTML=`<div class="cs-grid">${callState.participants.map(p=>`<div class="cs-tile"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><b>${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:18px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:18px;color:var(--primary)">graphic_eq</span>'}</div>`).join("")}</div>`;
+      stage.innerHTML=`<div class="cs-grid">${callState.participants.map(p=>`<div class="cs-tile" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><b>${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:18px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:18px;color:var(--primary)">graphic_eq</span>'}</div>`).join("")}</div>`;
     }
   }
   $("btnMute").onclick=toggleMute;
+  $("btnCallMicTest").onclick=()=>openMicTest();
   $("btnWatch").onclick=()=>wsSend({type:"set-activity",activity:callState.activity==="watch"?"none":"watch"});
   $("btnBoard").onclick=()=>wsSend({type:"set-activity",activity:callState.activity==="whiteboard"?"none":"whiteboard"});
+}
+
+/* ---------- Mic Test Dialog ---------- */
+let mtStream=null, mtTimer=null, mtSrc=null;
+function stopMicTest(){
+  if(mtTimer){clearInterval(mtTimer);mtTimer=null;}
+  if(mtSrc){try{mtSrc.disconnect();}catch{} mtSrc=null;}
+  if(mtStream){mtStream.getTracks().forEach(t=>t.stop());mtStream=null;}
+  const aud=$("mtAudio"); if(aud){aud.pause();aud.srcObject=null;}
+  if($("mtFill")) $("mtFill").style.width="0%";
+  if($("mtStartBtn")) $("mtStartBtn").textContent="Start test";
+}
+function openMicTest(){
+  const dlg=$("micTestDlg");
+  $("mtStatus").textContent="Click Start test to check your microphone.";
+  $("mtStatus").className="mic-status";
+  $("mtFill").style.width="0%";
+  $("mtLoop").checked=false;
+  const close=()=>{stopMicTest();dlg.close();};
+  $("mtCloseBtn").onclick=close;
+  $("mtDoneBtn").onclick=close;
+  dlg.oncancel=e=>{e.preventDefault();close();};
+  $("mtLoop").onchange=()=>{
+    const aud=$("mtAudio");
+    if($("mtLoop").checked && mtStream){aud.srcObject=mtStream;aud.play().catch(()=>{});}
+    else{aud.pause();aud.srcObject=null;}
+  };
+  $("mtStartBtn").onclick=async()=>{
+    if(mtStream){stopMicTest();$("mtStatus").textContent="Mic test stopped.";$("mtStatus").className="mic-status";return;}
+    $("mtStatus").textContent="Requesting microphone…";
+    $("mtStatus").className="mic-status";
+    try{
+      mtStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+      const ctx=getAudioCtx();
+      mtSrc=ctx.createMediaStreamSource(mtStream);
+      const an=ctx.createAnalyser();
+      an.fftSize=256;
+      mtSrc.connect(an);
+      const data=new Uint8Array(an.frequencyBinCount);
+      let heardSpeech=false;
+      $("mtStatus").textContent="Listening… speak into your mic!";
+      $("mtStartBtn").textContent="Stop test";
+      if($("mtLoop").checked){$("mtAudio").srcObject=mtStream;$("mtAudio").play().catch(()=>{});}
+      mtTimer=setInterval(()=>{
+        an.getByteFrequencyData(data);
+        let sum=0; for(let i=0;i<data.length;i++) sum+=data[i];
+        const avg=sum/data.length;
+        const pct=Math.min(100,Math.round((avg/45)*100));
+        $("mtFill").style.width=pct+"%";
+        if(avg>8 && !heardSpeech){
+          heardSpeech=true;
+          $("mtStatus").textContent="Microphone is working!";
+          $("mtStatus").className="mic-status ok";
+        }
+      },60);
+    }catch(err){
+      stopMicTest();
+      $("mtStatus").textContent="Microphone not working: "+(err?.message||"Access denied or no mic found");
+      $("mtStatus").className="mic-status bad";
+    }
+  };
+  dlg.showModal();
 }
