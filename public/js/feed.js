@@ -278,6 +278,7 @@ function slide(v) {
   s.querySelector(".rail").onclick = e => {
     const b = e.target.closest("button");
     if (!b) return;
+    if (b.animate) b.animate([{ transform: "scale(1)" }, { transform: "scale(1.18)" }, { transform: "scale(1)" }], { duration: 240, easing: "cubic-bezier(.2,.9,.3,1.1)" });
     if (b.dataset.a === "follow") requireLogin(async () => {
       const id = v.user_id, was = following.has(id);
       const { error } = was ? await sb.from("follows").delete().eq("follower_id", user.id).eq("following_id", id)

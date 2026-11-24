@@ -1,8 +1,38 @@
-/* Starts the feed page: hash changes, up/down buttons, logo button */
-const FEED_HASH = /^#(feed|fyp|following|friends|search=|v=)/;
+/* Starts the feed page: animated hash transitions, up/down buttons, logo button, comment sync */
+const FEED_HASH = /^(?:#(?:feed|fyp|following|friends)|#(?:search|v)=.*)?$/;
+const TAB_ORDER = ["fyp", "explore", "following", "friends"];
+const tabOf = h => (h === "#fyp" ? "fyp" : h === "#following" ? "following" : h === "#friends" ? "friends" : "explore");
+let lastTab = tabOf(location.hash);
+
+async function switchFeedAnimated() {
+  const feed = $("feed");
+  const nextTab = tabOf(location.hash);
+  const oldIdx = TAB_ORDER.indexOf(lastTab);
+  const newIdx = TAB_ORDER.indexOf(nextTab);
+  const dir = newIdx >= oldIdx ? 1 : -1;
+  lastTab = nextTab;
+
+  if (feed) {
+    feed.style.transition = "transform 170ms cubic-bezier(.4,0,1,1), opacity 170ms ease";
+    feed.style.transform = `translateX(${-28 * dir}px) scale(.985)`;
+    feed.style.opacity = "0";
+    await new Promise(r => setTimeout(r, 170));
+  }
+  await loadFeed();
+  if (feed) {
+    feed.style.transition = "none";
+    feed.style.transform = `translateX(${32 * dir}px) scale(.985)`;
+    feed.style.opacity = "0";
+    void feed.offsetWidth;
+    feed.style.transition = "transform 280ms cubic-bezier(.2,.9,.3,1.1), opacity 240ms ease";
+    feed.style.transform = "translateX(0) scale(1)";
+    feed.style.opacity = "1";
+  }
+}
+
 addEventListener("hashchange", () => {
   if (!FEED_HASH.test(location.hash)) return;
-  loadFeed();
+  switchFeedAnimated();
 });
 const _lf = loadFeed;
 loadFeed = async function () { if (location.hash === "#fyp") await loadViews(); await _lf(); document.querySelectorAll("[data-follow]").forEach(paintFollow); };
@@ -12,7 +42,6 @@ $("vprev").onclick = () => $("feed").scrollBy({ top: -$("feed").clientHeight, be
 $("vnext").onclick = () => $("feed").scrollBy({ top: $("feed").clientHeight, behavior: "smooth" });
 
 if ($("home")) $("home").onclick = () => { location.href = "/"; };
-
 
 // Keep the comments panel on the video that's on screen while you scroll
 let cmtSyncTimer = null;
