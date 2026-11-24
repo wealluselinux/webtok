@@ -1,6 +1,7 @@
-/* Web Tok AI (@webtok_ai via NVIDIA NIM), Content Safety Checker, & Admin Application AI Evaluator */
+/* Web Tok AI (@webtok_ai via NVIDIA NIM), Content Safety Checker, Admin Application AI Evaluator, & Mailer */
 const path = require("path");
 const crypto = require("crypto");
+const tls = require("tls");
 const bcrypt = require("bcryptjs");
 
 const AI_ID = "00000000-0000-0000-0000-000000000002";
@@ -15,10 +16,108 @@ const CHAT_MODELS = [
 ];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
+/* Multi-provider mailer: Brevo HTTPS API -> Resend HTTPS API -> SMTP over TLS (Gmail / AOL / custom) */
+async function sendMail({ to, subject, text }) {
+  const safeTo = String(to || "").replace(/[\r\n<>]+/g, "").trim();
+  if (!safeTo || !safeTo.includes("@") || safeTo.endsWith(".system")) {
+    return { sent: false, skipped: true };
+  }
+  const safeSub = String(subject || "").replace(/[\r\n]+/g, " ").trim();
+  const fromAddr = (process.env.MAIL_FROM || process.env.MAIL_USER || process.env.AOL_MAIL_USER || "").trim();
+
+  const brevoKey = (process.env.BREVO_API_KEY || "").trim();
+  if (brevoKey && fromAddr) {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "api-key": brevoKey },
+      body: JSON.stringify({
+        sender: { name: "Web Tok Mailer", email: fromAddr },
+        to: [{ email: safeTo }],
+        subject: safeSub,
+        textContent: String(text || "")
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!r.ok) throw new Error(`Brevo ${r.status}: ${await r.text()}`);
+    return { sent: true, provider: "brevo" };
+  }
+
+  const resendKey = (process.env.RESEND_API_KEY || "").trim();
+  if (resendKey) {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
+      body: JSON.stringify({
+        from: fromAddr ? `Web Tok Mailer <${fromAddr}>` : "Web Tok Mailer <onboarding@resend.dev>",
+        to: [safeTo],
+        subject: safeSub,
+        text: String(text || "")
+      }),
+      signal: AbortSignal.timeout(15000)
+    });
+    if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
+    return { sent: true, provider: "resend" };
+  }
+
+  const user = (process.env.MAIL_USER || process.env.AOL_MAIL_USER || "").trim();
+  const pass = (process.env.MAIL_PASS || process.env.AOL_MAIL_PASS || "").trim();
+  if (!user || !pass) return { sent: false, skipped: true };
+
+  const host = (process.env.MAIL_HOST || (user.toLowerCase().endsWith("@gmail.com") ? "smtp.gmail.com" : "smtp.aol.com")).trim();
+  const port = parseInt(process.env.MAIL_PORT || "465", 10) || 465;
+
+  return new Promise((resolve, reject) => {
+    const sock = tls.connect({ host, port, servername: host });
+    sock.setTimeout(15000, () => { sock.destroy(); reject(new Error("SMTP timeout")); });
+    let buf = "";
+    let step = 0;
+    const b64 = s => Buffer.from(s, "utf8").toString("base64");
+    const bodyText = String(text || "").replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..");
+    const cmds = [
+      () => `EHLO webtok.onrender.com\r\n`,
+      () => `AUTH LOGIN\r\n`,
+      () => `${b64(user)}\r\n`,
+      () => `${b64(pass)}\r\n`,
+      () => `MAIL FROM:<${user}>\r\n`,
+      () => `RCPT TO:<${safeTo}>\r\n`,
+      () => `DATA\r\n`,
+      () => `From: "Web Tok Mailer" <${user}>\r\nTo: <${safeTo}>\r\nSubject: ${safeSub}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${bodyText}\r\n.\r\n`,
+      () => `QUIT\r\n`
+    ];
+    sock.on("data", chunk => {
+      buf += chunk.toString("utf8");
+      const lines = buf.split(/\r?\n/);
+      buf = lines.pop() || "";
+      for (const line of lines) {
+        if (!line || /^\d{3}-/.test(line)) continue;
+        const code = parseInt(line.slice(0, 3), 10);
+        if (code >= 400) {
+          sock.destroy();
+          return reject(new Error(`SMTP ${line}`));
+        }
+        if (step < cmds.length) {
+          sock.write(cmds[step++]());
+        } else {
+          sock.end();
+          return resolve({ sent: true, provider: "smtp" });
+        }
+      }
+    });
+    sock.on("error", err => reject(err));
+  });
+}
+
 module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 }) {
   const aiKey = () => (process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || process.env.NVIDIA_API_KEY || process.env.AI_ADMINFROM_CHECKER || "").trim();
   const checkerKey = () => (process.env.WEBTOK_CHECKER || process.env.WEB_TALK_CHECKER || "").trim();
   const adminFormKey = () => (process.env.AI_ADMINFROM_CHECKER || process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || "").trim();
+  app.locals.sendMail = sendMail;
+  app.locals.isMailerConfigured = () => {
+    const fromAddr = (process.env.MAIL_FROM || process.env.MAIL_USER || process.env.AOL_MAIL_USER || "").trim();
+    if ((process.env.BREVO_API_KEY || "").trim() && fromAddr) return true;
+    if ((process.env.RESEND_API_KEY || "").trim()) return true;
+    return !!((process.env.MAIL_USER || process.env.AOL_MAIL_USER || "").trim() && (process.env.MAIL_PASS || process.env.AOL_MAIL_PASS || "").trim());
+  };
 
   let appsTableReady = false;
   async function ensureAdminAppsTable() {
@@ -170,7 +269,7 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     }
 
     const [profRow, vidRow, cmtRow, admins] = await Promise.all([
-      run("SELECT u.created_at, u.restrictions, p.username, p.display_name FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]),
+      run("SELECT u.created_at, u.restrictions, u.email, p.username, p.display_name FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]),
       run("SELECT COUNT(*) n FROM videos WHERE user_id = ?", [uid]),
       run("SELECT COUNT(*) n FROM comments WHERE user_id = ?", [uid]),
       run("SELECT p.username, p.display_name, u.role, u.role_since FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.role IN ('owner','admin') ORDER BY u.role DESC, u.created_at ASC")
@@ -222,6 +321,14 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
       args: [id, uid, JSON.stringify(answers), aiVerdict, aiScore, aiReason, ts]
     });
 
+    if (aiVerdict === "DENY") {
+      await ensureAiAccount();
+      await db.execute({
+        sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)",
+        args: [AI_ID, "ai_deny_admin_app", `@${prof.username || "user"} (${prof.email || uid}) — Score ${aiScore ?? "?"}/10: ${aiReason}`.slice(0, 500), ts]
+      }).catch(() => {});
+    }
+
     return { data: { id, status: "pending", ai_verdict: aiVerdict, ai_score: aiScore, created_at: ts }, error: null };
   }));
 
@@ -255,6 +362,10 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     if (!appRow) throw new HttpError(404, "Application not found.");
     if (appRow.status !== "pending") throw new HttpError(400, "This application has already been reviewed.");
 
+    const appUser = (await run("SELECT u.email, p.username FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [appRow.user_id]))[0] || {};
+    const customReason = String(req.body?.reason || "").trim().slice(0, 600);
+    const denyReason = customReason || String(appRow.ai_reason || "").trim() || "Your application did not meet the requirements at this time.";
+
     const ts = nowIso();
     await db.execute({
       sql: "UPDATE admin_applications SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
@@ -272,15 +383,26 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     await ensureNotifAccount();
     const msg = decision === "approved"
       ? "Congratulations! Your Web Tok Admin application was approved by the owner. You now have access to the Admin panel."
-      : "Your Web Tok Admin application was reviewed by the owner and was not approved at this time.";
+      : `Your Web Tok Admin application was reviewed by the owner and was not approved at this time.\n\nReason: ${denyReason}`;
     await db.execute({
       sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
-      args: [NOTIF_ID, appRow.user_id, msg, ts]
+      args: [NOTIF_ID, appRow.user_id, msg.slice(0, 1000), ts]
     }).catch(() => {});
 
+    if (appUser.email) {
+      sendMail({
+        to: appUser.email,
+        subject: decision === "approved" ? "Web Tok Admin Application Approved" : "Web Tok Admin Application Update",
+        text: `Hi @${appUser.username || "user"},\n\n${msg}\n\n— Web Tok`
+      }).catch(e => console.warn("Mailer error:", e.message));
+    }
+
+    const logDetail = decision === "approved"
+      ? `@${appUser.username || appRow.user_id} approved as admin`
+      : `@${appUser.username || appRow.user_id} denied — Reason: ${denyReason}`;
     await db.execute({
       sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)",
-      args: [req.wt.uid, decision === "approved" ? "approve_admin_app" : "deny_admin_app", `Application ${id} for user ${appRow.user_id}`, ts]
+      args: [req.wt.uid, decision === "approved" ? "approve_admin_app" : "deny_admin_app", logDetail.slice(0, 500), ts]
     }).catch(() => {});
 
     return { data: { id, status: decision }, error: null };

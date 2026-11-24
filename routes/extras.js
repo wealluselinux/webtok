@@ -57,6 +57,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS video_sounds (video_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sound_id TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
@@ -114,17 +115,94 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       const { id, ua, ip } = deviceFingerprint(req);
       const ts = nowIso();
       const existing = (await run("SELECT 1 FROM known_devices WHERE user_id = ? AND device_id = ?", [uid, id]))[0];
+      let isNewDevice = false;
       if (existing) {
         await db.execute({ sql: "UPDATE known_devices SET last_seen = ? WHERE user_id = ? AND device_id = ?", args: [ts, uid, id] });
-        return;
+      } else {
+        const prevCount = (await run("SELECT COUNT(*) n FROM known_devices WHERE user_id = ?", [uid]))[0].n;
+        await db.execute({ sql: "INSERT INTO known_devices (user_id, device_id, first_seen, last_seen) VALUES (?,?,?,?)", args: [uid, id, ts, ts] });
+        if (!isSignup && prevCount > 0) {
+          isNewDevice = true;
+          await db.execute({ sql: "INSERT INTO login_alerts (id, user_id, device_id, user_agent, ip, seen, created_at) VALUES (?,?,?,?,?,0,?)", args: [crypto.randomUUID(), uid, id, ua, ip, ts] });
+        }
       }
-      const prevCount = (await run("SELECT COUNT(*) n FROM known_devices WHERE user_id = ?", [uid]))[0].n;
-      await db.execute({ sql: "INSERT INTO known_devices (user_id, device_id, first_seen, last_seen) VALUES (?,?,?,?)", args: [uid, id, ts, ts] });
-      if (!isSignup && prevCount > 0) {
-        await db.execute({ sql: "INSERT INTO login_alerts (id, user_id, device_id, user_agent, ip, seen, created_at) VALUES (?,?,?,?,?,0,?)", args: [crypto.randomUUID(), uid, id, ua, ip, ts] });
+      if (!isSignup && app.locals.sendMail) {
+        const uRow = (await run("SELECT u.email, p.username FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]))[0];
+        if (uRow?.email) {
+          app.locals.sendMail({
+            to: uRow.email,
+            subject: isNewDevice ? "New device sign-in to your Web Tok account" : "New sign-in to your Web Tok account",
+            text: [
+              `Hi @${uRow.username || "user"},`,
+              ``,
+              `Someone just signed into your Web Tok account.`,
+              `Time: ${new Date(ts).toUTCString()}`,
+              `Device: ${ua}`,
+              `IP: ${ip || "Unknown"}`,
+              ``,
+              `If this was you, you can ignore this email. If not, open Web Tok and sign out all devices or change your password right away.`,
+              ``,
+              `— Web Tok Security`
+            ].join("\n")
+          }).catch(e => console.warn("Login alert email error:", e.message));
+        }
       }
     } catch (e) { console.warn("recordLoginDevice:", e.message); }
   };
+
+  /* ---------- Email verification code for signup ---------- */
+  const verifHash = (em, code) => crypto.createHash("sha256").update(`${em}:${code}`).digest("hex");
+
+  app.post("/api/auth/send-verification", limit(6, 600000), wrap(async req => {
+    await ensure();
+    const em = String(req.body?.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em) || em.length > 120) throw new HttpError(400, "Enter a valid email.");
+    if ((await run("SELECT 1 FROM users WHERE email = ?", [em])).length) {
+      throw new HttpError(422, "That email already has an account. Sign in instead.");
+    }
+    if (!app.locals.isMailerConfigured || !app.locals.isMailerConfigured() || !app.locals.sendMail) {
+      return { data: { sent: false, required: false }, error: null };
+    }
+    const code = String(crypto.randomInt(100000, 1000000));
+    const ts = nowIso();
+    const exp = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    await db.execute({
+      sql: `INSERT INTO email_verifications (email, code_hash, expires_at, attempts, created_at) VALUES (?,?,?,0,?)
+            ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0, created_at=excluded.created_at`,
+      args: [em, verifHash(em, code), exp, ts]
+    });
+    await app.locals.sendMail({
+      to: em,
+      subject: "Your Web Tok verification code",
+      text: `Your Web Tok signup verification code is: ${code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n\n— Web Tok`
+    });
+    return { data: { sent: true, required: true }, error: null };
+  }));
+
+  app.post("/api/auth/signup", async (req, res, next) => {
+    try {
+      await ensure();
+      if (!app.locals.isMailerConfigured || !app.locals.isMailerConfigured()) return next();
+      const em = String(req.body?.email || "").trim().toLowerCase();
+      const code = String(req.body?.data?.verification_code || "").trim();
+      if (!/^\d{6}$/.test(code)) return deny(res, 400, "Enter the 6-digit verification code sent to your email.");
+      const row = (await run("SELECT * FROM email_verifications WHERE email = ?", [em]))[0];
+      if (!row) return deny(res, 400, "Please request a verification code for your email first.");
+      if (Date.parse(row.expires_at) < Date.now()) {
+        await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [em] });
+        return deny(res, 400, "Verification code expired. Request a new code.");
+      }
+      if (row.attempts >= 5) {
+        return deny(res, 429, "Too many wrong codes. Please request a new verification code.");
+      }
+      if (row.code_hash !== verifHash(em, code)) {
+        await db.execute({ sql: "UPDATE email_verifications SET attempts = attempts + 1 WHERE email = ?", args: [em] });
+        return deny(res, 400, "Incorrect verification code.");
+      }
+      await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [em] });
+      next();
+    } catch (e) { next(e); }
+  });
 
   const deny = (res, code, message) => res.status(code).json({ data: null, error: { message } });
 

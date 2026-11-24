@@ -210,11 +210,18 @@ async function loadApps() {
             loadApps();
           }}),
           h("button", { class: "btn bad", text: "No · Deny", onclick: async () => {
-            const ok = await wtConfirm({ title: `Deny @${a.username || "user"}?`, message: "They will remain a regular user.", icon: "block", confirmText: "No, deny", danger: true });
-            if (!ok) return;
-            const res = await api(`/api/admin/applications/${encodeURIComponent(a.id)}/decide`, { decision: "denied" });
+            const reason = await wtPrompt({
+              title: `Deny @${a.username || "user"}?`,
+              message: "They will remain a regular user and receive a message with the reason (leave blank to send the AI's reason):",
+              placeholder: a.ai_reason ? `Default: ${a.ai_reason.slice(0, 120)}` : "Reason for denial…",
+              icon: "block",
+              confirmText: "No, deny",
+              danger: true
+            });
+            if (reason === null) return;
+            const res = await api(`/api/admin/applications/${encodeURIComponent(a.id)}/decide`, { decision: "denied", reason: reason.trim() });
             if (res.error) return toast(res.error.message);
-            toast(`Denied application from @${a.username || "user"}.`);
+            toast(`Denied application from @${a.username || "user"} and sent them the reason.`);
             loadApps();
           }})
         );
