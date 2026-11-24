@@ -24,7 +24,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .line{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
 .name{font-weight:700}.sub{color:var(--muted);font-size:14px;word-break:break-all}
 .badge{display:inline-block;padding:3px 10px;border-radius:999px;background:var(--surface);font-size:12px;font-weight:700;margin-left:6px}
-.badge.bad{background:var(--bad);color:#fff}.badge.role{background:var(--primary);color:var(--on-primary)}
+.badge.bad{background:var(--bad);color:#fff}.badge.role{background:var(--primary);color:var(--on-primary)}.badge.ok{background:var(--ok);color:#fff}
 .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
 .acts label{font-size:14px;display:flex;gap:4px;align-items:center}
 #result{position:sticky;top:8px;z-index:5;background:var(--primary);color:var(--on-primary);border-radius:28px;padding:18px 20px;margin-bottom:14px;box-shadow:0 8px 24px #0003}
@@ -32,6 +32,7 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
 .hidden{display:none!important}.msg{color:var(--muted);padding:10px 4px}
 .tk-rep{background:var(--surface);border-radius:18px;padding:10px 14px;margin-top:8px;font-size:13px;line-height:1.45}
 .tk-rep.adm{border:2px solid var(--primary)}
+.lbl-q{display:block;font-size:13px;font-weight:700;margin:8px 4px 4px}
 </style></head><body>
 <div id="wp-layer"></div>
 <div id="wp-scrim"></div>
@@ -52,11 +53,13 @@ input:focus,textarea:focus,select:focus{outline:0;border-color:var(--primary)}
       <button class="btn on" data-tab="users">Users</button>
       <button class="btn" data-tab="content">Content</button>
       <button class="btn" data-tab="support">Support</button>
+      <button class="btn" data-tab="apps" id="appsTab">Applications</button>
       <button class="btn hidden" data-tab="log" id="logTab">Log</button>
     </div>
     <section id="users"><input id="q" type="search" placeholder="Search by email, username or name"><div id="ulist"></div></section>
     <section id="content" class="hidden"></section>
     <section id="support" class="hidden"></section>
+    <section id="apps" class="hidden"></section>
     <section id="log" class="hidden"></section>
   </div>
 </div>

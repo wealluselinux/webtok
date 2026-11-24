@@ -183,6 +183,60 @@ async function loadSupport() {
   });
 }
 
+
+/* ----- admin applications (AI_ADMINFROM_CHECKER + owner Yes/No) ----- */
+async function loadApps() {
+  const box = $("apps"); box.replaceChildren(h("div", { class: "msg", text: "Loading admin applications…" }));
+  const r = await api("/api/admin/applications");
+  box.replaceChildren();
+  if (r.error) { box.append(h("div", { class: "msg", text: r.error.message })); return; }
+  if (!r.data.length) { box.append(h("div", { class: "msg", text: "No admin applications yet." })); return; }
+  r.data.forEach(a => {
+    const ans = a.answers || {};
+    const aiBadge = a.ai_verdict
+      ? h("span", { class: "badge " + (a.ai_verdict === "APPROVE" ? "ok" : a.ai_verdict === "DENY" ? "bad" : ""), text: `AI: ${a.ai_verdict}${a.ai_score ? ` (${a.ai_score}/10)` : ""}` })
+      : "";
+    const statusBadge = h("span", { class: "badge " + (a.status === "approved" ? "ok" : a.status === "denied" ? "bad" : "role"), text: a.status });
+    const acts = [];
+    if (a.status === "pending") {
+      if (me === "owner") {
+        acts.push(
+          h("button", { class: "btn p", text: "Yes · Approve & Make Admin", onclick: async () => {
+            const ok = await wtConfirm({ title: `Approve @${a.username || "user"}?`, message: "This will grant them Admin access right away.", icon: "verified_user", confirmText: "Yes, make admin" });
+            if (!ok) return;
+            const res = await api(`/api/admin/applications/${encodeURIComponent(a.id)}/decide`, { decision: "approved" });
+            if (res.error) return toast(res.error.message);
+            toast(`Approved @${a.username || "user"} as an Admin.`);
+            loadApps();
+          }}),
+          h("button", { class: "btn bad", text: "No · Deny", onclick: async () => {
+            const ok = await wtConfirm({ title: `Deny @${a.username || "user"}?`, message: "They will remain a regular user.", icon: "block", confirmText: "No, deny", danger: true });
+            if (!ok) return;
+            const res = await api(`/api/admin/applications/${encodeURIComponent(a.id)}/decide`, { decision: "denied" });
+            if (res.error) return toast(res.error.message);
+            toast(`Denied application from @${a.username || "user"}.`);
+            loadApps();
+          }})
+        );
+      } else {
+        acts.push(h("div", { class: "sub", text: "Awaiting owner decision (Yes/No)." }));
+      }
+    }
+    box.append(h("div", { class: "card" },
+      h("div", { class: "line" },
+        h("div", {}, h("span", { class: "name", text: a.display_name || a.username || "(user)" }), h("span", { class: "sub", text: `  @${a.username || "?"}` }), statusBadge, aiBadge),
+        h("div", { class: "sub", text: "Applied " + when(a.created_at) })),
+      h("div", { class: "sub", style: "margin:4px 0 8px", text: `${a.email || ""} · Joined ${when(a.user_created_at)}` }),
+      h("div", { class: "tk-rep" }, h("b", { text: "Why become admin: " }), ans.why || ""),
+      h("div", { class: "tk-rep" }, h("b", { text: "Moderation approach: " }), ans.moderation || ""),
+      h("div", { class: "tk-rep" }, h("b", { text: "Activity & improvements: " }), ans.activity || ""),
+      ans.extra ? h("div", { class: "tk-rep" }, h("b", { text: "Extra notes: " }), ans.extra) : "",
+      h("div", { class: "tk-rep adm" }, h("div", { class: "sub", style: "font-weight:700;margin-bottom:3px", text: "AI Evaluation" }), h("div", { text: a.ai_reason || "No AI notes." })),
+      acts.length ? h("div", { class: "acts" }, ...acts) : ""
+    ));
+  });
+}
+
 /* ----- log (owner only) ----- */
 async function loadLog() {
   const box = $("log"); box.replaceChildren();
@@ -194,9 +248,10 @@ async function loadLog() {
 
 document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
   document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x === b));
-  ["users", "content", "support", "log"].forEach(t => $(t).classList.toggle("hidden", t !== b.dataset.tab));
+  ["users", "content", "support", "apps", "log"].forEach(t => $(t).classList.toggle("hidden", t !== b.dataset.tab));
   if (b.dataset.tab === "content") loadContent();
   if (b.dataset.tab === "support") loadSupport();
+  if (b.dataset.tab === "apps") loadApps();
   if (b.dataset.tab === "log") loadLog();
 });
 let qt = null; $("q").oninput = () => { clearTimeout(qt); qt = setTimeout(loadUsers, 300); };
@@ -206,12 +261,51 @@ let qt = null; $("q").oninput = () => { clearTimeout(qt); qt = setTimeout(loadUs
   if (r.error || !["admin", "owner"].includes(r.data?.role)) {
     $("app")?.remove();
     const denied = $("denied");
+    const isGuest = !!r.error?.guest;
+    const formWrap = h("div", { class: "hidden", style: "margin-top:16px;padding-top:14px;border-top:1px solid var(--surface)" });
+    const statusWrap = h("div", { style: "margin:10px 0" });
+    const applyBtn = !isGuest ? h("button", { class: "btn p", text: "Apply to become an Admin", onclick: () => formWrap.classList.toggle("hidden") }) : "";
+
+    if (!isGuest) {
+      const qWhy = h("textarea", { rows: 2, maxlength: 800, placeholder: "Why do you want to be an admin on Web Tok?" });
+      const qMod = h("textarea", { rows: 2, maxlength: 800, placeholder: "How would you handle spam, rule-breaking videos, or user disputes?" });
+      const qAct = h("textarea", { rows: 2, maxlength: 600, placeholder: "How active are you and what would you help improve?" });
+      const qExt = h("textarea", { rows: 2, maxlength: 600, placeholder: "Anything else the owner & admins should know? (optional)" });
+      const hint = h("div", { class: "sub", style: "margin-bottom:10px" });
+      const subBtn = h("button", { class: "btn p", text: "Submit Admin Application", onclick: async () => {
+        subBtn.disabled = true; hint.textContent = "Submitting & running AI review…";
+        const res = await api("/api/admin-applications", { why: qWhy.value.trim(), moderation: qMod.value.trim(), activity: qAct.value.trim(), extra: qExt.value.trim() });
+        if (res.error) { hint.textContent = res.error.message; subBtn.disabled = false; return; }
+        formWrap.classList.add("hidden");
+        applyBtn.classList.add("hidden");
+        statusWrap.replaceChildren(h("div", { class: "tk-rep adm", text: "Application submitted! The AI reviewed your answers and sent your application to the owner for a Yes/No decision." }));
+      }});
+      formWrap.append(
+        h("div", { class: "name", style: "margin-bottom:6px", text: "Admin Application Form" }),
+        h("label", { class: "lbl-q", text: "1. Why do you want to be an admin?" }), qWhy,
+        h("label", { class: "lbl-q", text: "2. How would you handle spam, rule-breaking videos, or user disputes?" }), qMod,
+        h("label", { class: "lbl-q", text: "3. How active are you and what would you help improve?" }), qAct,
+        h("label", { class: "lbl-q", text: "4. Anything else? (optional)" }), qExt,
+        hint,
+        subBtn
+      );
+      api("/api/admin-applications/mine").then(m => {
+        if (m.data) {
+          if (m.data.status === "pending") applyBtn.classList.add("hidden");
+          statusWrap.replaceChildren(h("div", { class: "tk-rep adm", text: `Your latest admin application (${when(m.data.created_at)}): ${m.data.status === "pending" ? "Pending owner decision" : m.data.status}.` }));
+        }
+      });
+    }
+
     denied.replaceChildren(
-      h("div", { class: "name", text: r.error?.guest ? "Guest accounts can't access the Admin panel." : "You don't have access to this page." }),
-      h("div", { class: "sub", style: "margin:8px 0 14px", text: r.error?.guest ? "This is a guest session. Sign in with an admin or owner account to use this feature." : "Only admins and the owner can open the Admin panel." }),
+      h("div", { class: "name", text: isGuest ? "Guest accounts can't access the Admin panel." : "You don't have access to this page." }),
+      h("div", { class: "sub", style: "margin:8px 0 14px", text: isGuest ? "This is a guest session. Sign in with an admin or owner account to use this feature." : "Only admins and the owner can open the Admin panel. Want to apply?" }),
+      statusWrap,
       h("div", { style: "display:flex;gap:10px;flex-wrap:wrap" },
-        h("a", { class: "btn p", href: "/login", text: "Sign in" }),
-        h("a", { class: "btn", href: "/scroll", text: "Back to Feed" }))
+        applyBtn,
+        h("a", { class: "btn", href: "/login", text: isGuest ? "Sign in" : "Switch account" }),
+        h("a", { class: "btn", href: "/scroll", text: "Back to Feed" })),
+      formWrap
     );
     denied.classList.remove("hidden");
     return;

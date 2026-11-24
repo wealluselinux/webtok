@@ -1,4 +1,4 @@
-/* Web Tok AI (@webtok_ai via NVIDIA NIM) & AI Content Safety Checker (videos + stickers) */
+/* Web Tok AI (@webtok_ai via NVIDIA NIM), Content Safety Checker, & Admin Application AI Evaluator */
 const path = require("path");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
@@ -6,12 +6,41 @@ const bcrypt = require("bcryptjs");
 const AI_ID = "00000000-0000-0000-0000-000000000002";
 const NOTIF_ID = "00000000-0000-0000-0000-000000000001";
 const NIM_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-const CHAT_MODELS = ["meta/llama-3.3-70b-instruct", "meta/llama-3.1-8b-instruct", "nvidia/nemotron-3.5-lightning-30b-a3b", "qwen/qwen2.5-coder-32b-instruct"];
+const CHAT_MODELS = [
+  "nvidia/nemotron-3.5-lightning-30b-a3b",
+  "nvidia/nemotron-3.5-bolt-e4b",
+  "meta/llama-3.1-8b-instruct",
+  "qwen/qwen2.5-coder-32b-instruct",
+  "nvidia/llama-3.1-nemotron-51b-instruct"
+];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
 module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowIso, removeFromR2 }) {
-  const aiKey = () => (process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || "").trim();
+  const aiKey = () => (process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || process.env.NVIDIA_API_KEY || process.env.AI_ADMINFROM_CHECKER || "").trim();
   const checkerKey = () => (process.env.WEBTOK_CHECKER || process.env.WEB_TALK_CHECKER || "").trim();
+  const adminFormKey = () => (process.env.AI_ADMINFROM_CHECKER || process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || "").trim();
+
+  let appsTableReady = false;
+  async function ensureAdminAppsTable() {
+    if (appsTableReady) return;
+    await db.batch([
+      `CREATE TABLE IF NOT EXISTS admin_applications (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        answers_json TEXT NOT NULL,
+        ai_verdict TEXT,
+        ai_score INTEGER,
+        ai_reason TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        reviewed_by TEXT,
+        reviewed_at TEXT,
+        created_at TEXT NOT NULL
+      )`,
+      "CREATE INDEX IF NOT EXISTS idx_admin_apps_user ON admin_applications(user_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_admin_apps_status ON admin_applications(status, created_at DESC)"
+    ], "write");
+    appsTableReady = true;
+  }
 
   async function ensureAiAccount() {
     if ((await run("SELECT 1 FROM profiles WHERE id = ?", [AI_ID])).length) return;
@@ -114,6 +143,147 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
       throw new HttpError(403, `Upload blocked by safety filter: ${res.reason}`);
     }
     return { data: { safe: true }, error: null };
+  }));
+
+  /* ---------- Admin Application Form + AI_ADMINFROM_CHECKER + Owner Yes/No ---------- */
+  app.get("/api/admin-applications/mine", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await ensureAdminAppsTable();
+    const row = (await run("SELECT id, status, ai_verdict, ai_score, created_at, reviewed_at FROM admin_applications WHERE user_id = ? ORDER BY created_at DESC LIMIT 1", [uid]))[0];
+    return { data: row || null, error: null };
+  }));
+
+  app.post("/api/admin-applications", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (["admin", "owner"].includes(req.wt?.role)) throw new HttpError(400, "You already have admin access.");
+    await ensureAdminAppsTable();
+
+    const pending = await run("SELECT 1 FROM admin_applications WHERE user_id = ? AND status = 'pending'", [uid]);
+    if (pending.length) throw new HttpError(409, "You already have a pending admin application awaiting owner review.");
+
+    const why = String(req.body?.why || "").trim().slice(0, 800);
+    const moderation = String(req.body?.moderation || "").trim().slice(0, 800);
+    const activity = String(req.body?.activity || "").trim().slice(0, 600);
+    const extra = String(req.body?.extra || "").trim().slice(0, 600);
+    if (why.length < 10 || moderation.length < 10 || activity.length < 5) {
+      throw new HttpError(400, "Please answer all required questions in detail.");
+    }
+
+    const [profRow, vidRow, cmtRow, admins] = await Promise.all([
+      run("SELECT u.created_at, u.restrictions, p.username, p.display_name FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]),
+      run("SELECT COUNT(*) n FROM videos WHERE user_id = ?", [uid]),
+      run("SELECT COUNT(*) n FROM comments WHERE user_id = ?", [uid]),
+      run("SELECT p.username, p.display_name, u.role, u.role_since FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.role IN ('owner','admin') ORDER BY u.role DESC, u.created_at ASC")
+    ]);
+    const prof = profRow[0] || {};
+    const adminRoster = admins.map(a => `@${a.username || "unknown"} (${a.role})`).join(", ") || "Owner only";
+
+    let aiVerdict = "PENDING_AI";
+    let aiScore = null;
+    let aiReason = "AI evaluation unavailable (AI_ADMINFROM_CHECKER key not configured).";
+    const key = adminFormKey();
+    if (key) {
+      const prompt = [
+        `Applicant: ${prof.display_name || ""} (@${prof.username || "user"}), joined ${prof.created_at || "unknown"}, videos posted: ${vidRow[0]?.n || 0}, comments: ${cmtRow[0]?.n || 0}, restrictions: ${prof.restrictions || "[]"}.`,
+        `Current admin team (${admins.length}): ${adminRoster}.`,
+        ``,
+        `Q1 (Why do you want to be an admin?): ${why}`,
+        `Q2 (How would you handle spam, rule-breaking videos, or disputes?): ${moderation}`,
+        `Q3 (How active are you and what would you help improve?): ${activity}`,
+        `Q4 (Anything else?): ${extra || "(none)"}`,
+        ``,
+        `Evaluate if this person should be made a Web Tok admin. Reply in JSON ONLY with keys: "recommend" ("APPROVE" or "DENY"), "score" (integer 1-10), and "reason" (2-3 concise sentences explaining why, considering their answers and the current admin team).`
+      ].join("\n");
+      try {
+        const rawReply = await callNim(key, CHAT_MODELS, [
+          { role: "system", content: "You are an admin-application evaluator for Web Tok. Output valid JSON only: {\"recommend\":\"APPROVE\"|\"DENY\",\"score\":1-10,\"reason\":\"...\"}." },
+          { role: "user", content: prompt }
+        ], 320);
+        const jm = /\{[\s\S]*\}/.exec(rawReply);
+        if (jm) {
+          const parsed = JSON.parse(jm[0]);
+          aiVerdict = String(parsed.recommend || "").toUpperCase() === "APPROVE" ? "APPROVE" : "DENY";
+          aiScore = Math.min(10, Math.max(1, parseInt(parsed.score, 10) || 5));
+          aiReason = String(parsed.reason || rawReply).trim().slice(0, 600);
+        } else {
+          aiVerdict = /APPROVE/i.test(rawReply) ? "APPROVE" : "DENY";
+          aiReason = rawReply.slice(0, 600);
+        }
+      } catch (e) {
+        aiVerdict = "ERROR";
+        aiReason = `AI evaluation error: ${e?.message || "Failed"}`;
+      }
+    }
+
+    const id = crypto.randomUUID(), ts = nowIso();
+    const answers = { why, moderation, activity, extra };
+    await db.execute({
+      sql: "INSERT INTO admin_applications (id, user_id, answers_json, ai_verdict, ai_score, ai_reason, status, created_at) VALUES (?,?,?,?,?,?,'pending',?)",
+      args: [id, uid, JSON.stringify(answers), aiVerdict, aiScore, aiReason, ts]
+    });
+
+    return { data: { id, status: "pending", ai_verdict: aiVerdict, ai_score: aiScore, created_at: ts }, error: null };
+  }));
+
+  app.get("/api/admin/applications", wrap(async req => {
+    if (!req.wt) throw new HttpError(401, "Sign in required");
+    if (!["admin", "owner"].includes(req.wt.role)) throw new HttpError(403, "Admins only");
+    await ensureAdminAppsTable();
+    const rows = await run(`
+      SELECT a.*, p.username, p.display_name, u.email, u.created_at AS user_created_at, u.role AS current_role
+      FROM admin_applications a
+      LEFT JOIN profiles p ON p.id = a.user_id
+      LEFT JOIN users u ON u.id = a.user_id
+      ORDER BY CASE WHEN a.status = 'pending' THEN 0 ELSE 1 END, a.created_at DESC LIMIT 80`);
+    const out = rows.map(r => {
+      let answers = {};
+      try { answers = JSON.parse(r.answers_json || "{}"); } catch {}
+      return { ...r, answers };
+    });
+    return { data: out, error: null };
+  }));
+
+  app.post("/api/admin/applications/:id/decide", wrap(async req => {
+    if (!req.wt) throw new HttpError(401, "Sign in required");
+    if (req.wt.role !== "owner") throw new HttpError(403, "Only the owner can approve or deny admin applications.");
+    await ensureAdminAppsTable();
+    const id = String(req.params.id || "").trim();
+    const decision = req.body?.decision === "approved" ? "approved" : req.body?.decision === "denied" ? "denied" : null;
+    if (!decision) throw new HttpError(400, "Decision must be 'approved' or 'denied'.");
+
+    const appRow = (await run("SELECT * FROM admin_applications WHERE id = ?", [id]))[0];
+    if (!appRow) throw new HttpError(404, "Application not found.");
+    if (appRow.status !== "pending") throw new HttpError(400, "This application has already been reviewed.");
+
+    const ts = nowIso();
+    await db.execute({
+      sql: "UPDATE admin_applications SET status = ?, reviewed_by = ?, reviewed_at = ? WHERE id = ?",
+      args: [decision, req.wt.uid, ts, id]
+    });
+
+    if (decision === "approved") {
+      await db.execute({
+        sql: "UPDATE users SET role = 'admin', role_since = COALESCE(role_since, ?) WHERE id = ? AND role = 'user'",
+        args: [ts, appRow.user_id]
+      });
+      if (app.locals.forgetUser) app.locals.forgetUser(appRow.user_id);
+    }
+
+    await ensureNotifAccount();
+    const msg = decision === "approved"
+      ? "Congratulations! Your Web Tok Admin application was approved by the owner. You now have access to the Admin panel."
+      : "Your Web Tok Admin application was reviewed by the owner and was not approved at this time.";
+    await db.execute({
+      sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
+      args: [NOTIF_ID, appRow.user_id, msg, ts]
+    }).catch(() => {});
+
+    await db.execute({
+      sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)",
+      args: [req.wt.uid, decision === "approved" ? "approve_admin_app" : "deny_admin_app", `Application ${id} for user ${appRow.user_id}`, ts]
+    }).catch(() => {});
+
+    return { data: { id, status: decision }, error: null };
   }));
 
   app.post("/api/admin/set-password", wrap(async req => {
