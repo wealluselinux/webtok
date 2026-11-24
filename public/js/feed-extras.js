@@ -124,7 +124,7 @@
       if (rail && !rail.querySelector(".rail-snd")) {
         const capTxt = (s.querySelector(".cap-t")?.textContent || "").toLowerCase();
         const match = Array.isArray(sounds) ? sounds.find(sn => sn.title && capTxt.includes(sn.title.toLowerCase())) : null;
-        const sndLabel = match ? match.title : "Original sound";
+        const sndLabel = s.dataset.soundTitle || (match ? match.title : "Original sound");
         const snd = document.createElement("a");
         snd.className = "fab rail-snd";
         snd.href = "/sounds";

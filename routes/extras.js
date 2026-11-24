@@ -53,6 +53,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS login_alerts (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, device_id TEXT NOT NULL, user_agent TEXT NOT NULL, ip TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, media_url TEXT NOT NULL, media_type TEXT NOT NULL, caption TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS sounds (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, storage_path TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS video_sounds (video_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sound_id TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
@@ -61,6 +62,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE INDEX IF NOT EXISTS idx_alerts_user ON login_alerts(user_id, seen, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_stories_exp ON stories(expires_at, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_sounds_created ON sounds(created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_vsnd_user ON video_sounds(user_id)",
       "CREATE INDEX IF NOT EXISTS idx_tickets_user ON support_tickets(user_id, updated_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_ticket_replies ON support_replies(ticket_id, id)",
     ], "write");
@@ -325,12 +327,53 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
   app.delete("/api/sounds/:id", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
-    const s = (await run("SELECT storage_path FROM sounds WHERE id = ? AND user_id = ?", [String(req.params.id || ""), uid]))[0];
+    const sid = String(req.params.id || "");
+    const s = (await run("SELECT storage_path FROM sounds WHERE id = ? AND user_id = ?", [sid, uid]))[0];
     if (s) {
-      await db.execute({ sql: "DELETE FROM sounds WHERE id = ? AND user_id = ?", args: [String(req.params.id || ""), uid] });
+      await db.batch([
+        { sql: "DELETE FROM video_sounds WHERE sound_id = ?", args: [sid] },
+        { sql: "DELETE FROM sounds WHERE id = ? AND user_id = ?", args: [sid, uid] }
+      ], "write");
       if (s.storage_path && removeFromR2) await removeFromR2([`sounds/${s.storage_path}`]);
     }
     return { data: true, error: null };
+  }));
+
+  app.get("/api/video-sounds", wrap(async req => {
+    const ids = String(req.query.ids || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 50);
+    if (!ids.length) return { data: {}, error: null };
+    const ph = ids.map(() => "?").join(",");
+    const rows = await run(`
+      SELECT vs.video_id, s.id, s.title, s.artist, s.audio_url, p.username, p.display_name
+      FROM video_sounds vs
+      JOIN sounds s ON s.id = vs.sound_id
+      LEFT JOIN profiles p ON p.id = s.user_id
+      WHERE vs.video_id IN (${ph})`, ids);
+    const out = {};
+    rows.forEach(r => {
+      out[r.video_id] = { id: r.id, title: r.title, artist: r.artist, audio_url: r.audio_url, username: r.username || null, display_name: r.display_name || null };
+    });
+    return { data: out, error: null };
+  }));
+
+  app.post("/api/video-sounds", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const videoId = String(req.body?.videoId || "").trim();
+    const soundId = req.body?.soundId ? String(req.body.soundId).trim() : null;
+    if (!videoId) throw new HttpError(400, "Missing video.");
+    const v = (await run("SELECT 1 FROM videos WHERE id = ? AND user_id = ?", [videoId, uid]))[0];
+    if (!v) throw new HttpError(403, "You can only attach sounds to your own videos.");
+    if (!soundId) {
+      await db.execute({ sql: "DELETE FROM video_sounds WHERE video_id = ? AND user_id = ?", args: [videoId, uid] });
+      return { data: { videoId, soundId: null }, error: null };
+    }
+    const s = (await run("SELECT id, title, artist, audio_url FROM sounds WHERE id = ?", [soundId]))[0];
+    if (!s) throw new HttpError(404, "Selected sound not found.");
+    await db.execute({
+      sql: "INSERT INTO video_sounds (video_id, user_id, sound_id, created_at) VALUES (?,?,?,?) ON CONFLICT(video_id) DO UPDATE SET sound_id=excluded.sound_id, created_at=excluded.created_at",
+      args: [videoId, uid, soundId, nowIso()]
+    });
+    return { data: { videoId, soundId, sound: s }, error: null };
   }));
 
   /* ---------- custom + built-in stickers (with AI safety check) ---------- */
@@ -492,11 +535,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
           }
           currentGroup = gid;
           const r = getRoom(gid);
+          // Replace any stale socket for same user
           if (r.peers.has(uid)) r.peers.delete(uid);
           const existing = [...r.peers.keys()].filter(k => k !== uid);
           r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
           sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
           broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
+          // If DM call and this is the first person, ring the other friend if they're online on /ws
           if (gid.startsWith("dm:") && existing.length === 0) {
             const parts = gid.slice(3).split(":");
             const other = parts[0] === uid ? parts[1] : parts[0];
@@ -857,7 +902,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       await db.batch([
         { sql: "DELETE FROM likes WHERE video_id = ?", args: [v.id] },
         { sql: "DELETE FROM comments WHERE video_id = ?", args: [v.id] },
-        { sql: "DELETE FROM video_views WHERE video_id = ?", args: [v.id] }
+        { sql: "DELETE FROM video_views WHERE video_id = ?", args: [v.id] },
+        { sql: "DELETE FROM video_sounds WHERE video_id = ?", args: [v.id] }
       ], "write");
     }
     const userTickets = await run("SELECT id FROM support_tickets WHERE user_id = ?", [uid]);
@@ -878,6 +924,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       { sql: "DELETE FROM login_alerts WHERE user_id = ?", args: [uid] },
       { sql: "DELETE FROM stories WHERE user_id = ?", args: [uid] },
       { sql: "DELETE FROM sounds WHERE user_id = ?", args: [uid] },
+      { sql: "DELETE FROM video_sounds WHERE user_id = ?", args: [uid] },
       { sql: "DELETE FROM support_replies WHERE user_id = ?", args: [uid] },
       { sql: "DELETE FROM support_tickets WHERE user_id = ?", args: [uid] },
       { sql: "DELETE FROM profiles WHERE id = ?", args: [uid] },
@@ -946,7 +993,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const v = (await run("SELECT id, title, storage_path FROM videos WHERE id = ?", [String(req.body?.videoId || "")]))[0];
     if (!v) throw new HttpError(404, "Video not found");
     await db.batch([{ sql: "DELETE FROM likes WHERE video_id = ?", args: [v.id] }, { sql: "DELETE FROM comments WHERE video_id = ?", args: [v.id] },
-      { sql: "DELETE FROM video_views WHERE video_id = ?", args: [v.id] }, { sql: "DELETE FROM videos WHERE id = ?", args: [v.id] }], "write");
+      { sql: "DELETE FROM video_views WHERE video_id = ?", args: [v.id] }, { sql: "DELETE FROM video_sounds WHERE video_id = ?", args: [v.id] }, { sql: "DELETE FROM videos WHERE id = ?", args: [v.id] }], "write");
     if (v.storage_path && removeFromR2) await removeFromR2([`videos/${v.storage_path}`]);
     await log(me, "delete_video", `"${v.title}"`);
     return { data: true, error: null };

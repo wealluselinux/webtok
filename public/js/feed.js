@@ -1,4 +1,4 @@
-/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, share to Web Tok AI / friends / groups */
+/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, attached sounds, share to Web Tok AI / friends / groups */
 let obs, muted = true;
 const AI_BOT_ID = "00000000-0000-0000-0000-000000000002";
 
@@ -27,13 +27,17 @@ async function listVideos() {
   const userIds = [...new Set(vids.map(v => v.user_id))];
   const vidIds = vids.map(v => v.id);
 
-  const [profRes, likeRes, cmtRes] = await Promise.all([
+  const [profRes, likeRes, cmtRes, soundRes] = await Promise.all([
     sb.from("profiles").select("id, username, display_name").in("id", userIds),
     sb.from("likes").select("video_id, user_id").in("video_id", vidIds),
-    sb.from("comments").select("video_id").in("video_id", vidIds)
+    sb.from("comments").select("video_id").in("video_id", vidIds),
+    fetch("/api/video-sounds?ids=" + encodeURIComponent(vidIds.slice(0, 50).join(",")))
+      .then(r => r.json())
+      .catch(() => ({ data: {} }))
   ]);
 
   const profMap = Object.fromEntries((profRes.data || []).map(p => [p.id, p]));
+  const soundMap = soundRes?.data || {};
   const likeCounts = {}, likedSet = new Set(), cmtCounts = {};
   (likeRes.data || []).forEach(l => {
     likeCounts[l.video_id] = (likeCounts[l.video_id] || 0) + 1;
@@ -50,6 +54,7 @@ async function listVideos() {
     src: v.video_url,
     orientation: v.orientation || null,
     hashtags: v.hashtags || [],
+    sound: soundMap[v.id] || null,
     username: profMap[v.user_id]?.username || null,
     likesCount: likeCounts[v.id] || 0,
     commentsCount: cmtCounts[v.id] || 0,
@@ -59,7 +64,17 @@ async function listVideos() {
 
 function toggleFeedSound() {
   muted = !muted;
-  document.querySelectorAll("video").forEach(x => x.muted = muted);
+  document.querySelectorAll(".slide").forEach(sl => {
+    const vid = sl.querySelector("video");
+    const snd = sl.querySelector(".wt-vid-snd");
+    if (snd) {
+      if (vid) vid.muted = true;
+      snd.muted = muted;
+      if (!muted && vid && !vid.paused) snd.play().catch(() => {});
+    } else if (vid) {
+      vid.muted = muted;
+    }
+  });
   document.querySelectorAll('[data-a="sound"]').forEach(btn => {
     btn.querySelector("span").textContent = muted ? "volume_off" : "volume_up";
     btn.querySelector("small").textContent = muted ? "Muted" : "Sound";
@@ -190,9 +205,12 @@ function slide(v) {
   const s = document.createElement("section");
   s.className = "slide";
   s.dataset.vid = v.id;
+  if (v.sound?.title) s.dataset.soundTitle = v.sound.title;
   const by = v.username ? `<small><a href="/profile?u=${encodeURIComponent(v.username)}">@${escapeHtml(v.username)}</a></small>` : "";
   const orientClass = v.orientation === "landscape" || v.orientation === "square" ? " " + v.orientation : "";
+  const sndHtml = v.sound?.audio_url ? `<audio class="wt-vid-snd" loop preload="none" src="${escapeHtml(v.sound.audio_url)}"></audio>` : "";
   s.innerHTML = `<div class="player${orientClass}"><video loop playsinline muted preload="none"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
+    ${sndHtml}
     <div class="vid-seek-wrap">
       <input type="range" class="vid-seek" min="0" max="1000" value="0" aria-label="Seek video">
       <span class="vid-time">0:00 / 0:00</span>
@@ -208,6 +226,7 @@ function slide(v) {
     </div>`;
   const player = s.querySelector(".player");
   const vid = s.querySelector("video");
+  const sndEl = s.querySelector(".wt-vid-snd");
   const seek = s.querySelector(".vid-seek");
   const timeEl = s.querySelector(".vid-time");
   let scrubbing = false;
@@ -220,6 +239,17 @@ function slide(v) {
     }
     timeEl.textContent = `${fmtVidTime(vid.currentTime)} / ${fmtVidTime(vid.duration)}`;
   };
+  vid.onplay = () => {
+    if (sndEl) {
+      vid.muted = true;
+      sndEl.muted = muted;
+      if (isFinite(sndEl.duration) && sndEl.duration > 0) sndEl.currentTime = vid.currentTime % sndEl.duration;
+      sndEl.play().catch(() => {});
+    }
+  };
+  vid.onpause = () => {
+    if (sndEl) sndEl.pause();
+  };
   vid.ontimeupdate = () => {
     if (scrubbing || !isFinite(vid.duration) || vid.duration <= 0) return;
     seek.value = Math.round((vid.currentTime / vid.duration) * 1000);
@@ -230,6 +260,7 @@ function slide(v) {
     if (isFinite(vid.duration) && vid.duration > 0) {
       const target = (seek.value / 1000) * vid.duration;
       vid.currentTime = target;
+      if (sndEl && isFinite(sndEl.duration) && sndEl.duration > 0) sndEl.currentTime = target % sndEl.duration;
       timeEl.textContent = `${fmtVidTime(target)} / ${fmtVidTime(vid.duration)}`;
     }
   };
@@ -291,8 +322,24 @@ async function loadFeed() {
     feed.innerHTML = "";
     obs = new IntersectionObserver(es => es.forEach(e => {
       const v = e.target.querySelector("video");
-      if (e.isIntersecting) { if (!v.src && v.dataset.src) v.src = v.dataset.src; v.preload = "auto"; v.muted = muted; v.play().catch(() => {}); activeVid = e.target.dataset.vid; trackView(activeVid); }
-      else { v.pause(); v.currentTime = 0; }
+      const snd = e.target.querySelector(".wt-vid-snd");
+      if (e.isIntersecting) {
+        if (!v.src && v.dataset.src) v.src = v.dataset.src;
+        v.preload = "auto";
+        if (snd) {
+          v.muted = true;
+          snd.muted = muted;
+          v.play().then(() => { snd.play().catch(() => {}); }).catch(() => {});
+        } else {
+          v.muted = muted;
+          v.play().catch(() => {});
+        }
+        activeVid = e.target.dataset.vid;
+        trackView(activeVid);
+      } else {
+        v.pause(); v.currentTime = 0;
+        if (snd) { snd.pause(); snd.currentTime = 0; }
+      }
     }), { threshold: .7 });
     const near = new IntersectionObserver(es => es.forEach(e => {
       const v = e.target.querySelector("video");

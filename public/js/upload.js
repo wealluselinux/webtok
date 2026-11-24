@@ -1,6 +1,6 @@
-/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check) */
+/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check + sound picker) */
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
-let upQueue = [], uploadUIReady = false;
+let upQueue = [], uploadUIReady = false, uploadedSounds = [], upPreviewAudio = null, upPreviewIdx = -1;
 const _parseTags = s => typeof parseTags === "function"
   ? parseTags(s)
   : [...new Set(String(s || "").toLowerCase().match(/[a-z0-9_]{1,30}/g) || [])];
@@ -24,6 +24,36 @@ function setStatusBar(phase, pct, etaText) {
 function hideStatusBar() {
   const wrap = $("upBarWrap");
   if (wrap) wrap.classList.add("hidden");
+}
+
+function stopSoundPreview() {
+  if (upPreviewAudio) {
+    upPreviewAudio.pause();
+    upPreviewAudio.src = "";
+  }
+  upPreviewIdx = -1;
+  document.querySelectorAll(".up-snd-prev").forEach(b => {
+    b.innerHTML = '<span class="ms" style="font-size:16px">play_arrow</span>Preview';
+  });
+}
+
+async function loadUploadSounds() {
+  try {
+    const r = await fetch("/api/sounds");
+    const j = await r.json();
+    uploadedSounds = Array.isArray(j?.data) ? j.data : [];
+  } catch {
+    uploadedSounds = [];
+  }
+  if ($("uploadDlg")?.open) renderUpQueue();
+}
+
+function soundSelectHtml(selectedId) {
+  const opts = uploadedSounds.map(s => {
+    const label = `${s.title}${s.artist && s.artist !== "Original sound" ? " — " + s.artist : ""} (@${s.username || "user"})`;
+    return `<option value="${escapeHtml(s.id)}" ${s.id === selectedId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+  }).join("");
+  return `<option value="">Original video audio (no added sound)</option>${opts ? `<optgroup label="Uploaded Sounds">${opts}</optgroup>` : ""}`;
 }
 
 function captureVideoFrame(url) {
@@ -107,8 +137,13 @@ function initFullUploadUI() {
     .up-fields{flex:1;min-width:220px;display:flex;flex-direction:column;gap:10px}
     .up-meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);gap:8px}
     .up-orients{display:flex;gap:6px;flex-wrap:wrap}
-    .up-or{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);color:var(--text)}
+    .up-or{padding:7px 14px;border-radius:999px;font-size:12px;font-weight:600;background:var(--card);color:var(--text);display:inline-flex;align-items:center;gap:4px}
     .up-or.on{background:var(--primary);color:var(--on-primary)}
+    .up-snd-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .up-snd{flex:1;min-width:190px;padding:9px 14px;border-radius:999px;border:0;background:var(--bg);color:var(--text);font:inherit;font-size:13px;outline:0}
+    .up-snd-prev:disabled{opacity:.45;cursor:default}
+    .up-snd-link{font-size:12px;font-weight:700;color:var(--primary);text-decoration:none;white-space:nowrap}
+    .up-snd-link:hover{text-decoration:underline}
   `;
   document.head.appendChild(style);
 
@@ -139,11 +174,12 @@ function initFullUploadUI() {
       <div class="up-list" id="upQueue"></div>
     </div>`;
 
-  $("upClose").onclick = () => dlg.close();
+  dlg.addEventListener("close", stopSoundPreview);
+  $("upClose").onclick = () => { stopSoundPreview(); dlg.close(); };
   $("upFile").onchange = e => {
     [...(e.target.files || [])].forEach(file => {
       const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-      const item = { file, title: defTitle, orientation: "portrait", status: "Ready", url: URL.createObjectURL(file) };
+      const item = { file, title: defTitle, orientation: "portrait", soundId: "", status: "Ready", url: URL.createObjectURL(file) };
       const probe = document.createElement("video");
       probe.preload = "metadata";
       probe.src = item.url;
@@ -168,6 +204,7 @@ function renderUpQueue() {
     card.className = "up-card";
     const mb = (item.file.size / (1024 * 1024)).toFixed(1);
     const over = item.file.size > MAX_INPUT_BYTES;
+    const isPlaying = upPreviewIdx === idx && upPreviewAudio && !upPreviewAudio.paused;
     card.innerHTML = `
       <video class="up-prev" src="${item.url}" muted playsinline></video>
       <div class="up-fields">
@@ -182,19 +219,53 @@ function renderUpQueue() {
           <button type="button" class="up-or ${item.orientation === "landscape" ? "on" : ""}" data-o="landscape">Landscape (16:9)</button>
           <button type="button" class="up-or ${item.orientation === "square" ? "on" : ""}" data-o="square">Square (1:1)</button>
         </div>
+        <div class="up-snd-row">
+          <select class="up-snd" aria-label="Choose a sound">${soundSelectHtml(item.soundId || "")}</select>
+          <button type="button" class="up-or up-snd-prev" ${item.soundId ? "" : "disabled"}><span class="ms" style="font-size:16px">${isPlaying ? "stop" : "play_arrow"}</span>${isPlaying ? "Stop" : "Preview"}</button>
+          <a href="/sounds" target="_blank" class="up-snd-link">+ Upload sound</a>
+        </div>
       </div>
       <button type="button" class="btn icon" title="Remove">✕</button>`;
     card.querySelector("input").oninput = e => { item.title = e.target.value; };
     card.querySelector(".up-tags").oninput = e => { item.tags = e.target.value; };
-    card.querySelectorAll(".up-or").forEach(b => {
+    card.querySelectorAll(".up-or[data-o]").forEach(b => {
       b.onclick = () => { item.orientation = b.dataset.o; renderUpQueue(); };
     });
-    card.querySelector(".btn.icon").onclick = () => { upQueue.splice(idx, 1); renderUpQueue(); };
+    const sndSel = card.querySelector(".up-snd");
+    const prevBtn = card.querySelector(".up-snd-prev");
+    sndSel.onchange = () => {
+      item.soundId = sndSel.value;
+      if (upPreviewIdx === idx) stopSoundPreview();
+      prevBtn.disabled = !item.soundId;
+    };
+    prevBtn.onclick = () => {
+      if (upPreviewIdx === idx && upPreviewAudio && !upPreviewAudio.paused) {
+        stopSoundPreview();
+        return;
+      }
+      const snd = uploadedSounds.find(s => s.id === item.soundId);
+      if (!snd) return;
+      stopSoundPreview();
+      if (!upPreviewAudio) {
+        upPreviewAudio = new Audio();
+        upPreviewAudio.onended = stopSoundPreview;
+      }
+      upPreviewAudio.src = snd.audio_url;
+      upPreviewIdx = idx;
+      prevBtn.innerHTML = '<span class="ms" style="font-size:16px">stop</span>Stop';
+      upPreviewAudio.play().catch(() => stopSoundPreview());
+    };
+    card.querySelector(".btn.icon").onclick = () => {
+      if (upPreviewIdx === idx) stopSoundPreview();
+      upQueue.splice(idx, 1);
+      renderUpQueue();
+    };
     q.appendChild(card);
   });
 }
 
 async function submitBatchUpload() {
+  stopSoundPreview();
   const valid = upQueue.filter(it => it.file.size <= MAX_INPUT_BYTES);
   if (!valid.length) {
     $("upHint").textContent = upQueue.length ? "All selected videos exceed 100 MB." : "Pick one or more video files first.";
@@ -241,13 +312,23 @@ async function submitBatchUpload() {
         const chkJ = await chkR.json().catch(() => ({}));
         if (!chkR.ok || chkJ.error) throw new Error(chkJ.error?.message || "Blocked by safety filter.");
         setSt("Saving…");
-        let { error: dbErr } = await sb.from("videos").insert({
+        setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
+        let insRes = await sb.from("videos").insert({
           user_id: user.id, title, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
-        });
-        if (dbErr && /orientation/i.test(dbErr.message)) {
-          dbErr = (await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath, hashtags: tags })).error;
+        }).select("id").single();
+        if (insRes.error && /orientation/i.test(insRes.error.message)) {
+          insRes = await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath, hashtags: tags }).select("id").single();
         }
-        if (dbErr) throw dbErr;
+        if (insRes.error) throw insRes.error;
+        if (item.soundId && insRes.data?.id) {
+          const sr = await fetch("/api/video-sounds", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+            body: JSON.stringify({ videoId: insRes.data.id, soundId: item.soundId })
+          });
+          const sj = await sr.json().catch(() => ({}));
+          if (!sr.ok || sj.error) throw new Error(sj.error?.message || "Could not attach sound.");
+        }
         setSt("Done");
         okCount++;
       } catch (err) {
@@ -277,11 +358,13 @@ async function submitBatchUpload() {
 $("openUpload").onclick = () => requireLogin(() => {
   initFullUploadUI();
   hideStatusBar();
+  stopSoundPreview();
   upQueue = [];
   $("upFile").value = "";
   $("upHint").textContent = "";
   $("upHint").className = "hint";
   $("upSubmit").disabled = false;
   renderUpQueue();
+  loadUploadSounds();
   $("uploadDlg").showModal();
 });
