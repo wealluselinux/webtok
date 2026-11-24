@@ -16,8 +16,65 @@ const CHAT_MODELS = [
 ];
 const VISION_MODELS = ["meta/llama-3.2-11b-vision-instruct", "nvidia/nemotron-3.5-super-vl-120b-a12b"];
 
+function escHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildEmailHtml({ title, bannerBg = "#d0bcff", bannerFg = "#1d192b", greeting = "Hi there!", intro = "", pillText = "", details = [], noteText = "", ctaLabel = "", ctaUrl = "" }) {
+  const baseUrl = (process.env.RENDER_EXTERNAL_URL || "https://webtok.onrender.com").replace(/\/+$/, "");
+  const logoUrl = `${baseUrl}/images/logo.png`;
+  const supportUrl = `${baseUrl}/support`;
+  const detailRows = (details || []).filter(Boolean).map(([k, v]) =>
+    `<tr><td style="padding:6px 0;color:#625b71;font-size:13px;width:90px;vertical-align:top;"><strong>${escHtml(k)}</strong></td><td style="padding:6px 0;color:#1d192b;font-size:13px;word-break:break-word;">${escHtml(v)}</td></tr>`
+  ).join("");
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f0f8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1d192b;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f0f8;padding:28px 14px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;">
+        <tr><td align="center" style="padding:0 0 18px;">
+          <a href="${baseUrl}" style="text-decoration:none;display:inline-flex;align-items:center;gap:10px;color:#1d192b;">
+            <img src="${logoUrl}" alt="Web Tok" width="32" height="32" style="display:inline-block;vertical-align:middle;border-radius:10px;border:0;">
+            <span style="font-size:22px;font-weight:800;letter-spacing:-0.4px;vertical-align:middle;color:#6750a4;">Web Tok</span>
+          </a>
+        </td></tr>
+        <tr><td style="background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 6px 24px rgba(29,25,43,0.08);">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+            <tr><td align="center" style="background:${bannerBg};padding:34px 24px;">
+              <h1 style="margin:0;font-size:30px;line-height:1.2;font-weight:800;color:${bannerFg};letter-spacing:-0.5px;">${escHtml(title)}</h1>
+            </td></tr>
+            <tr><td style="padding:32px 32px 28px;">
+              <p style="margin:0 0 14px;font-size:18px;font-weight:700;color:#1d192b;">${escHtml(greeting)}</p>
+              <p style="margin:0 0 22px;font-size:15px;line-height:1.55;color:#3b3548;">${escHtml(intro)}</p>
+              ${pillText ? `<div style="text-align:center;margin:24px 0;">
+                <span style="display:inline-block;background:${bannerBg};color:${bannerFg};font-size:24px;font-weight:800;letter-spacing:4px;padding:13px 32px;border-radius:999px;">${escHtml(pillText)}</span>
+              </div>` : ""}
+              ${detailRows ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f1fc;border-radius:16px;padding:14px 18px;margin:0 0 20px;">${detailRows}</table>` : ""}
+              ${ctaLabel && ctaUrl ? `<div style="text-align:center;margin:22px 0;">
+                <a href="${escHtml(ctaUrl)}" style="display:inline-block;background:#6750a4;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;">${escHtml(ctaLabel)}</a>
+              </div>` : ""}
+              <p style="margin:20px 0 0;font-size:13px;line-height:1.55;color:#625b71;font-style:italic;">
+                ${escHtml(noteText || "If you didn't request this or have any questions, please")} <a href="${supportUrl}" style="color:#6750a4;text-decoration:underline;">contact support</a>.
+              </p>
+              <p style="margin:26px 0 0;text-align:center;font-size:15px;font-weight:700;color:#6750a4;">The Web Tok Team</p>
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td align="center" style="padding:18px 12px 0;font-size:12px;color:#625b71;">
+          <a href="${baseUrl}" style="color:#625b71;text-decoration:none;margin:0 8px;">Web Tok</a> ·
+          <a href="${supportUrl}" style="color:#625b71;text-decoration:none;margin:0 8px;">Support</a> ·
+          <a href="${baseUrl}/terms" style="color:#625b71;text-decoration:none;margin:0 8px;">Terms</a> ·
+          <a href="${baseUrl}/privacy" style="color:#625b71;text-decoration:none;margin:0 8px;">Privacy</a>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
 /* Multi-provider mailer: Brevo HTTPS API -> Resend HTTPS API -> SMTP over TLS (Gmail / AOL / custom) */
-async function sendMail({ to, subject, text }) {
+async function sendMail({ to, subject, text, html }) {
   const safeTo = String(to || "").replace(/[\r\n<>]+/g, "").trim();
   if (!safeTo || !safeTo.includes("@") || safeTo.endsWith(".system")) {
     return { sent: false, skipped: true };
@@ -27,15 +84,17 @@ async function sendMail({ to, subject, text }) {
 
   const brevoKey = (process.env.BREVO_API_KEY || "").trim();
   if (brevoKey && fromAddr) {
+    const payload = {
+      sender: { name: "Web Tok", email: fromAddr },
+      to: [{ email: safeTo }],
+      subject: safeSub,
+      textContent: String(text || "")
+    };
+    if (html) payload.htmlContent = String(html);
     const r = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",
       headers: { "Content-Type": "application/json", "api-key": brevoKey },
-      body: JSON.stringify({
-        sender: { name: "Web Tok Mailer", email: fromAddr },
-        to: [{ email: safeTo }],
-        subject: safeSub,
-        textContent: String(text || "")
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000)
     });
     if (!r.ok) throw new Error(`Brevo ${r.status}: ${await r.text()}`);
@@ -44,15 +103,17 @@ async function sendMail({ to, subject, text }) {
 
   const resendKey = (process.env.RESEND_API_KEY || "").trim();
   if (resendKey) {
+    const payload = {
+      from: fromAddr ? `Web Tok <${fromAddr}>` : "Web Tok <onboarding@resend.dev>",
+      to: [safeTo],
+      subject: safeSub,
+      text: String(text || "")
+    };
+    if (html) payload.html = String(html);
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${resendKey}` },
-      body: JSON.stringify({
-        from: fromAddr ? `Web Tok Mailer <${fromAddr}>` : "Web Tok Mailer <onboarding@resend.dev>",
-        to: [safeTo],
-        subject: safeSub,
-        text: String(text || "")
-      }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000)
     });
     if (!r.ok) throw new Error(`Resend ${r.status}: ${await r.text()}`);
@@ -112,6 +173,7 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
   const checkerKey = () => (process.env.WEBTOK_CHECKER || process.env.WEB_TALK_CHECKER || "").trim();
   const adminFormKey = () => (process.env.AI_ADMINFROM_CHECKER || process.env.WEBYOK_AI || process.env.WEBTOK_AI || process.env.WEB_TALK_AI || "").trim();
   app.locals.sendMail = sendMail;
+  app.locals.buildEmailHtml = buildEmailHtml;
   app.locals.isMailerConfigured = () => {
     const fromAddr = (process.env.MAIL_FROM || process.env.MAIL_USER || process.env.AOL_MAIL_USER || "").trim();
     if ((process.env.BREVO_API_KEY || "").trim() && fromAddr) return true;
@@ -390,10 +452,25 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
     }).catch(() => {});
 
     if (appUser.email) {
+      const baseUrl = (process.env.RENDER_EXTERNAL_URL || "https://webtok.onrender.com").replace(/\/+$/, "");
+      const html = buildEmailHtml({
+        title: decision === "approved" ? "Admin Application Approved" : "Admin Application Update",
+        bannerBg: decision === "approved" ? "#c8f0d4" : "#ffd8d4",
+        bannerFg: decision === "approved" ? "#103b20" : "#5c1410",
+        greeting: `Hi @${appUser.username || "user"}!`,
+        intro: decision === "approved"
+          ? "Congratulations! Your Web Tok Admin application was approved by the owner. You now have access to the Admin panel."
+          : "Your Web Tok Admin application was reviewed by the owner and was not approved at this time.",
+        details: decision === "denied" ? [["Reason", denyReason]] : [["Role", "Admin"]],
+        noteText: "Questions about this decision? You can reach out anytime and",
+        ctaLabel: decision === "approved" ? "Open Admin Panel" : "Back to Web Tok",
+        ctaUrl: decision === "approved" ? `${baseUrl}/admin` : `${baseUrl}/scroll`
+      });
       sendMail({
         to: appUser.email,
         subject: decision === "approved" ? "Web Tok Admin Application Approved" : "Web Tok Admin Application Update",
-        text: `Hi @${appUser.username || "user"},\n\n${msg}\n\n— Web Tok`
+        text: `Hi @${appUser.username || "user"},\n\n${msg}\n\n— Web Tok`,
+        html
       }).catch(e => console.warn("Mailer error:", e.message));
     }
 

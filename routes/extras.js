@@ -129,6 +129,22 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       if (!isSignup && app.locals.sendMail) {
         const uRow = (await run("SELECT u.email, p.username FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]))[0];
         if (uRow?.email) {
+          const baseUrl = (process.env.RENDER_EXTERNAL_URL || "https://webtok.onrender.com").replace(/\/+$/, "");
+          const html = app.locals.buildEmailHtml ? app.locals.buildEmailHtml({
+            title: isNewDevice ? "New Device Sign-In" : "New Sign-In",
+            bannerBg: "#d0bcff",
+            bannerFg: "#1d192b",
+            greeting: `Hi @${uRow.username || "user"}!`,
+            intro: "Someone just signed into your Web Tok account. Here are the sign-in details:",
+            details: [
+              ["Time", new Date(ts).toUTCString()],
+              ["Device", ua],
+              ["IP", ip || "Unknown"]
+            ],
+            noteText: "If this was you, you can safely ignore this email. If you didn't sign in, sign out all devices and",
+            ctaLabel: "Open Web Tok",
+            ctaUrl: `${baseUrl}/profile`
+          }) : undefined;
           app.locals.sendMail({
             to: uRow.email,
             subject: isNewDevice ? "New device sign-in to your Web Tok account" : "New sign-in to your Web Tok account",
@@ -143,7 +159,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
               `If this was you, you can ignore this email. If not, open Web Tok and sign out all devices or change your password right away.`,
               ``,
               `— Web Tok Security`
-            ].join("\n")
+            ].join("\n"),
+            html
           }).catch(e => console.warn("Login alert email error:", e.message));
         }
       }
@@ -171,10 +188,20 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
             ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0, created_at=excluded.created_at`,
       args: [em, verifHash(em, code), exp, ts]
     });
+    const html = app.locals.buildEmailHtml ? app.locals.buildEmailHtml({
+      title: "Verification Code",
+      bannerBg: "#d0bcff",
+      bannerFg: "#1d192b",
+      greeting: "Hi there!",
+      intro: "To finish creating your Web Tok account, enter the following verification code:",
+      pillText: code,
+      noteText: "For your protection, never share this code with anyone. It expires in 15 minutes. If you didn't request this code, please"
+    }) : undefined;
     await app.locals.sendMail({
       to: em,
-      subject: "Your Web Tok verification code",
-      text: `Your Web Tok signup verification code is: ${code}\n\nThis code expires in 15 minutes. If you didn't request this, you can ignore this email.\n\n— Web Tok`
+      subject: `Your Web Tok verification code is ${code}`,
+      text: `Your Web Tok verification code is ${code}\n\nThis code expires in 15 minutes. For your protection, never share this code with anyone.\n\n— The Web Tok Team`,
+      html
     });
     return { data: { sent: true, required: true }, error: null };
   }));
