@@ -8,6 +8,14 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
 <link rel="stylesheet" href="/css/base.css">
 <link rel="stylesheet" href="/css/landing.css">
+<style>
+.home-stats{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.stat-pill{display:inline-flex;align-items:center;gap:7px;padding:8px 14px;border-radius:999px;background:var(--card);color:var(--text);font-size:13px;font-weight:600;box-shadow:0 3px 10px #0001}
+.stat-pill .ms{font-size:17px;color:var(--primary)}
+.stat-pill strong{font-weight:800;color:var(--primary)}
+.stat-pill .live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e33;flex:none}
+@media(max-width:900px){.home-stats{justify-content:center}}
+</style>
 </head>
 <body data-page="landing">
 <div id="wp-layer"></div>
@@ -47,6 +55,10 @@
         <span><span class="ms">toll</span>Tok Coins &amp; Shop</span>
         <span><span class="ms">chat</span>Friends &amp; DMs</span>
         <span><span class="ms">palette</span>Material You</span>
+      </div>
+      <div class="home-stats" id="wtHomeStats" aria-label="Community stats">
+        <div class="stat-pill"><span class="ms">group</span><strong id="stTotal">—</strong> users</div>
+        <div class="stat-pill"><span class="live-dot"></span><strong id="stOnline">—</strong> online now</div>
       </div>
     </div>
 

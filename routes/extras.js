@@ -18,6 +18,7 @@ const bcrypt = require("bcryptjs");
 const { WebSocketServer } = require("ws");
 
 const NOTIF_ID = "00000000-0000-0000-0000-000000000001";
+const AI_ID = "00000000-0000-0000-0000-000000000002";
 
 module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError, limit, weakPassword, nowIso, removeFromR2 }) {
   const SECRET = process.env.JWT_SECRET;
@@ -141,6 +142,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       if (st.banned) return deny(res, 403, "This account has been suspended." + (st.reason ? " Reason: " + st.reason : ""));
       if (tok.iat < Math.floor(st.after / 1000)) return deny(res, 401, "Session expired. Please sign in again.");
       req.wt = { uid: tok.sub, ...st };
+      if (req.path !== "/presence/offline") touchPresence(tok.sub);
       const body = req.body || {};
       let need = null;
       if (req.method === "POST" && req.path === "/db" && (body.op === "insert" || body.op === "upsert")) need = { comments: "comment", messages: "message", videos: "post" }[body.table] || null;
@@ -436,8 +438,52 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const from = String(req.body?.from || "");
     if (!from) throw new HttpError(400, "Missing sender");
-    await db.execute({ sql: "UPDATE messages SET read_at = ? WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL", args: [nowIso(), uid, from] });
+    const rs = await db.execute({ sql: "UPDATE messages SET read_at = ? WHERE recipient_id = ? AND sender_id = ? AND read_at IS NULL", args: [nowIso(), uid, from] });
+    if (rs.rowsAffected > 0) {
+      const row = (await run("SELECT MAX(id) AS last_read_id FROM messages WHERE sender_id = ? AND recipient_id = ? AND read_at IS NOT NULL", [from, uid]))[0];
+      const lastReadId = Number(row?.last_read_id || 0);
+      const socks = userSockets.get(from);
+      if (socks) {
+        for (const sws of socks) sendWs(sws, { type: "dm-read", by: uid, lastReadId });
+      }
+    }
     return { data: true, error: null };
+  }));
+  app.get("/api/messages/read-status", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const other = String(req.query.with || "").trim();
+    if (!other) throw new HttpError(400, "Missing user");
+    const row = (await run("SELECT MAX(id) AS last_read_id FROM messages WHERE sender_id = ? AND recipient_id = ? AND read_at IS NOT NULL", [uid, other]))[0];
+    return { data: { lastReadId: Number(row?.last_read_id || 0) }, error: null };
+  }));
+  app.post("/api/presence/ping", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    touchPresence(uid);
+    return { data: { ok: true }, error: null };
+  }));
+  app.post("/api/presence/offline", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    lastSeenByUid.delete(uid);
+    return { data: { ok: true }, error: null };
+  }));
+  app.get("/api/presence", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const ids = String(req.query.ids || "").split(",").map(s => s.trim()).filter(Boolean).slice(0, 100);
+    const online = {};
+    ids.forEach(id => { online[id] = isUserOnline(id); });
+    return { data: { online }, error: null };
+  }));
+  app.get("/api/stats/users", wrap(async () => {
+    const row = (await run("SELECT COUNT(*) n FROM users WHERE role != 'system'"))[0];
+    const onlineSet = new Set();
+    const now = Date.now();
+    for (const [id, socks] of userSockets) {
+      if (socks && socks.size > 0 && id !== NOTIF_ID && id !== AI_ID) onlineSet.add(id);
+    }
+    for (const [id, ts] of lastSeenByUid) {
+      if ((now - ts) < PRESENCE_TTL_MS && id !== NOTIF_ID && id !== AI_ID) onlineSet.add(id);
+    }
+    return { data: { totalUsers: Number(row?.n || 0), onlineUsers: onlineSet.size }, error: null };
   }));
   app.delete("/api/messages/with/:id", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
@@ -473,6 +519,18 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   /* ---------- Group & DM Call / Watch / Whiteboard rooms (WebSocket) ---------- */
   const rooms = new Map();
   const userSockets = new Map();
+  const lastSeenByUid = new Map();
+  const PRESENCE_TTL_MS = 90000;
+  function touchPresence(uid) {
+    if (uid && uid !== NOTIF_ID && uid !== AI_ID) lastSeenByUid.set(uid, Date.now());
+  }
+  function isUserOnline(uid) {
+    if (!uid || uid === NOTIF_ID || uid === AI_ID) return false;
+    const socks = userSockets.get(uid);
+    if (socks && socks.size > 0) return true;
+    const t = lastSeenByUid.get(uid) || 0;
+    return (Date.now() - t) < PRESENCE_TTL_MS;
+  }
   function getRoom(gid) {
     let r = rooms.get(gid);
     if (!r) {
@@ -521,10 +579,12 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
 
       if (!userSockets.has(uid)) userSockets.set(uid, new Set());
       userSockets.get(uid).add(ws);
+      touchPresence(uid);
 
       const prof = (await run("SELECT id, username, display_name, avatar_url FROM profiles WHERE id = ?", [uid]))[0] || { id: uid, username: "user", display_name: "User", avatar_url: null };
 
       ws.on("message", async raw => {
+        touchPresence(uid);
         let msg; try { msg = JSON.parse(String(raw)); } catch { return; }
         const type = msg.type;
         if (type === "join-call") {
@@ -753,7 +813,19 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       const maxId = rows[rows.length - 1].id;
       await db.execute({ sql: "UPDATE group_members SET last_read_id = MAX(last_read_id, ?) WHERE group_id = ? AND user_id = ?", args: [maxId, gid, uid] });
     }
+    const memberReads = await run("SELECT user_id, last_read_id FROM group_members WHERE group_id = ? AND status = 'accepted'", [gid]);
+    for (const r of rows) {
+      r.read_count = memberReads.filter(m => m.user_id !== r.sender_id && Number(m.last_read_id || 0) >= Number(r.id)).length;
+    }
     return { data: rows, error: null };
+  }));
+
+  app.get("/api/groups/:id/reads", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const gid = String(req.params.id || "");
+    await requireMember(gid, uid);
+    const memberReads = await run("SELECT user_id, last_read_id FROM group_members WHERE group_id = ? AND status = 'accepted'", [gid]);
+    return { data: { memberReads }, error: null };
   }));
 
   app.post("/api/groups/:id/messages", wrap(async req => {
@@ -772,6 +844,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         p.username, p.display_name, p.avatar_url
       FROM group_messages m LEFT JOIN profiles p ON p.id = m.sender_id
       WHERE m.id = ?`, [msgId]))[0];
+    const memberReads = await run("SELECT user_id, last_read_id FROM group_members WHERE group_id = ? AND status = 'accepted'", [gid]);
+    row.read_count = memberReads.filter(m => m.user_id !== row.sender_id && Number(m.last_read_id || 0) >= Number(row.id)).length;
     return { data: row, error: null };
   }));
 

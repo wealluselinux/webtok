@@ -201,6 +201,8 @@ async function handleWs(m){
   } else if(m.type==="wb-stroke"){
     if(callState.activity!=="whiteboard"){callState.activity="whiteboard";renderCallUI();}
     drawStroke(m);
+  } else if(m.type==="dm-read"){
+    if(typeof window.wtOnDmRead==="function") window.wtOnDmRead(m);
   } else if(m.type==="wb-clear"){
     const c=$("wbCanvas"); if(c) c.getContext("2d").clearRect(0,0,c.width,c.height);
   } else if(m.type==="error" && m.message){

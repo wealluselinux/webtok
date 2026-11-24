@@ -32,6 +32,17 @@
     emit(session ? "SIGNED_IN" : (was ? "SIGNED_OUT" : "INITIAL_SESSION"));
   });
 
+  async function pingPresence() {
+    if (document.hidden) return;
+    try {
+      const t = await token();
+      if (t) fetch("/api/presence/ping", { method: "POST", headers: { Authorization: "Bearer " + t }, keepalive: true }).catch(() => {});
+    } catch {}
+  }
+  setTimeout(pingPresence, 300);
+  setInterval(pingPresence, 45000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pingPresence(); });
+
   const auth = {
     async getSession() { return { data: { session: await fresh() }, error: null }; },
     async getUser() { const s = await fresh(); return { data: { user: s ? s.user : null }, error: null }; },
@@ -39,12 +50,14 @@
       const r = await post("/api/auth/login", { email, password });
       if (!r.ok) return { data: { user: null, session: null }, error: errOf(r) };
       save(r.json.data.session); emit("SIGNED_IN");
+      pingPresence();
       return { data: { user: session.user, session }, error: null };
     },
     async signUp({ email, password, options = {} }) {
       const r = await post("/api/auth/signup", { email, password, data: options.data || {} });
       if (!r.ok) return { data: { user: null, session: null }, error: errOf(r) };
       save(r.json.data.session); emit("SIGNED_IN");
+      pingPresence();
       return { data: { user: session.user, session }, error: null };
     },
     async refreshSession(arg) {
@@ -55,7 +68,12 @@
       save(r.json.data.session); emit(changed ? "SIGNED_IN" : "TOKEN_REFRESHED");
       return { data: { user: session.user, session }, error: null };
     },
-    async signOut() { save(null); emit("SIGNED_OUT"); return { error: null }; },
+    async signOut() {
+      const t = session && session.access_token;
+      if (t) fetch("/api/presence/offline", { method: "POST", headers: { Authorization: "Bearer " + t }, keepalive: true }).catch(() => {});
+      save(null); emit("SIGNED_OUT");
+      return { error: null };
+    },
     onAuthStateChange(cb) {
       listeners.push(cb);
       setTimeout(() => { try { cb("INITIAL_SESSION", session); } catch (e) { console.error(e); } }, 0);

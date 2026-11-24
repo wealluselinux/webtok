@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id), sb=supabase.createClient(WT_CONFIG.SUPA
 const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const NOTIF_BOT={id:"00000000-0000-0000-0000-000000000001",username:"notifications",display_name:"Notifications",isNotif:true};
 const AI_BOT={id:"00000000-0000-0000-0000-000000000002",username:"webtok_ai",display_name:"Web Tok AI",isAi:true};
-let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, hasNotifs=false, activeTab="all", groupPoll=null, lastGroupMsgId=0;
+let me=null, token=null, cur=null, curType=null, friends=[], groups=[], invites=[], unreadBySender={}, hasNotifs=false, activeTab="all", groupPoll=null, dmPoll=null, lastGroupMsgId=0, dmLastReadId=0, onlineByUid={};
 const avStyle=p=>p&&p.avatar_url?`style="background-image:url(${esc(p.avatar_url)})"`:"";
 const dmRoomId=(a,b)=>"dm:"+[String(a),String(b)].sort().join(":");
 
@@ -53,12 +53,68 @@ function bubble(m, showSender=false){
   else if(s){d.classList.add("stk");d.appendChild(stickerEl(s[1]))}
   else d.textContent=m.body;
   wrap.appendChild(d);
+  if(m.sender_id===me && cur && !cur.isAi && !cur.isNotif){
+    const rc=document.createElement("div");
+    rc.className="m-receipt";
+    if(curType==="dm"){
+      rc.textContent=(m.id!=null && Number(m.id)<=dmLastReadId)?"Seen":"Sent";
+    } else if(curType==="group"){
+      const cnt=Number(m.read_count||0);
+      rc.textContent=cnt>0?`Read by ${cnt}`:"Sent";
+    }
+    wrap.appendChild(rc);
+  }
   $("msgs").appendChild(wrap);
   $("msgs").scrollTop=1e9;
   return wrap;
 }
 
-function stopGroupPoll(){if(groupPoll){clearInterval(groupPoll);groupPoll=null;}}
+function updateDmReceipts(lastReadId){
+  dmLastReadId=Math.max(dmLastReadId,Number(lastReadId||0));
+  $("msgs")?.querySelectorAll(".m-wrap.me[data-mid]").forEach(w=>{
+    if(Number(w.dataset.mid)<=dmLastReadId){
+      const rc=w.querySelector(".m-receipt");
+      if(rc) rc.textContent="Seen";
+    }
+  });
+}
+window.wtOnDmRead=msg=>{if(curType==="dm"&&cur&&msg?.by===cur.id)updateDmReceipts(msg.lastReadId);};
+
+function updateGroupReceipts(memberReads){
+  $("msgs")?.querySelectorAll(".m-wrap.me[data-mid]").forEach(w=>{
+    const mid=Number(w.dataset.mid);
+    const cnt=(memberReads||[]).filter(r=>r.user_id!==me && Number(r.last_read_id||0)>=mid).length;
+    const rc=w.querySelector(".m-receipt");
+    if(rc) rc.textContent=cnt>0?`Read by ${cnt}`:"Sent";
+  });
+}
+
+async function refreshPresence(){
+  const ids=friends.map(f=>f.id);
+  if(!ids.length || !token) return;
+  try{
+    const res=await api(`/api/presence?ids=${encodeURIComponent(ids.join(","))}`);
+    onlineByUid=res?.online||{};
+    document.querySelectorAll('#fl .fr[data-id]').forEach(row=>{
+      const fid=row.dataset.id, isOn=!!onlineByUid[fid];
+      const dot=row.querySelector(".on-dot");
+      if(dot){dot.classList.toggle("on",isOn);dot.title=isOn?"Online":"Offline";}
+      const sub=row.querySelector(".fr-sub");
+      const f=friends.find(x=>x.id===fid);
+      if(sub && f) sub.textContent=`@${f.username} · ${isOn?"Online":"Offline"}`;
+    });
+    if(curType==="dm" && cur && !cur.isAi && !cur.isNotif){
+      const hs=$("headStatus");
+      if(hs){
+        const isOn=!!onlineByUid[cur.id];
+        hs.className="st-pill"+(isOn?" on":"");
+        hs.innerHTML=`<i class="st-dot"></i>${isOn?"Online":"Offline"}`;
+      }
+    }
+  }catch{}
+}
+
+function stopGroupPoll(){if(groupPoll){clearInterval(groupPoll);groupPoll=null;}if(dmPoll){clearInterval(dmPoll);dmPoll=null;}}
 function makeStickerBlob(file){
   return new Promise((resolve,reject)=>{
     const u=URL.createObjectURL(file), img=new Image();
@@ -123,18 +179,21 @@ async function openChat(f){
     :f.isNotif
     ?'<div class="av ai"><span class="ms">notifications</span></div>'
     :`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div>`;
-  const subText=`@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":f.isNotif?" · Official Announcements":""}`;
+  const isOn=isFriend && !!onlineByUid[f.id];
+  const subHtml=isFriend
+    ?`@${esc(f.username)} · <span id="headStatus" class="st-pill${isOn?" on":""}"><i class="st-dot"></i>${isOn?"Online":"Offline"}</span>`
+    :`@${esc(f.username)}${f.isAi?" · Powered by NVIDIA NIM":f.isNotif?" · Official Announcements":""}`;
   const callActions=isFriend
     ?`<button type="button" class="head-chip p" id="btnCall"><span class="ms" style="font-size:16px">call</span>Call</button><button type="button" class="head-chip" id="btnMicTest" title="Test microphone"><span class="ms" style="font-size:16px">mic</span>Test Mic</button>`
     :"";
   const bottomHtml=f.isNotif
     ?'<div style="padding:12px 16px;text-align:center;font-size:12px;color:var(--muted);border-top:1px solid var(--surface)">Official Web Tok announcements (read-only)</div>'
     :`<div id="stkPanel" class="hidden"></div><form id="form"><input id="txt" maxlength="1000" placeholder="${f.isAi?"Ask Web Tok AI anything or share a video…":"Message…"}" autocomplete="off"><button type="button" id="stkBtn" aria-label="Stickers"><span class="ms">emoji_emotions</span></button><button aria-label="Send"><span class="ms">send</span></button></form>`;
-  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div style="font-size:12px;color:var(--muted);font-weight:500">${subText}</div></div><div class="head-actions">${callActions}<button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
+  $("chat").innerHTML=`<div id="head"><button id="back" aria-label="Back"><span class="ms">arrow_back</span></button>${avHtml}<div><div>${esc(f.display_name||f.username)}</div><div class="head-sub">${subHtml}</div></div><div class="head-actions">${callActions}<button type="button" class="head-chip" id="btnClearChat" title="Clear chat"><span class="ms" style="font-size:16px">delete_sweep</span>Clear</button></div></div>
   <div id="callBar" class="hidden"></div>
   <div id="msgs"><div class="m3-loader"><div class="m3-wave"><svg viewBox="0 0 160 14" fill="none"><path d="M0 7 Q10 1 20 7 T40 7 T60 7 T80 7 T100 7 T120 7 T140 7 T160 7" stroke="var(--primary)" stroke-width="3.2" stroke-linecap="round"/></svg></div></div></div>
   ${bottomHtml}`;
-  $("back").onclick=()=>{document.body.classList.remove("chatting");cur=null;curType=null};
+  $("back").onclick=()=>{stopGroupPoll();document.body.classList.remove("chatting");cur=null;curType=null};
   if(isFriend){
     const rid=dmRoomId(me,f.id);
     $("btnCall").onclick=()=>{if(callGroupId===rid)leaveCall();else joinCall(rid);};
@@ -158,7 +217,12 @@ async function openChat(f){
       renderSidebarList();
     }catch(err){await wtAlert({title:"Couldn't clear chat",message:err.message});}
   };
-  const {data}=await sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300);
+  dmLastReadId=0;
+  const [{data}, rsData]=await Promise.all([
+    sb.from("messages").select("*").or(`and(sender_id.eq.${me},recipient_id.eq.${f.id}),and(sender_id.eq.${f.id},recipient_id.eq.${me})`).order("created_at").limit(300),
+    isFriend?api(`/api/messages/read-status?with=${encodeURIComponent(f.id)}`).catch(()=>null):Promise.resolve(null)
+  ]);
+  if(rsData?.lastReadId) dmLastReadId=Number(rsData.lastReadId);
   $("msgs").innerHTML="";
   if(f.isAi && !(data||[]).length){
     $("msgs").innerHTML='<div class="empty">Hi! Ask me anything or share a Web Tok video to ask what it\'s about.</div>';
@@ -166,7 +230,17 @@ async function openChat(f){
     $("msgs").innerHTML='<div class="empty">No announcements right now.</div>';
   }
   (data||[]).forEach(m=>bubble(m,false));
-  if(window.wtMarkRead)wtMarkRead(f.id);
+  if(window.wtMarkRead) wtMarkRead(f.id);
+  else if(isFriend) api("/api/messages/read",{method:"POST",body:JSON.stringify({from:f.id})}).catch(()=>{});
+  if(isFriend){
+    dmPoll=setInterval(async()=>{
+      if(curType!=="dm"||!cur||cur.id!==f.id||document.hidden)return;
+      try{
+        const rs=await api(`/api/messages/read-status?with=${encodeURIComponent(f.id)}`);
+        if(rs?.lastReadId) updateDmReceipts(rs.lastReadId);
+      }catch{}
+    },3000);
+  }
 
   async function send(body){
     if(f.isAi){
@@ -256,13 +330,17 @@ async function openGroupChat(g){
   $("txt").focus();
 
   groupPoll=setInterval(async()=>{
-    if(curType!=="group"||!cur||cur.id!==g.id)return;
+    if(curType!=="group"||!cur||cur.id!==g.id||document.hidden)return;
     try{
-      const newer=await api(`/api/groups/${encodeURIComponent(g.id)}/messages?after=${lastGroupMsgId}`);
+      const [newer,reads]=await Promise.all([
+        api(`/api/groups/${encodeURIComponent(g.id)}/messages?after=${lastGroupMsgId}`),
+        api(`/api/groups/${encodeURIComponent(g.id)}/reads`).catch(()=>null)
+      ]);
       if(newer.length){
         const em=$("msgs").querySelector(".empty"); if(em) em.remove();
         newer.forEach(m=>{if(m.id>lastGroupMsgId){bubble(m,true);lastGroupMsgId=m.id}});
       }
+      if(reads?.memberReads) updateGroupReceipts(reads.memberReads);
     }catch{}
   },3000);
 }
@@ -368,7 +446,8 @@ function renderSidebarList(){
         const e=document.createElement("div");
         e.className="fr"+(curType==="dm"&&cur?.id===f.id?" on":"")+(unreadBySender[f.id]?" unread":"");
         e.dataset.id=f.id;
-        e.innerHTML=`<div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><div class="fr-meta"><div class="fr-name">${esc(f.display_name||f.username)}</div><div class="fr-sub">@${esc(f.username)}</div></div><i class="dot"></i>`;
+        const isOn=!!onlineByUid[f.id];
+        e.innerHTML=`<div class="av-wrap"><div class="av" ${avStyle(f)}>${f.avatar_url?"":esc((f.display_name||f.username||"?")[0].toUpperCase())}</div><i class="on-dot${isOn?" on":""}" title="${isOn?"Online":"Offline"}"></i></div><div class="fr-meta"><div class="fr-name">${esc(f.display_name||f.username)}</div><div class="fr-sub">@${esc(f.username)} · ${isOn?"Online":"Offline"}</div></div><i class="dot"></i>`;
         e.onclick=()=>openChat(f);
         fl.appendChild(e);
       });
@@ -443,8 +522,9 @@ async function loadGroupsAndInvites(){
     const {data:nMsgs}=await sb.from("messages").select("id").or(`and(sender_id.eq.${me},recipient_id.eq.${NOTIF_BOT.id}),and(sender_id.eq.${NOTIF_BOT.id},recipient_id.eq.${me})`).limit(1);
     hasNotifs=!!(nMsgs&&nMsgs.length)||!!unreadBySender[NOTIF_BOT.id];
   }catch{}
-  await loadGroupsAndInvites();
+  await Promise.all([loadGroupsAndInvites(), refreshPresence()]);
   setInterval(loadGroupsAndInvites,12000);
+  setInterval(()=>{if(!document.hidden)refreshPresence();},10000);
   addEventListener("hashchange",()=>{
     const w=location.hash.slice(1);
     if(w===AI_BOT.id) openChat(AI_BOT);
@@ -458,7 +538,7 @@ async function loadGroupsAndInvites(){
   sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
     const m=p.new;
     if(m.sender_id===NOTIF_BOT.id) hasNotifs=true;
-    if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id)}
+    if(curType==="dm"&&cur&&cur.id===m.sender_id){bubble(m,false);if(window.wtMarkRead)wtMarkRead(m.sender_id);else api("/api/messages/read",{method:"POST",body:JSON.stringify({from:m.sender_id})}).catch(()=>{});}
     else{unreadBySender[m.sender_id]=1;renderSidebarList()}
   }).subscribe();
 })();
