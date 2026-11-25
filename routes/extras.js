@@ -673,32 +673,111 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   /* ---------- Webify (Spotify-style music & playlist player: Web Tok Sounds + External Discover) ---------- */
-  app.get("/api/webify/discover", limit(40, 600000), wrap(async req => {
-    const q = String(req.query.q || "").trim().slice(0, 80) || "top hits";
+  let spTokenCache = { token: "", exp: 0 };
+  async function getSpotifyToken() {
+    const cid = (process.env.SPOTIFY_CLIENT_ID || "").trim();
+    const sec = (process.env.SPOTIFY_CLIENT_SECRET || "").trim();
+    if (!cid || !sec) return "";
+    if (spTokenCache.token && spTokenCache.exp > Date.now() + 15000) return spTokenCache.token;
     try {
+      const r = await fetch("https://accounts.spotify.com/api/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Basic " + Buffer.from(`${cid}:${sec}`).toString("base64")
+        },
+        body: "grant_type=client_credentials"
+      });
+      if (!r.ok) return "";
+      const j = await r.json();
+      if (j.access_token) {
+        spTokenCache = { token: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
+        return spTokenCache.token;
+      }
+    } catch {}
+    return "";
+  }
+
+  app.get("/api/webify/discover", limit(60, 600000), wrap(async req => {
+    const q = String(req.query.q || "").trim().slice(0, 80) || "top hits";
+    const fetchJson = async (url, opts = {}) => {
       const ac = new AbortController();
       const tm = setTimeout(() => ac.abort(), 5000);
-      const url = `https://itunes.apple.com/search?media=music&entity=song&limit=24&term=${encodeURIComponent(q)}`;
-      const r = await fetch(url, { signal: ac.signal });
-      clearTimeout(tm);
-      if (!r.ok) return { data: [], error: null };
-      const j = await r.json();
-      const tracks = (Array.isArray(j?.results) ? j.results : [])
-        .filter(x => x.previewUrl)
-        .map(x => ({
-          id: "ext_" + String(x.trackId || crypto.randomUUID()),
-          source: "discover",
-          sound_id: null,
-          title: String(x.trackName || "Untitled").slice(0, 80),
-          artist: String(x.artistName || "Unknown Artist").slice(0, 60),
-          album: String(x.collectionName || "").slice(0, 80),
-          audio_url: x.previewUrl,
-          cover_url: String(x.artworkUrl100 || "").replace("100x100", "300x300") || null
-        }));
-      return { data: tracks, error: null };
-    } catch {
-      return { data: [], error: null };
-    }
+      try {
+        const r = await fetch(url, { ...opts, signal: ac.signal });
+        clearTimeout(tm);
+        return r.ok ? await r.json() : null;
+      } catch {
+        clearTimeout(tm);
+        return null;
+      }
+    };
+
+    const spTok = await getSpotifyToken();
+    const [itJson, dzJson, spJson] = await Promise.all([
+      fetchJson(`https://itunes.apple.com/search?media=music&entity=song&limit=40&term=${encodeURIComponent(q)}`),
+      fetchJson(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=35`),
+      spTok ? fetchJson(`https://api.spotify.com/v1/search?type=track&limit=25&q=${encodeURIComponent(q)}`, {
+        headers: { Authorization: "Bearer " + spTok }
+      }) : Promise.resolve(null)
+    ]);
+
+    const seen = new Set();
+    const out = [];
+    const pushTrack = t => {
+      if (!t || !t.audio_url) return;
+      const key = `${t.title.toLowerCase().trim()}|${t.artist.toLowerCase().trim()}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(t);
+    };
+
+    (Array.isArray(spJson?.tracks?.items) ? spJson.tracks.items : []).forEach(x => {
+      if (!x.preview_url) return;
+      pushTrack({
+        id: "sp_" + String(x.id || crypto.randomUUID()),
+        source: "discover",
+        provider: "Spotify",
+        sound_id: null,
+        title: String(x.name || "Untitled").slice(0, 80),
+        artist: String((x.artists || []).map(a => a.name).join(", ") || "Unknown Artist").slice(0, 60),
+        album: String(x.album?.name || "").slice(0, 80),
+        audio_url: x.preview_url,
+        cover_url: x.album?.images?.[0]?.url || null
+      });
+    });
+
+    (Array.isArray(dzJson?.data) ? dzJson.data : []).forEach(x => {
+      if (!x.preview) return;
+      pushTrack({
+        id: "dz_" + String(x.id || crypto.randomUUID()),
+        source: "discover",
+        provider: "Deezer",
+        sound_id: null,
+        title: String(x.title || "Untitled").slice(0, 80),
+        artist: String(x.artist?.name || "Unknown Artist").slice(0, 60),
+        album: String(x.album?.title || "").slice(0, 80),
+        audio_url: x.preview,
+        cover_url: x.album?.cover_medium || x.album?.cover || null
+      });
+    });
+
+    (Array.isArray(itJson?.results) ? itJson.results : []).forEach(x => {
+      if (!x.previewUrl) return;
+      pushTrack({
+        id: "it_" + String(x.trackId || crypto.randomUUID()),
+        source: "discover",
+        provider: "iTunes",
+        sound_id: null,
+        title: String(x.trackName || "Untitled").slice(0, 80),
+        artist: String(x.artistName || "Unknown Artist").slice(0, 60),
+        album: String(x.collectionName || "").slice(0, 80),
+        audio_url: x.previewUrl,
+        cover_url: String(x.artworkUrl100 || "").replace("100x100", "300x300") || null
+      });
+    });
+
+    return { data: out, error: null };
   }));
 
   app.get("/api/webify/playlists", wrap(async req => {
