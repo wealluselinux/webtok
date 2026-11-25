@@ -127,6 +127,7 @@
       buildToggleRow("st-gen-vid-loop", "Loop videos", "Replay videos automatically when they finish", p.vidLoop !== false, v => persistPrefs({ vidLoop: v })),
       buildToggleRow("st-gen-vid-sound", "Start videos with sound", "Unmute feed videos automatically when supported by your browser", p.vidStartUnmuted === true, v => persistPrefs({ vidStartUnmuted: v })),
       buildToggleRow("st-gen-vid-caps", "Show captions & hashtags", "Display video titles, creator handle, and hashtags over videos", p.vidShowCaptions !== false, v => persistPrefs({ vidShowCaptions: v })),
+      buildToggleRow("st-gen-auto-tags", "Auto-generate hashtags on upload", "Automatically suggest hashtags from your video title when uploading", p.autoHashtags !== false, v => persistPrefs({ autoHashtags: v })),
       buildSelectRow("st-gen-vid-fit", "Video framing", "Choose whether videos fit inside or fill the player", p.vidFit || "default", [["default", "Default"], ["contain", "Fit (no crop)"], ["cover", "Fill screen"]], v => persistPrefs({ vidFit: v }))
     );
     const lastVidRow = vidCard.querySelector(".wt-gen-row:last-child");
@@ -257,6 +258,7 @@
     syncChk("st-gen-vid-loop", t.vidLoop !== false);
     syncChk("st-gen-vid-sound", t.vidStartUnmuted === true);
     syncChk("st-gen-vid-caps", t.vidShowCaptions !== false);
+    syncChk("st-gen-auto-tags", t.autoHashtags !== false);
     syncChk("st-gen-ring", t.callRingtone !== false);
     syncChk("st-gen-motion", t.reduceMotion === true);
     syncChk("st-gen-compact", t.compactControls === true);

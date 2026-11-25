@@ -1,4 +1,4 @@
-/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, attached sounds, share to Web Tok AI / friends / groups */
+/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, attached sounds, descriptions/captions, share */
 function getFeedPrefs() { try { return JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { return {}; } }
 let obs, muted = getFeedPrefs().vidStartUnmuted === true ? false : true;
 const AI_BOT_ID = "00000000-0000-0000-0000-000000000002";
@@ -13,7 +13,7 @@ async function listVideos() {
   if (!sb) return [];
   let { data: vids, error } = await sb
     .from("videos")
-    .select("id, user_id, title, video_url, orientation, created_at")
+    .select("id, user_id, title, description, captions, video_url, orientation, created_at")
     .order("created_at", { ascending: false });
   if (error) {
     const res = await sb
@@ -52,6 +52,8 @@ async function listVideos() {
     id: v.id,
     user_id: v.user_id,
     name: v.title,
+    description: v.description || "",
+    captions: v.captions || "",
     src: v.video_url,
     orientation: v.orientation || null,
     hashtags: v.hashtags || [],
@@ -270,6 +272,20 @@ function slide(v) {
   seek.onchange = () => { scrubbing = false; };
 
   s.querySelector(".cap-t").textContent = v.name;
+  if (v.description) {
+    const descEl = document.createElement("div");
+    descEl.className = "cap-desc";
+    descEl.style.cssText = "font-size:13px;opacity:.92;margin-top:3px;line-height:1.35;max-width:74ch;white-space:pre-line";
+    descEl.textContent = v.description;
+    s.querySelector(".cap").appendChild(descEl);
+  }
+  if (v.captions) {
+    const ccEl = document.createElement("div");
+    ccEl.className = "wt-vid-cc";
+    ccEl.style.cssText = "position:absolute;left:50%;bottom:84px;transform:translateX(-50%);z-index:4;background:rgba(0,0,0,.72);color:#fff;padding:6px 14px;border-radius:12px;font-size:13px;font-weight:600;max-width:min(86%,420px);text-align:center;line-height:1.35;pointer-events:none";
+    ccEl.textContent = v.captions;
+    player.appendChild(ccEl);
+  }
   if ((v.hashtags || []).length) {
     const tg = document.createElement("div");
     tg.className = "cap-tags";

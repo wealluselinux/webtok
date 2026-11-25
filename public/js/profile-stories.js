@@ -1,4 +1,4 @@
-/* Profile page: 24-hour Stories strip (moved from main feed to user profile) */
+/* Profile page: 24-hour Stories strip + Full-screen post-style Story Viewer */
 (function initProfileStories() {
   const st = document.createElement("style");
   st.textContent = `
@@ -13,8 +13,33 @@
     .st-ring.add{background:var(--surface)}
     .st-in{width:100%;height:100%;clip-path:var(--m3-cookie-7);background:var(--surface) center/cover;display:grid;place-items:center;font-weight:700;font-size:18px;color:var(--primary)}
     .st-lbl{font-size:11px;font-weight:600;max-width:64px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #wt-story-dlg{border:0;border-radius:var(--r-xl,32px);padding:22px;width:min(94vw,420px);background:var(--bg);color:var(--text);margin:auto;box-shadow:0 16px 48px #0005}
-    #wt-story-dlg::backdrop{background:#0007;backdrop-filter:blur(4px)}
+
+    /* Full-screen post-style story viewer */
+    #wt-story-dlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;padding:0;border:0;border-radius:0;background:#000;color:#fff;overflow:hidden}
+    #wt-story-dlg[open]{display:flex;flex-direction:column}
+    .stv-progress{position:absolute;top:10px;left:12px;right:12px;z-index:20;display:flex;gap:4px}
+    .stv-seg{flex:1;height:3px;border-radius:999px;background:rgba(255,255,255,.28);overflow:hidden}
+    .stv-seg.done{background:#fff}
+    .stv-seg.active{background:rgba(255,255,255,.92)}
+    .stv-top{position:absolute;top:22px;left:14px;right:14px;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:10px;pointer-events:none}
+    .stv-top>*{pointer-events:auto}
+    .stv-author{display:flex;align-items:center;gap:10px;min-width:0;text-decoration:none;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.65)}
+    .stv-av{width:38px;height:38px;clip-path:var(--m3-cookie-7);background:var(--primary);color:var(--on-primary);display:grid;place-items:center;font-weight:700;font-size:15px;background-size:cover;background-position:center;flex-shrink:0}
+    .stv-meta{min-width:0}
+    .stv-meta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .stv-meta small{display:block;font-size:12px;opacity:.82}
+    .stv-acts{display:flex;align-items:center;gap:6px}
+    .stv-btn{border:0;border-radius:999px;background:rgba(0,0,0,.48);color:#fff;backdrop-filter:blur(8px);padding:8px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+    .stv-btn.ic{width:38px;height:38px;padding:0;justify-content:center}
+    .stv-stage{position:relative;flex:1;width:100%;height:100%;display:grid;place-items:center;background:#000}
+    .stv-stage img,.stv-stage video{width:100%;height:100%;object-fit:contain;max-height:100dvh;max-width:100vw}
+    .stv-nav{position:absolute;top:76px;bottom:110px;width:24%;z-index:10;background:none;border:0;cursor:pointer;display:flex;align-items:center;padding:12px;color:rgba(255,255,255,.7);opacity:0;transition:opacity .15s}
+    .stv-stage:hover .stv-nav{opacity:1}
+    .stv-nav.prev{left:0;justify-content:flex-start}
+    .stv-nav.next{right:0;justify-content:flex-end}
+    .stv-bottom{position:absolute;left:0;right:0;bottom:0;z-index:20;padding:42px 20px 24px;background:linear-gradient(transparent,rgba(0,0,0,.84));pointer-events:none}
+    .stv-cap{font-size:15px;line-height:1.4;max-width:680px;text-shadow:0 2px 8px rgba(0,0,0,.7)}
+    .stv-sub{font-size:12px;opacity:.75;margin-top:6px}
   `;
   document.head.appendChild(st);
 
@@ -23,17 +48,36 @@
     vDlg = document.createElement("dialog");
     vDlg.id = "wt-story-dlg";
     vDlg.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px">
-        <b id="stViewerUser">Story</b>
-        <div style="display:flex;gap:6px;align-items:center">
-          <button type="button" class="btn sm hidden" id="stViewerDel" style="color:var(--bad)"><span class="ms" style="font-size:16px">delete</span>Delete</button>
-          <button type="button" class="btn icon" aria-label="Close" onclick="this.closest('dialog').close()"><span class="ms">close</span></button>
+      <div class="stv-progress" id="stViewerProg"></div>
+      <div class="stv-top">
+        <div class="stv-author">
+          <div class="stv-av" id="stViewerAv"></div>
+          <div class="stv-meta">
+            <b id="stViewerUser">Story</b>
+            <small id="stViewerTime"></small>
+          </div>
+        </div>
+        <div class="stv-acts">
+          <button type="button" class="stv-btn hidden" id="stViewerDel" style="background:rgba(198,40,40,.85)"><span class="ms" style="font-size:16px">delete</span>Delete</button>
+          <button type="button" class="stv-btn ic" id="stViewerClose" aria-label="Close"><span class="ms">close</span></button>
         </div>
       </div>
-      <div id="stViewerBody" style="border-radius:24px;overflow:hidden;background:#000;max-height:60dvh;display:grid;place-items:center"></div>
-      <div id="stViewerCap" style="margin-top:10px;font-size:13px;color:var(--muted)"></div>
+      <div class="stv-stage">
+        <button type="button" class="stv-nav prev" id="stViewerPrev" aria-label="Previous story"><span class="ms" style="font-size:32px">chevron_left</span></button>
+        <div id="stViewerBody" style="width:100%;height:100%;display:grid;place-items:center"></div>
+        <button type="button" class="stv-nav next" id="stViewerNext" aria-label="Next story"><span class="ms" style="font-size:32px">chevron_right</span></button>
+      </div>
+      <div class="stv-bottom">
+        <div class="stv-cap" id="stViewerCap"></div>
+        <div class="stv-sub" id="stViewerCount"></div>
+      </div>
     `;
     document.body.appendChild(vDlg);
+    document.getElementById("stViewerClose").onclick = () => vDlg.close();
+    vDlg.addEventListener("close", () => {
+      const vid = vDlg.querySelector("video");
+      if (vid) vid.pause();
+    });
   }
 
   function ensureSection() {
@@ -48,6 +92,12 @@
     if (wrap && tabs) wrap.insertBefore(sec, tabs);
     else if (wrap) wrap.appendChild(sec);
     return sec;
+  }
+
+  function relTime(iso) {
+    const mins = Math.max(1, Math.floor((Date.now() - Date.parse(iso || Date.now())) / 60000));
+    if (mins < 60) return `${mins}m ago`;
+    return `${Math.floor(mins / 60)}h ago`;
   }
 
   window.loadProfileStories = async function () {
@@ -112,20 +162,29 @@
         sBar.appendChild(fin);
       }
 
-      rows.forEach((story, idx) => {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "st-pill";
-        const init = (story.display_name || story.username || profile?.username || "U")[0].toUpperCase();
-        const thumb = story.media_type === "image" ? story.media_url : (story.avatar_url || profile?.avatar_url || "");
-        const lbl = story.caption ? story.caption : `Story ${idx + 1}`;
-        b.innerHTML = `<div class="st-ring"><div class="st-in" style="${thumb ? `background-image:url(${thumb})` : ""}">${thumb ? "" : init}</div></div><span class="st-lbl">${escapeHtml(lbl)}</span>`;
-        b.onclick = () => {
-          document.getElementById("stViewerUser").textContent = "@" + (story.username || profile?.username || "user");
+      function openStoryAt(startIdx) {
+        let curIdx = Math.max(0, Math.min(startIdx, rows.length - 1));
+        const render = () => {
+          const story = rows[curIdx];
+          if (!story) return;
+          const uname = story.username || profile?.username || "user";
+          const dname = story.display_name || profile?.display_name || ("@" + uname);
+          const avUrl = story.avatar_url || profile?.avatar_url || "";
+          const avEl = document.getElementById("stViewerAv");
+          avEl.style.backgroundImage = avUrl ? `url(${avUrl})` : "";
+          avEl.textContent = avUrl ? "" : (dname[0] || "U").toUpperCase();
+          document.getElementById("stViewerUser").textContent = `${dname} (@${uname})`;
+          document.getElementById("stViewerTime").textContent = relTime(story.created_at);
           document.getElementById("stViewerCap").textContent = story.caption || "";
-          document.getElementById("stViewerBody").innerHTML = story.media_type === "video"
-            ? `<video src="${story.media_url}" controls autoplay playsinline style="max-height:58dvh;max-width:100%"></video>`
-            : `<img src="${story.media_url}" style="max-height:58dvh;max-width:100%;object-fit:contain">`;
+          document.getElementById("stViewerCount").textContent = rows.length > 1 ? `Story ${curIdx + 1} of ${rows.length}` : "24-hour Story";
+          document.getElementById("stViewerProg").innerHTML = rows.map((_, i) => `<div class="stv-seg ${i < curIdx ? "done" : i === curIdx ? "active" : ""}"></div>`).join("");
+          document.getElementById("stViewerPrev").style.visibility = curIdx > 0 ? "visible" : "hidden";
+          document.getElementById("stViewerNext").style.visibility = curIdx < rows.length - 1 ? "visible" : "hidden";
+
+          const body = document.getElementById("stViewerBody");
+          body.innerHTML = story.media_type === "video"
+            ? `<video src="${story.media_url}" controls autoplay playsinline loop></video>`
+            : `<img src="${story.media_url}" alt="Story">`;
 
           const delBtn = document.getElementById("stViewerDel");
           if (delBtn) {
@@ -146,8 +205,22 @@
               window.loadProfileStories();
             };
           }
-          vDlg.showModal();
         };
+        document.getElementById("stViewerPrev").onclick = () => { if (curIdx > 0) { curIdx--; render(); } };
+        document.getElementById("stViewerNext").onclick = () => { if (curIdx < rows.length - 1) { curIdx++; render(); } };
+        render();
+        vDlg.showModal();
+      }
+
+      rows.forEach((story, idx) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "st-pill";
+        const init = (story.display_name || story.username || profile?.username || "U")[0].toUpperCase();
+        const thumb = story.media_type === "image" ? story.media_url : (story.avatar_url || profile?.avatar_url || "");
+        const lbl = story.caption ? story.caption : `Story ${idx + 1}`;
+        b.innerHTML = `<div class="st-ring"><div class="st-in" style="${thumb ? `background-image:url(${thumb})` : ""}">${thumb ? "" : init}</div></div><span class="st-lbl">${escapeHtml(lbl)}</span>`;
+        b.onclick = () => openStoryAt(idx);
         sBar.appendChild(b);
       });
     } catch {}

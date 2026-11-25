@@ -1,4 +1,4 @@
-/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check + sound picker) */
+/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check + sound picker + auto hashtags + description/captions) */
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false, uploadedSounds = [], upPreviewAudio = null, upPreviewIdx = -1;
 const _parseTags = s => typeof parseTags === "function"
@@ -10,6 +10,50 @@ function fmtEta(sec) {
   if (sec < 60) return `~${sec}s left`;
   const m = Math.floor(sec / 60), s = sec % 60;
   return `~${m}m ${s}s left`;
+}
+
+function isAutoTagsOn() {
+  try { return JSON.parse(localStorage.getItem("wt_theme") || "{}").autoHashtags !== false; } catch { return true; }
+}
+function setAutoTagsPref(on) {
+  try {
+    const t = JSON.parse(localStorage.getItem("wt_theme") || "{}");
+    t.autoHashtags = !!on;
+    localStorage.setItem("wt_theme", JSON.stringify(t));
+    if (typeof window.saveTheme === "function") window.saveTheme({ autoHashtags: !!on }).catch(() => {});
+  } catch {}
+}
+function localQuickTags(title, desc) {
+  const stop = new Set(["the","and","for","with","this","that","from","your","you","are","was","were","have","has","had","not","but","out","all","just","like","into","about","video","clip","mp4","mov","webm","new","my","our"]);
+  const words = `${title || ""} ${desc || ""}`.toLowerCase().match(/[a-z0-9_]{3,20}/g) || [];
+  const uniq = [...new Set(words.filter(w => !stop.has(w) && !/^\d+$/.test(w)))].slice(0, 4);
+  if (!uniq.length) uniq.push("webtok", "fyp");
+  return uniq.map(w => "#" + w).join(" ");
+}
+async function generateTagsForItem(item, idx, force = false) {
+  if (!force && (!isAutoTagsOn() || item.manualTags)) return;
+  const quick = localQuickTags(item.title, item.description);
+  if (!item.tags || force) {
+    item.tags = quick;
+    const inp = document.querySelector(`.up-tags[data-idx="${idx}"]`);
+    if (inp) inp.value = item.tags;
+  }
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) return;
+    const r = await fetch("/api/ai/hashtags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ title: item.title || "", description: item.description || "" })
+    });
+    const j = await r.json().catch(() => ({}));
+    const arr = j?.data?.hashtags;
+    if (Array.isArray(arr) && arr.length && (force || (!item.manualTags && isAutoTagsOn()))) {
+      item.tags = arr.map(t => "#" + String(t).replace(/^#+/, "")).join(" ");
+      const inp = document.querySelector(`.up-tags[data-idx="${idx}"]`);
+      if (inp) inp.value = item.tags;
+    }
+  } catch {}
 }
 
 function setStatusBar(phase, pct, etaText) {
@@ -119,7 +163,7 @@ function initFullUploadUI() {
   style.textContent = `
     #uploadDlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);overflow:hidden}
     #uploadDlg[open]{display:flex;flex-direction:column}
-    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg)}
+    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg);gap:12px;flex-wrap:wrap}
     .up-top h2{font-size:22px;font-weight:700}
     .up-body{flex:1;overflow-y:auto;padding:24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px}
     .up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer;transition:transform .15s}
@@ -153,7 +197,10 @@ function initFullUploadUI() {
         <button type="button" class="btn icon" id="upClose">✕</button>
         <h2>Upload videos</h2>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;cursor:pointer;background:var(--surface);padding:6px 12px;border-radius:999px">
+          <input type="checkbox" id="upAutoTags" style="accent-color:var(--primary)">Auto hashtags
+        </label>
         <span class="hint" id="upHint" style="margin:0"></span>
         <button type="button" class="btn primary" id="upSubmit">Upload all</button>
       </div>
@@ -179,7 +226,8 @@ function initFullUploadUI() {
   $("upFile").onchange = e => {
     [...(e.target.files || [])].forEach(file => {
       const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-      const item = { file, title: defTitle, orientation: "portrait", soundId: "", status: "Ready", url: URL.createObjectURL(file) };
+      const item = { file, title: defTitle, description: "", captions: "", tags: "", manualTags: false, orientation: "portrait", soundId: "", status: "Ready", url: URL.createObjectURL(file) };
+      if (isAutoTagsOn()) item.tags = localQuickTags(defTitle, "");
       const probe = document.createElement("video");
       probe.preload = "metadata";
       probe.src = item.url;
@@ -189,6 +237,8 @@ function initFullUploadUI() {
         renderUpQueue();
       };
       upQueue.push(item);
+      const newIdx = upQueue.length - 1;
+      if (isAutoTagsOn()) setTimeout(() => generateTagsForItem(item, newIdx, false), 50);
     });
     renderUpQueue();
   };
@@ -212,8 +262,13 @@ function renderUpQueue() {
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
           <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
         </div>
-        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
-        <input type="text" class="up-tags" value="${escapeHtml(item.tags || "")}" placeholder="#hashtags (1 to 5, required)" maxlength="120" style="background:var(--bg)">
+        <input type="text" class="up-title" value="${escapeHtml(item.title)}" placeholder="Video name / title" maxlength="100" style="background:var(--bg)">
+        <textarea class="up-desc" rows="2" placeholder="Video bio / description (optional)" maxlength="300" style="background:var(--bg);border-radius:16px;padding:10px 14px;border:0;color:var(--text);font:inherit;font-size:13px;resize:vertical;outline:0">${escapeHtml(item.description || "")}</textarea>
+        <textarea class="up-caps" rows="2" placeholder="Captions / subtitles text (optional, shown on video)" maxlength="500" style="background:var(--bg);border-radius:16px;padding:10px 14px;border:0;color:var(--text);font:inherit;font-size:13px;resize:vertical;outline:0">${escapeHtml(item.captions || "")}</textarea>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" class="up-tags" data-idx="${idx}" value="${escapeHtml(item.tags || "")}" placeholder="#hashtags (1 to 5, required)" maxlength="120" style="background:var(--bg);flex:1">
+          <button type="button" class="up-or up-auto-btn" title="Auto-generate hashtags"><span class="ms" style="font-size:15px">auto_awesome</span>Auto</button>
+        </div>
         <div class="up-orients">
           <button type="button" class="up-or ${item.orientation === "portrait" ? "on" : ""}" data-o="portrait">Portrait (9:16)</button>
           <button type="button" class="up-or ${item.orientation === "landscape" ? "on" : ""}" data-o="landscape">Landscape (16:9)</button>
@@ -226,8 +281,18 @@ function renderUpQueue() {
         </div>
       </div>
       <button type="button" class="btn icon" title="Remove">✕</button>`;
-    card.querySelector("input").oninput = e => { item.title = e.target.value; };
-    card.querySelector(".up-tags").oninput = e => { item.tags = e.target.value; };
+    let tagTmr = null;
+    card.querySelector(".up-title").oninput = e => {
+      item.title = e.target.value;
+      if (isAutoTagsOn() && !item.manualTags) {
+        clearTimeout(tagTmr);
+        tagTmr = setTimeout(() => generateTagsForItem(item, idx, false), 550);
+      }
+    };
+    card.querySelector(".up-desc").oninput = e => { item.description = e.target.value; };
+    card.querySelector(".up-caps").oninput = e => { item.captions = e.target.value; };
+    card.querySelector(".up-tags").oninput = e => { item.tags = e.target.value; item.manualTags = !!e.target.value.trim(); };
+    card.querySelector(".up-auto-btn").onclick = () => { item.manualTags = false; generateTagsForItem(item, idx, true); };
     card.querySelectorAll(".up-or[data-o]").forEach(b => {
       b.onclick = () => { item.orientation = b.dataset.o; renderUpQueue(); };
     });
@@ -313,10 +378,12 @@ async function submitBatchUpload() {
         if (!chkR.ok || chkJ.error) throw new Error(chkJ.error?.message || "Blocked by safety filter.");
         setSt("Saving…");
         setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
+        const description = (item.description || "").trim().slice(0, 300) || null;
+        const captions = (item.captions || "").trim().slice(0, 500) || null;
         let insRes = await sb.from("videos").insert({
-          user_id: user.id, title, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
+          user_id: user.id, title, description, captions, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
         }).select("id").single();
-        if (insRes.error && /orientation/i.test(insRes.error.message)) {
+        if (insRes.error && /orientation|description|captions/i.test(insRes.error.message)) {
           insRes = await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath, hashtags: tags }).select("id").single();
         }
         if (insRes.error) throw insRes.error;
@@ -364,6 +431,10 @@ $("openUpload").onclick = () => requireLogin(() => {
   $("upHint").textContent = "";
   $("upHint").className = "hint";
   $("upSubmit").disabled = false;
+  if ($("upAutoTags")) {
+    $("upAutoTags").checked = isAutoTagsOn();
+    $("upAutoTags").onchange = e => setAutoTagsPref(e.target.checked);
+  }
   renderUpQueue();
   loadUploadSounds();
   $("uploadDlg").showModal();

@@ -39,6 +39,9 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     if (!ccols.includes("parent_id")) {
       await db.execute("ALTER TABLE comments ADD COLUMN parent_id TEXT");
     }
+    const vcols = (await db.execute("PRAGMA table_info(videos)")).rows.map(r => r[1]);
+    if (!vcols.includes("description")) await db.execute("ALTER TABLE videos ADD COLUMN description TEXT");
+    if (!vcols.includes("captions")) await db.execute("ALTER TABLE videos ADD COLUMN captions TEXT");
     const tcols = (await db.execute("PRAGMA table_info(support_tickets)")).rows.map(r => r[1]);
     if (tcols.length && !tcols.includes("contact_email")) {
       await db.execute("ALTER TABLE support_tickets ADD COLUMN contact_email TEXT");
@@ -310,6 +313,49 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   /* ---------- account credentials & verification ---------- */
+  app.post("/api/ai/hashtags", limit(30, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const title = String(req.body?.title || "").trim().slice(0, 120);
+    const desc = String(req.body?.description || "").trim().slice(0, 300);
+    const stop = new Set(["the","and","for","with","this","that","from","your","you","are","was","were","have","has","had","not","but","out","all","just","like","into","about","video","clip","mp4","mov","webm","new","my","our"]);
+    const fallbackTags = () => {
+      const words = `${title} ${desc}`.toLowerCase().match(/[a-z0-9_]{3,20}/g) || [];
+      const uniq = [...new Set(words.filter(w => !stop.has(w) && !/^\d+$/.test(w)))].slice(0, 4);
+      if (!uniq.length) uniq.push("webtok", "fyp");
+      else if (uniq.length < 2) uniq.push("webtok");
+      return uniq.slice(0, 5);
+    };
+    const key = process.env.NVIDIA_API_KEY || process.env.AI_ADMINFROM_CHECKER || "";
+    if (key && title) {
+      try {
+        const ac = new AbortController();
+        const tm = setTimeout(() => ac.abort(), 5000);
+        const r = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+          method: "POST",
+          signal: ac.signal,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body: JSON.stringify({
+            model: "meta/llama-3.1-8b-instruct",
+            max_tokens: 60,
+            temperature: 0.3,
+            messages: [
+              { role: "system", content: "Generate 3 to 4 short lowercase single-word hashtags (no #, comma-separated) for a short video based on its title and description. Output only the comma-separated words." },
+              { role: "user", content: `Title: ${title}${desc ? "\nDescription: " + desc : ""}` }
+            ]
+          })
+        });
+        clearTimeout(tm);
+        if (r.ok) {
+          const j = await r.json();
+          const raw = String(j?.choices?.[0]?.message?.content || "");
+          const tags = [...new Set(raw.toLowerCase().match(/[a-z0-9_]{2,24}/g) || [])].slice(0, 5);
+          if (tags.length) return { data: { hashtags: tags, source: "ai" }, error: null };
+        }
+      } catch {}
+    }
+    return { data: { hashtags: fallbackTags(), source: "keywords" }, error: null };
+  }));
+
   app.get("/api/account/theme", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const row = (await run("SELECT theme FROM profiles WHERE id = ?", [uid]))[0];
