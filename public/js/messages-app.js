@@ -525,16 +525,28 @@ async function loadGroupsAndInvites(){
   await Promise.all([loadGroupsAndInvites(), refreshPresence()]);
   setInterval(loadGroupsAndInvites,12000);
   setInterval(()=>{if(!document.hidden)refreshPresence();},10000);
-  addEventListener("hashchange",()=>{
+  async function handleHashRoute(){
     const w=location.hash.slice(1);
+    if(!w) return;
+    if(w.startsWith("call=")){
+      const gid=decodeURIComponent(w.slice(5));
+      if(gid.startsWith("dm:")){
+        const f=friends.find(x=>dmRoomId(me,x.id)===gid);
+        if(f && (!cur || curType!=="dm" || cur.id!==f.id)) await openChat(f);
+      } else {
+        const g=groups.find(x=>x.id===gid);
+        if(g && (!cur || curType!=="group" || cur.id!==g.id)) await openGroupChat(g);
+      }
+      if(typeof joinCall==="function" && (!window.wtInActiveCall || !window.wtInActiveCall())) joinCall(gid);
+      history.replaceState(null,"",location.pathname);
+      return;
+    }
     if(w===AI_BOT.id) openChat(AI_BOT);
     else if(w===NOTIF_BOT.id) openChat(NOTIF_BOT);
     else {const f=friends.find(x=>x.id===w);if(f)openChat(f);}
-  });
-  const want=location.hash.slice(1);
-  if(want===AI_BOT.id) openChat(AI_BOT);
-  else if(want===NOTIF_BOT.id) openChat(NOTIF_BOT);
-  else {const wf=friends.find(x=>x.id===want);if(wf)openChat(wf);}
+  }
+  addEventListener("hashchange",handleHashRoute);
+  await handleHashRoute();
   sb.channel("dm-"+me).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages",filter:`recipient_id=eq.${me}`},p=>{
     const m=p.new;
     if(m.sender_id===NOTIF_BOT.id) hasNotifs=true;

@@ -59,7 +59,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, media_url TEXT NOT NULL, media_type TEXT NOT NULL, caption TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS sounds (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, storage_path TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS video_sounds (video_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sound_id TEXT NOT NULL, created_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', contact_email TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
@@ -697,6 +697,22 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const participants = [...r.peers.values()].map(p => ({ uid: p.uid, username: p.username, display_name: p.display_name, avatar_url: p.avatar_url, muted: !!p.muted }));
     return { participants, activity: r.activity, watch: r.watch };
   }
+  async function notifyCallEnded(gid, exceptUid) {
+    try {
+      if (gid.startsWith("dm:")) {
+        const parts = gid.slice(3).split(":");
+        const other = parts[0] === exceptUid ? parts[1] : parts[0];
+        const socks = userSockets.get(other);
+        if (socks) for (const sws of socks) sendWs(sws, { type: "call-ended", groupId: gid });
+      } else {
+        const members = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [gid, exceptUid]);
+        for (const m of members) {
+          const socks = userSockets.get(m.user_id);
+          if (socks) for (const sws of socks) sendWs(sws, { type: "call-ended", groupId: gid });
+        }
+      }
+    } catch {}
+  }
   function removeUserFromRoom(gid, uid, extraMsg = null) {
     const r = rooms.get(gid);
     if (!r) return;
@@ -704,7 +720,10 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     if (p && extraMsg) sendWs(p.ws, extraMsg);
     r.peers.delete(uid);
     broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
-    if (!r.peers.size) rooms.delete(gid);
+    if (!r.peers.size) {
+      rooms.delete(gid);
+      notifyCallEnded(gid, uid);
+    }
   }
 
   if (server) {
@@ -744,13 +763,25 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
           r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
           sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
           broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
-          // If DM call and this is the first person, ring the other friend if they're online on /ws
-          if (gid.startsWith("dm:") && existing.length === 0) {
-            const parts = gid.slice(3).split(":");
-            const other = parts[0] === uid ? parts[1] : parts[0];
-            const socks = userSockets.get(other);
-            if (socks) {
-              for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url } });
+          // Ring the other DM friend or all online group members when starting a call
+          if (existing.length === 0) {
+            const caller = { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url };
+            if (gid.startsWith("dm:")) {
+              const parts = gid.slice(3).split(":");
+              const other = parts[0] === uid ? parts[1] : parts[0];
+              const socks = userSockets.get(other);
+              if (socks) {
+                for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: caller });
+              }
+            } else {
+              const grp = (await run("SELECT name FROM group_chats WHERE id = ?", [gid]))[0];
+              const members = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [gid, uid]);
+              for (const m of members) {
+                const socks = userSockets.get(m.user_id);
+                if (socks) {
+                  for (const sws of socks) sendWs(sws, { type: "group-call-ring", groupId: gid, groupName: grp?.name || "Group", from: caller });
+                }
+              }
             }
           }
           return;
@@ -992,7 +1023,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: row, error: null };
   }));
 
-  /* ---------- Support Tickets (user + guest) ---------- */
+  /* ---------- Support Tickets (user) ---------- */
   app.get("/api/support/tickets", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const tickets = await run(

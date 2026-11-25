@@ -1,4 +1,4 @@
-/* Layout & Customization Engine: Sidebar position/compact mode, Sidebar item order, Video rail button order, Corner roundness */
+/* Layout & Customization Engine: Sidebar position/compact mode, Sidebar item order, Video rail button order, Corner roundness, & Video rounded borders toggle */
 (function () {
   if (window.wtApplyLayoutPrefs) return;
 
@@ -7,6 +7,32 @@
 
   window.WT_DEFAULT_SB_ORDER = DEFAULT_SB;
   window.WT_DEFAULT_RAIL_ORDER = DEFAULT_RAIL;
+
+  function ensureVideoRoundSetting() {
+    const radEl = document.getElementById("st-radius");
+    if (!radEl || document.getElementById("st-video-round")) return;
+    const row = document.createElement("label");
+    row.className = "chk";
+    row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 4px 2px;cursor:pointer;font-size:14px;font-weight:600";
+    row.innerHTML = `<span>Rounded borders on videos</span><input type="checkbox" id="st-video-round" style="width:18px;height:18px;accent-color:var(--primary)">`;
+    radEl.insertAdjacentElement("afterend", row);
+    const chk = row.querySelector("#st-video-round");
+    let t = {};
+    try { t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch {}
+    chk.checked = t.videoRound !== false;
+    chk.onchange = async () => {
+      const on = !!chk.checked;
+      if (typeof saveTheme === "function") await saveTheme({ videoRound: on });
+      else {
+        try {
+          const cur = JSON.parse(localStorage.getItem("wt_theme") || "{}");
+          cur.videoRound = on;
+          localStorage.setItem("wt_theme", JSON.stringify(cur));
+          window.wtApplyLayoutPrefs(cur);
+        } catch {}
+      }
+    };
+  }
 
   window.wtApplyLayoutPrefs = function (t) {
     if (!t) { try { t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { t = {}; } }
@@ -53,11 +79,17 @@
       }`;
     }
 
+    if (t.videoRound === false) {
+      css += `#feed .vcard,#feed .vframe,#feed video,.vid-card,.vid-wrap{border-radius:0!important}`;
+    }
+
     css += `#sb .brand{order:-10}#sb .srch-wrap{order:-5}#sb #sbmore{order:100}`;
     sbOrder.forEach((id, i) => { css += `#sb .it[data-id="${id}"]{order:${i}}`; });
     railOrder.forEach((id, i) => { css += `.rail .fab[data-a="${id}"]{order:${i}}`; });
 
     st.textContent = css;
+    const chk = document.getElementById("st-video-round");
+    if (chk) chk.checked = t.videoRound !== false;
   };
 
   window.wtExtractColorFromCanvas = function (canvas) {
@@ -103,4 +135,6 @@
   };
 
   window.wtApplyLayoutPrefs();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", ensureVideoRoundSetting);
+  else ensureVideoRoundSetting();
 })();
