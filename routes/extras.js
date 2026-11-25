@@ -286,6 +286,101 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       next();
     } catch (e) { next(e); }
   });
+  /* ---------- Bot Protection & CAPTCHA Verification ---------- */
+  const botTracker = new Map();
+  function botIp(req) {
+    return String(req.headers["x-forwarded-for"] || req.ip || "unknown").split(",")[0].trim().slice(0, 64);
+  }
+  function hasValidBotPass(req) {
+    const pass = String(req.headers["x-wt-bot-pass"] || "").trim();
+    if (!pass) return false;
+    try {
+      const tok = jwt.verify(pass, SECRET);
+      return !!(tok && tok.t === "bot_pass");
+    } catch { return false; }
+  }
+  function botGuardAuth(req, res, next) {
+    if (req.method !== "POST") return next();
+    const ip = botIp(req);
+    const now = Date.now();
+    if (botTracker.size > 2000) {
+      for (const [k, v] of botTracker) {
+        if (v.flaggedUntil < now && (!v.hits.length || v.hits[v.hits.length - 1] < now - 180000)) botTracker.delete(k);
+      }
+    }
+    let rec = botTracker.get(ip);
+    if (!rec) { rec = { hits: [], flaggedUntil: 0 }; botTracker.set(ip, rec); }
+    rec.hits = rec.hits.filter(t => now - t < 120000);
+    if (rec.flaggedUntil > now && !hasValidBotPass(req)) {
+      return res.status(429).json({
+        data: null,
+        error: { message: "Bot verification required. Please complete the CAPTCHA.", code: "bot_check_required" },
+        bot_check_required: true
+      });
+    }
+    rec.hits.push(now);
+    if (rec.hits.length >= 5 && !hasValidBotPass(req)) {
+      rec.flaggedUntil = now + 15 * 60 * 1000;
+      return res.status(429).json({
+        data: null,
+        error: { message: "Too many sign-in/sign-up attempts. Please complete the CAPTCHA.", code: "bot_check_required" },
+        bot_check_required: true
+      });
+    }
+    next();
+  }
+
+  app.get("/api/bot/challenge", limit(40, 600000), (_req, res) => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 5; i++) code += chars[crypto.randomInt(chars.length)];
+    const salt = crypto.randomBytes(8).toString("hex");
+    const hash = crypto.createHash("sha256").update(`${code}:${salt}`).digest("hex");
+    const challengeToken = jwt.sign({ t: "bot_chal", salt, hash }, SECRET, { expiresIn: "5m" });
+
+    const colors = ["#d0bcff", "#f2b8b5", "#a8c7fa", "#c4eed0", "#fde293"];
+    let glyphs = "";
+    for (let i = 0; i < code.length; i++) {
+      const x = 26 + i * 38 + crypto.randomInt(-3, 4);
+      const y = 46 + crypto.randomInt(-6, 7);
+      const rot = crypto.randomInt(-22, 23);
+      const col = colors[crypto.randomInt(colors.length)];
+      glyphs += `<text x="${x}" y="${y}" fill="${col}" font-size="30" font-weight="800" font-family="monospace,sans-serif" transform="rotate(${rot} ${x} ${y})">${code[i]}</text>`;
+    }
+    let noise = "";
+    for (let i = 0; i < 6; i++) {
+      const x1 = crypto.randomInt(0, 50), y1 = crypto.randomInt(8, 66);
+      const cx = crypto.randomInt(60, 160), cy = crypto.randomInt(5, 70);
+      const x2 = crypto.randomInt(170, 220), y2 = crypto.randomInt(8, 66);
+      noise += `<path d="M${x1},${y1} Q${cx},${cy} ${x2},${y2}" stroke="rgba(255,255,255,0.28)" stroke-width="1.6" fill="none"/>`;
+    }
+    for (let i = 0; i < 24; i++) {
+      noise += `<circle cx="${crypto.randomInt(4, 216)}" cy="${crypto.randomInt(4, 70)}" r="${(crypto.randomInt(8, 18) / 10).toFixed(1)}" fill="rgba(255,255,255,0.22)"/>`;
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="74" viewBox="0 0 220 74" style="border-radius:14px;background:#141218;display:block">${noise}${glyphs}</svg>`;
+    res.json({ data: { challengeToken, svg }, error: null });
+  });
+
+  app.post("/api/bot/verify", limit(40, 600000), wrap(async req => {
+    const challengeToken = String(req.body?.challengeToken || "");
+    const answer = String(req.body?.answer || "").trim().toUpperCase();
+    if (!challengeToken || !answer) throw new HttpError(400, "Enter the verification code.");
+    let tok = null;
+    try { tok = jwt.verify(challengeToken, SECRET); } catch {}
+    if (!tok || tok.t !== "bot_chal" || !tok.salt || !tok.hash) {
+      throw new HttpError(400, "Challenge expired. Refresh and try again.");
+    }
+    const expected = crypto.createHash("sha256").update(`${answer}:${tok.salt}`).digest("hex");
+    if (expected !== tok.hash) {
+      throw new HttpError(400, "Incorrect code. Please try again.");
+    }
+    botTracker.delete(botIp(req));
+    const passToken = jwt.sign({ t: "bot_pass" }, SECRET, { expiresIn: "30m" });
+    return { data: { passToken, expiresIn: 1800 }, error: null };
+  }));
+
+  app.use(["/api/auth/login", "/api/auth/signup", "/api/auth/forgot/send-code"], botGuardAuth);
+
   app.use("/api/auth/login", async (req, res, next) => {
     try {
       if (req.method !== "POST") return next();
