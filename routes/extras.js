@@ -66,6 +66,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS system_announcements (id TEXT PRIMARY KEY, sent_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS mcp_oauth_clients (client_id TEXT PRIMARY KEY, client_secret TEXT, client_name TEXT, redirect_uris TEXT NOT NULL, token_endpoint_auth_method TEXT, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS mcp_oauth_codes (code TEXT PRIMARY KEY, client_id TEXT NOT NULL, user_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, code_challenge TEXT, code_challenge_method TEXT, scope TEXT, expires_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
@@ -1395,12 +1397,248 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }
   setTimeout(runAutoUpdateAnnouncements, 2500);
 
-  function isMcpAuthorized(req) {
-    const mcpKey = (process.env.MCP_API_KEY || "").trim();
+  const mcpBaseUrl = req => {
+    const envUrl = (process.env.RENDER_EXTERNAL_URL || "").replace(/\/+$/, "");
+    if (envUrl) return envUrl;
+    const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0].trim();
+    const host = String(req.headers["x-forwarded-host"] || req.headers.host || "webtok.onrender.com").split(",")[0].trim();
+    return `${proto}://${host}`;
+  };
+
+  /* ---------- Standard OAuth 2.1 + PKCE + Dynamic Client Registration for Gemini MCP ---------- */
+  app.get(["/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/api/mcp"], (req, res) => {
+    const base = mcpBaseUrl(req);
+    res.json({
+      resource: `${base}/api/mcp`,
+      authorization_servers: [base],
+      scopes_supported: ["mcp:tools"],
+      bearer_methods_supported: ["header"]
+    });
+  });
+
+  app.get(["/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"], (req, res) => {
+    const base = mcpBaseUrl(req);
+    res.json({
+      issuer: base,
+      authorization_endpoint: `${base}/oauth/authorize`,
+      token_endpoint: `${base}/oauth/token`,
+      registration_endpoint: `${base}/oauth/register`,
+      scopes_supported: ["mcp:tools"],
+      response_types_supported: ["code"],
+      grant_types_supported: ["authorization_code", "refresh_token"],
+      token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+      code_challenge_methods_supported: ["S256", "plain"]
+    });
+  });
+
+  app.post("/oauth/register", wrap(async (req, res) => {
+    await ensure();
+    const b = req.body || {};
+    const redirectUris = Array.isArray(b.redirect_uris) ? b.redirect_uris.map(u => String(u || "").trim()).filter(Boolean) : [];
+    if (!redirectUris.length) throw new HttpError(400, "redirect_uris is required");
+    const authMethod = ["none", "client_secret_post", "client_secret_basic"].includes(b.token_endpoint_auth_method) ? b.token_endpoint_auth_method : "none";
+    const clientId = "wt_mcp_" + crypto.randomBytes(12).toString("hex");
+    const clientSecret = authMethod === "none" ? null : crypto.randomBytes(24).toString("hex");
+    const clientName = String(b.client_name || "Gemini MCP Client").slice(0, 80);
+    await db.execute({
+      sql: "INSERT INTO mcp_oauth_clients (client_id, client_secret, client_name, redirect_uris, token_endpoint_auth_method, created_at) VALUES (?,?,?,?,?,?)",
+      args: [clientId, clientSecret, clientName, JSON.stringify(redirectUris), authMethod, nowIso()]
+    });
+    const out = {
+      client_id: clientId,
+      client_name: clientName,
+      redirect_uris: redirectUris,
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: authMethod
+    };
+    if (clientSecret) out.client_secret = clientSecret;
+    res.status(201).json(out);
+    return undefined;
+  }));
+
+  app.get("/oauth/authorize", async (req, res) => {
+    await ensure();
+    const clientId = String(req.query.client_id || "");
+    const redirectUri = String(req.query.redirect_uri || "");
+    const state = String(req.query.state || "");
+    const codeChallenge = String(req.query.code_challenge || "");
+    const codeChallengeMethod = String(req.query.code_challenge_method || "S256");
+    const scope = String(req.query.scope || "mcp:tools");
+
+    const client = (await run("SELECT client_name, redirect_uris FROM mcp_oauth_clients WHERE client_id = ?", [clientId]))[0];
+    const allowed = client ? safeArr(client.redirect_uris) : [];
+    if (!client || !redirectUri || !allowed.includes(redirectUri)) {
+      return res.status(400).send("Invalid OAuth client_id or redirect_uri.");
+    }
+    const escH = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    res.type("html").send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Authorize ${escH(client.client_name)} — Web Tok</title>
+<style>
+  body{margin:0;min-height:100dvh;display:grid;place-items:center;background:#141218;color:#e6e0e9;font-family:system-ui,-apple-system,sans-serif;padding:18px}
+  .card{width:min(100%,420px);background:#211f26;border-radius:28px;padding:28px;box-shadow:0 16px 48px rgba(0,0,0,.45)}
+  h1{margin:0 0 8px;font-size:22px} p{margin:0 0 18px;font-size:14px;color:#cac4d0;line-height:1.45}
+  label{display:block;font-size:12px;font-weight:700;color:#cac4d0;margin:12px 0 6px}
+  input{width:100%;box-sizing:border-box;padding:12px 14px;border-radius:14px;border:1px solid #49454f;background:#141218;color:#e6e0e9;font:inherit}
+  .btn{width:100%;margin-top:18px;padding:13px;border-radius:999px;border:0;background:#d0bcff;color:#381e72;font:inherit;font-size:15px;font-weight:700;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:default}
+  .err{color:#f2b8b5;font-size:13px;margin-top:12px;min-height:18px}
+  .scope{background:#2b2930;border-radius:14px;padding:12px 14px;font-size:13px;margin-bottom:14px}
+</style></head><body>
+  <div class="card">
+    <h1>Connect ${escH(client.client_name)}</h1>
+    <p>Sign in with your Web Tok <strong>Admin</strong> or <strong>Owner</strong> account to allow Gemini to send announcements and view site stats.</p>
+    <div class="scope"><strong>Permissions requested:</strong><br>• Send @notifications announcements<br>• View recent announcements &amp; site stats</div>
+    <form id="authForm">
+      <label>Admin / Owner Email</label><input type="email" id="em" required autocomplete="email">
+      <label>Password</label><input type="password" id="pw" required autocomplete="current-password">
+      <button class="btn" id="sub" type="submit">Authorize &amp; Connect</button>
+      <div class="err" id="err"></div>
+    </form>
+  </div>
+  <script>
+    document.getElementById("authForm").onsubmit = async e => {
+      e.preventDefault();
+      const btn = document.getElementById("sub"), err = document.getElementById("err");
+      btn.disabled = true; err.textContent = "";
+      try {
+        const r = await fetch("/oauth/authorize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("em").value.trim(),
+            password: document.getElementById("pw").value,
+            client_id: ${JSON.stringify(clientId)},
+            redirect_uri: ${JSON.stringify(redirectUri)},
+            state: ${JSON.stringify(state)},
+            code_challenge: ${JSON.stringify(codeChallenge)},
+            code_challenge_method: ${JSON.stringify(codeChallengeMethod)},
+            scope: ${JSON.stringify(scope)}
+          })
+        });
+        const j = await r.json();
+        if (!r.ok || !j.redirectTo) throw new Error(j.error || "Authorization failed");
+        location.href = j.redirectTo;
+      } catch (ex) {
+        err.textContent = ex.message;
+        btn.disabled = false;
+      }
+    };
+  </script>
+</body></html>`);
+  });
+
+  app.post("/oauth/authorize", limit(20, 600000), async (req, res) => {
+    try {
+      await ensure();
+      const b = req.body || {};
+      const email = String(b.email || "").trim().toLowerCase();
+      const password = String(b.password || "");
+      const clientId = String(b.client_id || "");
+      const redirectUri = String(b.redirect_uri || "");
+      const state = String(b.state || "");
+      const codeChallenge = String(b.code_challenge || "");
+      const codeChallengeMethod = String(b.code_challenge_method || "S256");
+      const scope = String(b.scope || "mcp:tools");
+
+      const client = (await run("SELECT redirect_uris FROM mcp_oauth_clients WHERE client_id = ?", [clientId]))[0];
+      if (!client || !safeArr(client.redirect_uris).includes(redirectUri)) {
+        return res.status(400).json({ error: "Invalid OAuth client or redirect_uri." });
+      }
+      const u = (await run("SELECT id, encrypted_password, role, banned FROM users WHERE email = ?", [email]))[0];
+      if (!u || !(await bcrypt.compare(password, u.encrypted_password))) {
+        return res.status(401).json({ error: "Incorrect email or password." });
+      }
+      if (u.banned) return res.status(403).json({ error: "Account suspended." });
+      if (!["admin", "owner"].includes(u.role)) {
+        return res.status(403).json({ error: "Only Web Tok Admins or the Owner can authorize MCP access." });
+      }
+      const code = crypto.randomBytes(24).toString("hex");
+      const exp = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      await db.execute({
+        sql: "INSERT INTO mcp_oauth_codes (code, client_id, user_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at) VALUES (?,?,?,?,?,?,?,?)",
+        args: [code, clientId, u.id, redirectUri, codeChallenge || null, codeChallengeMethod, scope, exp]
+      });
+      const dest = new URL(redirectUri);
+      dest.searchParams.set("code", code);
+      if (state) dest.searchParams.set("state", state);
+      return res.json({ redirectTo: dest.toString() });
+    } catch (e) {
+      return res.status(500).json({ error: e.message || "Server error" });
+    }
+  });
+
+  app.post("/oauth/token", require("express").urlencoded({ extended: false }), async (req, res) => {
+    try {
+      await ensure();
+      const b = req.body || {};
+      const grantType = String(b.grant_type || "");
+
+      if (grantType === "authorization_code") {
+        const code = String(b.code || "");
+        const redirectUri = String(b.redirect_uri || "");
+        const codeVerifier = String(b.code_verifier || "");
+        const row = (await run("SELECT * FROM mcp_oauth_codes WHERE code = ?", [code]))[0];
+        if (!row) return res.status(400).json({ error: "invalid_grant", error_description: "Invalid authorization code" });
+        await db.execute({ sql: "DELETE FROM mcp_oauth_codes WHERE code = ?", args: [code] });
+        if (Date.parse(row.expires_at) < Date.now()) {
+          return res.status(400).json({ error: "invalid_grant", error_description: "Authorization code expired" });
+        }
+        if (redirectUri && row.redirect_uri !== redirectUri) {
+          return res.status(400).json({ error: "invalid_grant", error_description: "redirect_uri mismatch" });
+        }
+        if (row.code_challenge) {
+          if (!codeVerifier) return res.status(400).json({ error: "invalid_grant", error_description: "code_verifier required" });
+          const computed = row.code_challenge_method === "plain"
+            ? codeVerifier
+            : crypto.createHash("sha256").update(codeVerifier).digest("base64url");
+          if (computed !== row.code_challenge) {
+            return res.status(400).json({ error: "invalid_grant", error_description: "Invalid PKCE code_verifier" });
+          }
+        }
+        const accessToken = jwt.sign({ sub: row.user_id, t: "mcp", scope: row.scope || "mcp:tools" }, SECRET, { expiresIn: "30d" });
+        const refreshToken = jwt.sign({ sub: row.user_id, t: "mcp_r", scope: row.scope || "mcp:tools" }, SECRET, { expiresIn: "90d" });
+        return res.json({ access_token: accessToken, token_type: "Bearer", expires_in: 30 * 86400, refresh_token: refreshToken, scope: row.scope || "mcp:tools" });
+      }
+
+      if (grantType === "refresh_token") {
+        const rt = String(b.refresh_token || "");
+        let tok = null;
+        try { tok = jwt.verify(rt, SECRET); } catch {}
+        if (!tok || tok.t !== "mcp_r" || !tok.sub) {
+          return res.status(400).json({ error: "invalid_grant", error_description: "Invalid refresh token" });
+        }
+        const st = await stateOf(tok.sub);
+        if (!st || st.banned || !["admin", "owner"].includes(st.role)) {
+          return res.status(403).json({ error: "access_denied" });
+        }
+        const accessToken = jwt.sign({ sub: tok.sub, t: "mcp", scope: tok.scope || "mcp:tools" }, SECRET, { expiresIn: "30d" });
+        return res.json({ access_token: accessToken, token_type: "Bearer", expires_in: 30 * 86400, refresh_token: rt, scope: tok.scope || "mcp:tools" });
+      }
+
+      return res.status(400).json({ error: "unsupported_grant_type" });
+    } catch (e) {
+      return res.status(500).json({ error: "server_error", error_description: e.message });
+    }
+  });
+
+  async function isMcpAuthorized(req) {
     const auth = String(req.headers.authorization || "");
     const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : String(req.headers["x-mcp-key"] || "").trim();
+    const mcpKey = (process.env.MCP_API_KEY || "").trim();
     if (mcpKey && bearer && bearer.length === mcpKey.length && crypto.timingSafeEqual(Buffer.from(bearer), Buffer.from(mcpKey))) {
       return { ok: true, uid: NOTIF_ID };
+    }
+    if (bearer) {
+      try {
+        const tok = jwt.verify(bearer, SECRET);
+        if (tok && tok.sub && (tok.t === "mcp" || tok.t === "a")) {
+          const st = await stateOf(tok.sub);
+          if (st && !st.banned && ["admin", "owner"].includes(st.role)) {
+            return { ok: true, uid: tok.sub };
+          }
+        }
+      } catch {}
     }
     if (req.wt && ["admin", "owner"].includes(req.wt.role)) {
       return { ok: true, uid: req.wt.uid };
@@ -1408,27 +1646,42 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { ok: false };
   }
 
-  app.get("/api/mcp", (_req, res) => {
+  app.get("/api/mcp", async (req, res) => {
+    const base = mcpBaseUrl(req);
+    const auth = await isMcpAuthorized(req);
+    if (!auth.ok) {
+      res.set("WWW-Authenticate", `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`);
+      return res.status(401).json({
+        error: "unauthorized",
+        oauth_protected_resource: `${base}/.well-known/oauth-protected-resource`
+      });
+    }
     res.json({
       name: "webtok-homemade-mcp",
       version: "1.0.0",
       protocol: "2024-11-05",
-      endpoint: "/api/mcp",
-      auth: "Bearer <MCP_API_KEY> or Admin/Owner token",
+      endpoint: `${base}/api/mcp`,
       tools: ["send_announcement", "list_announcements", "get_site_stats"]
     });
   });
 
   app.post("/api/mcp", async (req, res) => {
+    const base = mcpBaseUrl(req);
     const rpc = req.body || {};
     const id = rpc.id !== undefined ? rpc.id : null;
     const reply = (result) => res.json({ jsonrpc: "2.0", id, result });
-    const fail = (code, message) => res.status(code === -32001 ? 401 : 200).json({ jsonrpc: "2.0", id, error: { code, message } });
+    const fail = (code, message) => {
+      if (code === -32001) {
+        res.set("WWW-Authenticate", `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`);
+        return res.status(401).json({ jsonrpc: "2.0", id, error: { code, message } });
+      }
+      return res.json({ jsonrpc: "2.0", id, error: { code, message } });
+    };
 
     try {
       await ensure();
-      const auth = isMcpAuthorized(req);
-      if (!auth.ok) return fail(-32001, "Unauthorized: provide Bearer MCP_API_KEY or an Admin/Owner session token.");
+      const auth = await isMcpAuthorized(req);
+      if (!auth.ok) return fail(-32001, "Unauthorized: OAuth Bearer token required.");
 
       const method = String(rpc.method || "");
       if (method === "initialize") {
@@ -1439,7 +1692,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         });
       }
       if (method === "notifications/initialized") {
-        return reply({});
+        return res.status(202).end();
       }
       if (method === "tools/list") {
         return reply({
