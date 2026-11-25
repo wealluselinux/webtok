@@ -15,6 +15,12 @@
     s.defer = true;
     (document.head || document.documentElement).appendChild(s);
   }
+  if (typeof document !== "undefined" && !/^\/webify\b/.test(location.pathname) && !document.querySelector('script[src*="/js/webify-dock.js"]')) {
+    const w = document.createElement("script");
+    w.src = "/js/webify-dock.js";
+    w.defer = true;
+    (document.head || document.documentElement).appendChild(w);
+  }
   async function post(url, body, token) {
     const botPass = typeof window.wtGetBotPass === "function" ? window.wtGetBotPass() : "";
     const headers = {

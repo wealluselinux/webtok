@@ -302,15 +302,34 @@
     document.getElementById("wfBtnShuf").onclick = () => { shuffleOn = !shuffleOn; updatePlayerUI(); };
     document.getElementById("wfBtnRep").onclick = () => { repeatOn = !repeatOn; updatePlayerUI(); };
 
-    document.getElementById("wfSourcePills").onclick = e => {
+    document.getElementById("wfSourcePills").onclick = async e => {
       const p = e.target.closest(".wf-pill[data-src]");
-      if (!p) return;
-      activeSource = p.dataset.src;
-      activePlaylistId = null;
-      document.querySelectorAll("#wfSourcePills .wf-pill").forEach(b => b.classList.toggle("on", b === p));
-      renderPlaylists();
-      renderTracks();
+      if (p) {
+        activeSource = p.dataset.src;
+        activePlaylistId = null;
+        document.querySelectorAll("#wfSourcePills .wf-pill").forEach(b => b.classList.toggle("on", b === p));
+        renderPlaylists();
+        renderTracks();
+        return;
+      }
+      const g = e.target.closest(".wf-pill[data-genre]");
+      if (g) {
+        activeSource = "discover";
+        activePlaylistId = null;
+        document.getElementById("wfSearchInp").value = g.dataset.genre;
+        document.querySelectorAll("#wfSourcePills .wf-pill[data-src]").forEach(b => b.classList.toggle("on", b.dataset.src === "discover"));
+        await loadDiscover(g.dataset.genre);
+        renderPlaylists();
+        renderTracks();
+      }
     };
+    const dockBtn = document.getElementById("wfDockScrollBtn");
+    if (dockBtn) {
+      dockBtn.onclick = () => {
+        try { localStorage.setItem("wt_webify_dock_open", "1"); } catch {}
+        location.href = "/scroll#fyp";
+      };
+    }
     document.getElementById("wfShowBrowse").onclick = () => {
       activePlaylistId = null;
       renderPlaylists();
