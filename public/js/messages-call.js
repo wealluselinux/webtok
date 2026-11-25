@@ -1,5 +1,5 @@
 /* Messages: Full-screen Group & DM Voice Calls, Revised WebRTC, Green Speaking Ring, Mic Test, Group Watch & Whiteboard */
-let ws=null, callGroupId=null, callFull=true, localStream=null, isMuted=false, peers={}, pendingIce={};
+let ws=null, callGroupId=null, callTitle="", callFull=true, localStream=null, camStream=null, screenStream=null, isMuted=false, camOn=false, screenOn=false, peers={}, pendingIce={}, remoteVideos={};
 let callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};
 let wbColor="#6750a4", wbSize=4, wbDrawing=false, wbLast=null, ignoreSync=false, videoFeedCache=null;
 
@@ -86,9 +86,17 @@ async function createPeer(remoteUid, initiator){
   peers[remoteUid]=pc;
   pendingIce[remoteUid]=[];
   if(localStream) localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  if(camStream) camStream.getVideoTracks().forEach(t=>pc.addTrack(t,camStream));
+  if(screenStream) screenStream.getTracks().forEach(t=>pc.addTrack(t,screenStream));
   pc.onicecandidate=e=>{if(e.candidate)wsSend({type:"rtc-ice",to:remoteUid,candidate:e.candidate});};
   pc.ontrack=e=>{
     const stream=(e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
+    if(e.track.kind==="video"){
+      remoteVideos[remoteUid]=stream;
+      e.track.onended=()=>{ if(remoteVideos[remoteUid]===stream){ delete remoteVideos[remoteUid]; renderCallUI(); } };
+      renderCallUI();
+      return;
+    }
     let a=document.getElementById("aud-"+remoteUid);
     if(!a){
       a=document.createElement("audio");
@@ -122,6 +130,7 @@ function closePeer(remoteUid){
   if(peers[remoteUid]){try{peers[remoteUid].close();}catch{} delete peers[remoteUid];}
   delete pendingIce[remoteUid];
   detachAnalyser(remoteUid);
+  delete remoteVideos[remoteUid];
   const a=document.getElementById("aud-"+remoteUid);
   if(a) a.remove();
 }
@@ -230,23 +239,97 @@ async function joinCall(gid){
     return;
   }
   await ensureWs();
-  callGroupId=gid; isMuted=false; callFull=true;
+  callGroupId=gid;
+  callTitle=cur?(curType==="group"?cur.name:(cur.display_name||"@"+cur.username)):"Voice call";
+  isMuted=false; camOn=false; screenOn=false; callFull=true;
   attachAnalyser(me, localStream);
   wsSend({type:"join-call",groupId:gid});
 }
 function leaveCall(silent=false){
   if(!silent) wsSend({type:"leave-call"});
   Object.keys(peers).forEach(closePeer);
-  peers={}; pendingIce={};
+  peers={}; pendingIce={}; remoteVideos={};
   stopSpeakLoop();
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+  if(screenStream){screenStream.getTracks().forEach(t=>t.stop());screenStream=null;}
   $("audioBin").innerHTML="";
-  callGroupId=null;
+  callGroupId=null; callTitle=""; camOn=false; screenOn=false;
   try{localStorage.removeItem("wt_active_call");}catch{}
   callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};
   dockChatTo(false);
   $("callScreen").classList.add("hidden");
   renderCallUI();
+}
+async function renegotiateAll(){
+  for(const [ruid,pc] of Object.entries(peers)){
+    try{
+      const offer=await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      wsSend({type:"rtc-offer",to:ruid,sdp:pc.localDescription});
+    }catch{}
+  }
+}
+function removeStreamFromPeers(stream){
+  if(!stream) return;
+  const tids=new Set(stream.getTracks().map(t=>t.id));
+  for(const pc of Object.values(peers)){
+    pc.getSenders().forEach(s=>{ if(s.track && tids.has(s.track.id)){ try{pc.removeTrack(s);}catch{} } });
+  }
+}
+async function toggleCam(){
+  if(camOn){
+    camOn=false;
+    removeStreamFromPeers(camStream);
+    if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
+    wsSend({type:"video-state",camOn:false});
+    await renegotiateAll();
+    renderCallUI();
+    return;
+  }
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:true});
+    camOn=true;
+    for(const pc of Object.values(peers)){
+      camStream.getVideoTracks().forEach(t=>pc.addTrack(t,camStream));
+    }
+    wsSend({type:"video-state",camOn:true});
+    await renegotiateAll();
+    renderCallUI();
+  }catch(err){
+    await wtAlert({title:"Camera unavailable",message:"Could not access camera: "+(err?.message||"permission denied")});
+  }
+}
+async function toggleScreen(){
+  if(screenOn){
+    screenOn=false;
+    removeStreamFromPeers(screenStream);
+    if(screenStream){screenStream.getTracks().forEach(t=>t.stop());screenStream=null;}
+    wsSend({type:"video-state",screenOn:false});
+    await renegotiateAll();
+    renderCallUI();
+    return;
+  }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+    await wtAlert({title:"Screen share unsupported",message:"Your browser does not support screen sharing."});
+    return;
+  }
+  try{
+    screenStream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+    screenOn=true;
+    const vTrack=screenStream.getVideoTracks()[0];
+    if(vTrack) vTrack.onended=()=>{ if(screenOn) toggleScreen(); };
+    for(const pc of Object.values(peers)){
+      screenStream.getTracks().forEach(t=>pc.addTrack(t,screenStream));
+    }
+    wsSend({type:"video-state",screenOn:true});
+    await renegotiateAll();
+    renderCallUI();
+  }catch(err){
+    if(err?.name!=="AbortError" && err?.name!=="NotAllowedError"){
+      await wtAlert({title:"Screen share failed",message:err?.message||"Could not start screen share."});
+    }
+  }
 }
 function toggleMute(){
   isMuted=!isMuted;
@@ -365,17 +448,19 @@ function activeRoomId(){
 function renderCallUI(){
   const callBtn=$("btnCall"), bar=$("callBar"), scr=$("callScreen");
   const roomId=activeRoomId();
-  if(!bar || !scr || !roomId) return;
-  const inThisCall = callGroupId===roomId;
-  if(callBtn){
+  const inThisCall = !!callGroupId && callGroupId===roomId;
+  if(callBtn && roomId){
     callBtn.innerHTML=inThisCall?'<span class="ms" style="font-size:16px">call_end</span>Leave call':`<span class="ms" style="font-size:16px">call</span>${callState.participants.length?`Join (${callState.participants.length})`:"Call"}`;
     callBtn.className="head-chip "+(inThisCall?"bad":"p");
   }
-  if(!inThisCall){ bar.classList.add("hidden"); scr.classList.add("hidden"); return; }
+  if(!bar || !scr) return;
+  if(!callGroupId){ bar.classList.add("hidden"); scr.classList.add("hidden"); return; }
 
-  const title=curType==="group" ? cur.name : (cur.display_name||"@"+cur.username);
+  const title=callTitle || (cur?(curType==="group"?cur.name:(cur.display_name||"@"+cur.username)):"Voice call");
   const peersHtml=callState.participants.map(p=>`<div class="peer-pill" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`).join("");
   const ctrlsHtml=`<button class="head-chip" id="btnMute"><span class="ms" style="font-size:16px">${isMuted?"mic_off":"mic"}</span>${isMuted?"Unmute":"Mute"}</button>
+    <button class="head-chip ${camOn?"p":""}" id="btnCam"><span class="ms" style="font-size:16px">${camOn?"videocam":"videocam_off"}</span>${camOn?"Cam On":"Camera"}</button>
+    <button class="head-chip ${screenOn?"p":""}" id="btnScreen"><span class="ms" style="font-size:16px">${screenOn?"stop_screen_share":"screen_share"}</span>${screenOn?"Stop Share":"Share Screen"}</button>
     <button class="head-chip" id="btnCallMicTest"><span class="ms" style="font-size:16px">graphic_eq</span>Test Mic</button>
     <button class="head-chip ${callState.activity==="watch"?"p":""}" id="btnWatch"><span class="ms" style="font-size:16px">smart_display</span>Group Watch</button>
     <button class="head-chip ${callState.activity==="whiteboard"?"p":""}" id="btnBoard"><span class="ms" style="font-size:16px">draw</span>Whiteboard</button>`;
@@ -384,8 +469,9 @@ function renderCallUI(){
     scr.classList.add("hidden");
     dockChatTo(false);
     bar.classList.remove("hidden");
-    bar.innerHTML=`<div class="call-peers">${peersHtml}</div><div class="call-ctrls">${ctrlsHtml}<button class="head-chip p" id="btnFullCall"><span class="ms" style="font-size:16px">open_in_full</span>Full screen</button></div>`;
+    bar.innerHTML=`<div class="call-peers"><b style="font-size:13px;margin-right:4px">${esc(title)}</b>${peersHtml}</div><div class="call-ctrls">${ctrlsHtml}<button class="head-chip p" id="btnFullCall"><span class="ms" style="font-size:16px">open_in_full</span>Full screen</button><button class="head-chip bad" id="btnEndBar"><span class="ms" style="font-size:16px">call_end</span>Leave</button></div>`;
     $("btnFullCall").onclick=()=>{callFull=true;renderCallUI();};
+    $("btnEndBar").onclick=()=>leaveCall();
   } else {
     bar.classList.add("hidden");
     scr.classList.remove("hidden");
@@ -415,10 +501,25 @@ function renderCallUI(){
       }
     } else {
       stage.dataset.mode="grid";
-      stage.innerHTML=`<div class="cs-grid">${callState.participants.map(p=>`<div class="cs-tile" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><b>${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:18px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:18px;color:var(--primary)">graphic_eq</span>'}</div>`).join("")}</div>`;
+      stage.innerHTML=`<div class="cs-grid">${callState.participants.map(p=>{
+        const isMe=p.uid===me;
+        const hasVid=isMe ? (camOn||screenOn) : (p.camOn||p.screenOn||!!remoteVideos[p.uid]);
+        return `<div class="cs-tile ${p.screenOn||(isMe&&screenOn)?"wide":""}" data-uid="${esc(p.uid)}" style="position:relative;overflow:hidden">
+          ${hasVid ? `<video id="vid-${esc(p.uid)}" autoplay playsinline ${isMe?"muted":""} style="width:100%;height:100%;max-height:360px;object-fit:contain;border-radius:16px;background:#000"></video>` : `<div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div>`}
+          <div style="display:flex;align-items:center;gap:6px;margin-top:6px"><b>${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:18px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:18px;color:var(--primary)">graphic_eq</span>'}</div>
+        </div>`;
+      }).join("")}</div>`;
+      callState.participants.forEach(p=>{
+        const vEl=document.getElementById("vid-"+p.uid);
+        if(!vEl) return;
+        const st=p.uid===me ? (screenStream || camStream) : remoteVideos[p.uid];
+        if(st && vEl.srcObject!==st){ vEl.srcObject=st; vEl.play().catch(()=>{}); }
+      });
     }
   }
   $("btnMute").onclick=toggleMute;
+  $("btnCam").onclick=toggleCam;
+  $("btnScreen").onclick=toggleScreen;
   $("btnCallMicTest").onclick=()=>openMicTest();
   $("btnWatch").onclick=()=>wsSend({type:"set-activity",activity:callState.activity==="watch"?"none":"watch"});
   $("btnBoard").onclick=()=>wsSend({type:"set-activity",activity:callState.activity==="whiteboard"?"none":"whiteboard"});

@@ -22,10 +22,11 @@
     const st = document.createElement("style");
     st.id = "wt-wf-dock-css";
     st.textContent = `
-      #wt-wf-tab{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:9200;display:flex;align-items:center;gap:6px;padding:10px 12px 10px 14px;border-radius:999px 0 0 999px;border:1px solid var(--surface,#333);border-right:0;background:var(--card,#211f26);color:var(--text,#fff);font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:-4px 6px 22px rgba(0,0,0,.32)}
+      #wt-wf-tab{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:9200;display:flex;align-items:center;gap:6px;padding:10px 12px 10px 14px;border-radius:999px 0 0 999px;border:1px solid var(--surface,#333);border-right:0;background:var(--card,#211f26);color:var(--text,#fff);font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:-4px 6px 22px rgba(0,0,0,.32);transition:transform .24s cubic-bezier(.2,.9,.3,1),opacity .2s ease}
       #wt-wf-tab:hover{background:var(--surface,#2b2930)}
-      #wt-wf-dock{position:fixed;top:14px;right:14px;bottom:14px;width:min(340px,calc(100vw - 24px));z-index:9300;background:var(--card,#211f26);color:var(--text,#fff);border:1px solid var(--surface,#333);border-radius:26px;box-shadow:0 18px 48px rgba(0,0,0,.5);display:none;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif}
-      #wt-wf-dock.open{display:flex}
+      #wt-wf-tab.hidden-tab{transform:translate(110%,-50%);opacity:0;pointer-events:none}
+      #wt-wf-dock{position:fixed;top:14px;right:14px;bottom:14px;width:min(340px,calc(100vw - 24px));z-index:9300;background:var(--card,#211f26);color:var(--text,#fff);border:1px solid var(--surface,#333);border-radius:26px;box-shadow:0 18px 48px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;transform:translateX(calc(100% + 28px)) scale(.97);opacity:0;pointer-events:none;transition:transform .28s cubic-bezier(.2,.9,.3,1),opacity .22s ease}
+      #wt-wf-dock.open{transform:translateX(0) scale(1);opacity:1;pointer-events:auto}
       .wfd-top{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 16px;border-bottom:1px solid var(--surface,#333)}
       .wfd-top b{display:flex;align-items:center;gap:7px;font-size:16px}
       .wfd-top-acts{display:flex;align-items:center;gap:6px}
@@ -146,7 +147,7 @@
     const tab = document.getElementById("wt-wf-tab");
     if (!dock || !tab) return;
     dock.classList.toggle("open", open);
-    tab.style.display = open ? "none" : "flex";
+    tab.classList.toggle("hidden-tab", open);
     try { localStorage.setItem(DOCK_KEY, open ? "1" : "0"); } catch {}
     if (open && !loadedOnce) { loadedOnce = true; loadData(); }
   }

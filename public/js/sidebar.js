@@ -30,6 +30,10 @@ body.wt-leaving #feed,body.wt-leaving #app,body.wt-leaving #landing,body.wt-leav
 #sb .it:active{transform:scale(.96)}
 #sb .it.act{color:var(--primary);background:var(--surface)}
 #sb .it.act .ms{font-variation-settings:'FILL' 1;transform:scale(1.12)}
+#sb .it{position:relative}
+#sb .msg-dot{width:9px;height:9px;border-radius:50%;background:var(--primary,#d0bcff);box-shadow:0 0 0 3px rgba(208,188,255,.25);margin-left:auto;flex-shrink:0}
+#sb .msg-dot.hidden{display:none}
+@media(max-width:800px){#sb .msg-dot{position:absolute;top:8px;right:8px;margin:0}}
 #sb .menu{position:absolute;bottom:70px;left:16px;right:16px;background:var(--card);border-radius:24px;padding:8px;box-shadow:0 8px 30px #0004;display:none;z-index:45}
 #sb .menu.open{display:block;animation:wtMenuPop .18s cubic-bezier(.2,.9,.3,1.1)}
 body.has-sb #feed,body.has-sb #landing{left:var(--sbw);bottom:var(--sbh)}
@@ -57,7 +61,7 @@ nav.innerHTML=`<a class="brand" href="/"><img src="/images/logo.png" alt=""><spa
   <form class="srch" id="sbq"><span class="ms">search</span><input placeholder="Search users or videos" aria-label="Search"></form>
   <div class="srch-res hidden" id="sbq-res"></div>
 </div>`+
-items.map(([id,ic,l,h])=>h?`<a class="it" data-id="${id}" href="${h}"><span class="ms">${ic}</span><span class="lbl">${l}</span></a>`:`<button class="it" data-id="${id}"><span class="ms">${ic}</span><span class="lbl">${l}</span></button>`).join("")+
+items.map(([id,ic,l,h])=>h?`<a class="it" data-id="${id}" href="${h}"><span class="ms">${ic}</span><span class="lbl">${l}</span>${id==="messages"?'<span class="msg-dot hidden" id="sb-msg-dot"></span>':""}</a>`:`<button class="it" data-id="${id}"><span class="ms">${ic}</span><span class="lbl">${l}</span></button>`).join("")+
 `<button class="it" id="sbmore"><span class="ms">more_horiz</span><span class="lbl">More</span></button>
 <div class="menu" id="sbmenu">
   <a class="it" href="/webify"><span class="ms">music_note</span>Webify</a>
@@ -102,8 +106,18 @@ function getSb(){
     const j=await r.json().catch(()=>({}));
     const role=j?.data?.role||j?.role;
     if(role==="admin"||role==="owner") nav.querySelector("#sbadmin")?.classList.remove("hidden");
+    const tok=data?.session?.access_token;
+    if(tok){
+      const ur=await fetch("/api/messages/unread",{headers:{Authorization:"Bearer "+tok}});
+      const uj=await ur.json().catch(()=>({}));
+      if(typeof window.wtSetUnreadDot==="function") window.wtSetUnreadDot((uj?.data?.count||0)>0);
+    }
   }catch{}
 })();
+window.wtSetUnreadDot=function(on){
+  const d=document.getElementById("sb-msg-dot");
+  if(d) d.classList.toggle("hidden",!on);
+};
 const sInput=nav.querySelector("#sbq input"), sRes=nav.querySelector("#sbq-res");
 sInput.addEventListener("input",()=>{
   clearTimeout(_sTimer);

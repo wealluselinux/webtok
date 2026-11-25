@@ -338,6 +338,9 @@
                 window.wtShowIncomingCall(m);
               } else if (m.type === "call-ended") {
                 window.wtHideIncomingCall(m.groupId);
+              } else if (m.type === "new-message" || m.type === "mention-alert") {
+                if (typeof window.wtSetUnreadDot === "function") window.wtSetUnreadDot(true);
+                if (typeof window.wtShowMsgToast === "function") window.wtShowMsgToast(m);
               }
             } catch {}
           };
@@ -402,6 +405,77 @@
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderPageCallMini);
     else renderPageCallMini();
     addEventListener("storage", e => { if (e.key === "wt_active_call") renderPageCallMini(); });
+  })();
+
+  /* ---- Top Message & @Mention Toast Banner + Unread Dot Sync ---- */
+  (function () {
+    let toastTimer = null, lastUnreadMaxId = 0;
+    window.wtShowMsgToast = function (m) {
+      if (!m || /^\/messages\b/.test(location.pathname)) return;
+      if (!document.getElementById("wt-msg-toast-css")) {
+        const st = document.createElement("style");
+        st.id = "wt-msg-toast-css";
+        st.textContent = `
+          #wt-msg-toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9600;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:999px;background:var(--card,#211f26);color:var(--text,#fff);border:1px solid var(--surface,#333);box-shadow:0 10px 30px rgba(0,0,0,.42);max-width:min(92vw,460px);cursor:pointer;animation:wtCallPop .22s cubic-bezier(.2,.9,.3,1.1)}
+          #wt-msg-toast .mt-ic{width:32px;height:32px;border-radius:50%;background:var(--primary,#d0bcff);color:var(--on-primary,#381e72);display:grid;place-items:center;flex-shrink:0}
+          #wt-msg-toast .mt-txt{min-width:0;flex:1;font-size:13px;line-height:1.25}
+          #wt-msg-toast .mt-txt b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+          #wt-msg-toast .mt-txt small{display:block;color:var(--muted,#aaa);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+          #wt-msg-toast .mt-x{border:0;background:none;color:var(--muted,#aaa);cursor:pointer;padding:4px;display:grid;place-items:center}
+        `;
+        document.head.appendChild(st);
+      }
+      const old = document.getElementById("wt-msg-toast");
+      if (old) old.remove();
+      const f = m.from || {};
+      const who = f.display_name || (f.username ? "@" + f.username : "Someone");
+      const isMention = m.type === "mention-alert";
+      const title = isMention
+        ? `${who} mentioned you${m.groupName ? " in " + m.groupName : ""}`
+        : `${who} sent a message to you`;
+      const el = document.createElement("div");
+      el.id = "wt-msg-toast";
+      el.innerHTML = `<div class="mt-ic"><span class="ms" style="font-size:18px">${isMention ? "alternate_email" : "chat_bubble"}</span></div>
+        <div class="mt-txt"><b></b><small></small></div>
+        <button type="button" class="mt-x" aria-label="Dismiss"><span class="ms" style="font-size:18px">close</span></button>`;
+      el.querySelector("b").textContent = title;
+      el.querySelector("small").textContent = m.preview || "Open Messages to view";
+      el.onclick = e => {
+        if (e.target.closest(".mt-x")) { el.remove(); return; }
+        location.href = m.chatUrl || "/messages";
+      };
+      document.body.appendChild(el);
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { if (el.parentNode) el.remove(); }, 6000);
+    };
+
+    async function pollUnread() {
+      if (document.hidden) return;
+      try {
+        const t = await token();
+        if (!t) return;
+        const r = await fetch("/api/messages/unread", { headers: { Authorization: "Bearer " + t } });
+        const j = await r.json().catch(() => ({}));
+        const d = j?.data;
+        if (!d) return;
+        if (typeof window.wtSetUnreadDot === "function") window.wtSetUnreadDot((d.count || 0) > 0);
+        if (d.maxId && d.maxId > lastUnreadMaxId) {
+          const firstLoad = lastUnreadMaxId === 0;
+          lastUnreadMaxId = d.maxId;
+          if (!firstLoad && d.latest && d.latest[0] && !/^\/messages\b/.test(location.pathname)) {
+            const m = d.latest[0];
+            window.wtShowMsgToast({
+              type: "new-message",
+              from: { id: m.sender_id, username: m.username, display_name: m.display_name },
+              preview: m.body,
+              chatUrl: "/messages#" + encodeURIComponent(m.sender_id)
+            });
+          }
+        }
+      } catch {}
+    }
+    setTimeout(pollUnread, 1500);
+    setInterval(pollUnread, 10000);
   })();
 
   window.supabase = { createClient: () => client };
