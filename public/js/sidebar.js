@@ -60,6 +60,7 @@ nav.innerHTML=`<a class="brand" href="/"><img src="/images/logo.png" alt=""><spa
 items.map(([id,ic,l,h])=>h?`<a class="it" data-id="${id}" href="${h}"><span class="ms">${ic}</span><span class="lbl">${l}</span></a>`:`<button class="it" data-id="${id}"><span class="ms">${ic}</span><span class="lbl">${l}</span></button>`).join("")+
 `<button class="it" id="sbmore"><span class="ms">more_horiz</span><span class="lbl">More</span></button>
 <div class="menu" id="sbmenu">
+  <a class="it" href="/webify"><span class="ms">music_note</span>Webify</a>
   <a class="it" href="/profile"><span class="ms">palette</span>Theme &amp; settings</a>
   <a class="it" href="/developer"><span class="ms">code</span>Developer Studio</a>
   <a class="it hidden" id="sbadmin" href="/admin"><span class="ms">admin_panel_settings</span>Admin panel</a>

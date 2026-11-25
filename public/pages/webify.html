@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Webify — Web Tok</title>
+  <link rel="stylesheet" href="/css/base.css">
+  <style>
+    .wf-wrap{max-width:1120px;margin:0 auto;padding:24px 20px 130px}
+    .wf-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+    .wf-brand{display:flex;align-items:center;gap:12px}
+    .wf-logo{width:46px;height:46px;border-radius:16px;background:var(--primary);color:var(--on-primary);display:grid;place-items:center}
+    .wf-brand h1{margin:0;font-size:26px;font-weight:800}
+    .wf-brand p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+    .wf-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex:1;justify-content:flex-end}
+    .wf-search{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:999px;padding:0 14px;min-width:240px;flex:1;max-width:380px}
+    .wf-search input{flex:1;min-width:0;background:none;border:0;color:var(--text);font:inherit;padding:11px 0;outline:0}
+    .wf-pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+    .wf-pill{border:0;border-radius:999px;padding:9px 16px;background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+    .wf-pill.on{background:var(--primary);color:var(--on-primary)}
+    .wf-grid{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+    @media(max-width:860px){.wf-grid{grid-template-columns:1fr}}
+    .wf-panel{background:var(--card);border-radius:24px;padding:16px;border:1px solid var(--surface)}
+    .wf-panel h2{margin:0 0 12px;font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .wf-pl-list{display:flex;flex-direction:column;gap:6px}
+    .wf-pl-it{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:16px;background:none;border:0;color:var(--text);font:inherit;text-align:left;cursor:pointer;width:100%}
+    .wf-pl-it:hover{background:var(--surface)}
+    .wf-pl-it.on{background:var(--primary);color:var(--on-primary)}
+    .wf-pl-it .meta{min-width:0;flex:1}
+    .wf-pl-it b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wf-pl-it small{display:block;font-size:12px;opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wf-tracks{display:flex;flex-direction:column;gap:8px}
+    .wf-trk{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:18px;background:var(--surface);transition:transform .12s}
+    .wf-trk.playing{box-shadow:0 0 0 2px var(--primary)}
+    .wf-cov{width:46px;height:46px;border-radius:12px;background:var(--card) center/cover no-repeat;display:grid;place-items:center;flex-shrink:0;overflow:hidden}
+    .wf-tmeta{min-width:0;flex:1}
+    .wf-tmeta b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wf-tmeta small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .wf-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--card);color:var(--primary);flex-shrink:0}
+    .wf-badge.disc{color:var(--text)}
+    .wf-tacts{display:flex;align-items:center;gap:6px;flex-shrink:0}
+    .wf-player{position:fixed;left:var(--sbw,248px);right:0;bottom:var(--sbh,0px);z-index:35;background:var(--card);border-top:1px solid var(--surface);padding:10px 18px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;box-shadow:0 -8px 28px rgba(0,0,0,.28)}
+    @media(max-width:800px){.wf-player{left:0;bottom:var(--sbh,62px)}}
+    .wf-p-now{display:flex;align-items:center;gap:10px;min-width:180px;max-width:260px;flex:1}
+    .wf-p-ctrl{display:flex;flex-direction:column;align-items:center;gap:4px;flex:2;min-width:240px}
+    .wf-p-btns{display:flex;align-items:center;gap:8px}
+    .wf-p-seek{display:flex;align-items:center;gap:8px;width:100%;max-width:440px;font-size:11px;color:var(--muted)}
+    .wf-p-seek input{flex:1;accent-color:var(--primary)}
+    .wf-p-vol{display:flex;align-items:center;gap:6px;min-width:110px}
+    .wf-p-vol input{width:80px;accent-color:var(--primary)}
+    dialog.wf-dlg{border:0;border-radius:28px;padding:24px;width:min(92vw,420px);background:var(--card);color:var(--text);margin:auto;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+    dialog.wf-dlg::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(4px)}
+    .wf-fld{width:100%;box-sizing:border-box;padding:11px 14px;border-radius:14px;border:1px solid var(--surface);background:var(--bg);color:var(--text);font:inherit;margin-top:6px;outline:0}
+  </style>
+</head>
+<body data-page="webify">
+  <main class="wf-wrap">
+    <div class="wf-head">
+      <div class="wf-brand">
+        <div class="wf-logo"><span class="ms">music_note</span></div>
+        <div>
+          <h1>Webify</h1>
+          <p>Stream Web Tok sounds &amp; discover music, build playlists, and listen together.</p>
+        </div>
+      </div>
+      <div class="wf-controls">
+        <form class="wf-search" id="wfSearchForm">
+          <span class="ms" style="font-size:20px;color:var(--muted)">search</span>
+          <input id="wfSearchInp" placeholder="Search Web Tok sounds or music…" aria-label="Search music">
+        </form>
+        <button type="button" class="btn primary" id="wfNewPlBtn"><span class="ms" style="font-size:18px">playlist_add</span>New Playlist</button>
+      </div>
+    </div>
+
+    <div class="wf-pills" id="wfSourcePills">
+      <button type="button" class="wf-pill on" data-src="both"><span class="ms" style="font-size:17px">all_inclusive</span>Both Sources</button>
+      <button type="button" class="wf-pill" data-src="webtok"><span class="ms" style="font-size:17px">graphic_eq</span>Web Tok Sounds</button>
+      <button type="button" class="wf-pill" data-src="discover"><span class="ms" style="font-size:17px">travel_explore</span>Discover Music</button>
+    </div>
+
+    <div class="wf-grid">
+      <aside class="wf-panel">
+        <h2><span>Playlists</span><button type="button" class="btn sm" id="wfShowBrowse">Browse All</button></h2>
+        <div class="wf-pl-list" id="wfPlList"></div>
+      </aside>
+
+      <section class="wf-panel">
+        <h2 id="wfMainTitle"><span>All Tracks</span></h2>
+        <div class="wf-tracks" id="wfTrackList"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="wf-player" id="wfPlayerBar">
+    <div class="wf-p-now">
+      <div class="wf-cov" id="wfNowCov"><span class="ms">music_note</span></div>
+      <div class="wf-tmeta">
+        <b id="wfNowTitle">Nothing playing</b>
+        <small id="wfNowArtist">Pick a track or playlist</small>
+      </div>
+    </div>
+    <div class="wf-p-ctrl">
+      <div class="wf-p-btns">
+        <button type="button" class="btn icon" id="wfBtnShuf" title="Shuffle"><span class="ms">shuffle</span></button>
+        <button type="button" class="btn icon" id="wfBtnPrev" title="Previous"><span class="ms">skip_previous</span></button>
+        <button type="button" class="btn primary icon" id="wfBtnPlay" title="Play/Pause"><span class="ms">play_arrow</span></button>
+        <button type="button" class="btn icon" id="wfBtnNext" title="Next"><span class="ms">skip_next</span></button>
+        <button type="button" class="btn icon" id="wfBtnRep" title="Repeat"><span class="ms">repeat</span></button>
+      </div>
+      <div class="wf-p-seek">
+        <span id="wfTimeCur">0:00</span>
+        <input type="range" id="wfSeek" min="0" max="100" value="0">
+        <span id="wfTimeDur">0:00</span>
+      </div>
+    </div>
+    <div class="wf-p-vol">
+      <span class="ms" style="font-size:20px;color:var(--muted)">volume_up</span>
+      <input type="range" id="wfVol" min="0" max="1" step="0.02" value="0.85">
+    </div>
+  </div>
+
+  <dialog class="wf-dlg" id="wfPlDlg">
+    <h3 style="margin:0 0 12px">Create Playlist</h3>
+    <form id="wfPlForm">
+      <label style="font-size:12px;font-weight:700;color:var(--muted)">Playlist Name</label>
+      <input class="wf-fld" id="wfPlName" maxlength="60" placeholder="Late Night Vibes" required>
+      <label style="display:block;margin-top:12px;font-size:12px;font-weight:700;color:var(--muted)">Description (optional)</label>
+      <input class="wf-fld" id="wfPlDesc" maxlength="200" placeholder="My favorite Web Tok & Discover tracks">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;font-weight:600;cursor:pointer">
+        <input type="checkbox" id="wfPlPub" checked style="accent-color:var(--primary)">Public playlist (visible to community)
+      </label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
+        <button type="button" class="btn" id="wfPlCancel">Cancel</button>
+        <button type="submit" class="btn primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="wf-dlg" id="wfAddDlg">
+    <h3 style="margin:0 0 8px">Add to Playlist</h3>
+    <p id="wfAddTrackLabel" style="margin:0 0 14px;font-size:13px;color:var(--muted)"></p>
+    <div class="wf-pl-list" id="wfAddPlChoices"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button type="button" class="btn" id="wfAddCancel">Close</button>
+    </div>
+  </dialog>
+
+  <script src="/js/core.js"></script>
+  <script src="/js/wt-local.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/layout-prefs.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/webify.js"></script>
+</body>
+</html>
