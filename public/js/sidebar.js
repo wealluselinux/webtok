@@ -79,16 +79,6 @@ nav.addEventListener("click",e=>{
   if(!a || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   const url=new URL(a.href,location.href);
   if(url.origin!==location.origin) return;
-  if(typeof window.wtInActiveCall==="function" && window.wtInActiveCall() && url.pathname!=="/messages"){
-    e.preventDefault();
-    window.wtBrowseInCall(a.href);
-    return;
-  }
-  if(window.parent && window.parent!==window && typeof window.parent.wtInActiveCall==="function" && window.parent.wtInActiveCall() && url.pathname==="/messages"){
-    e.preventDefault();
-    window.parent.wtCloseBrowseFrame(true);
-    return;
-  }
   if(url.pathname===location.pathname) return;
   e.preventDefault();
   document.body.classList.add("wt-leaving");

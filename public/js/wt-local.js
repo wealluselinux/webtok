@@ -350,5 +350,53 @@
     }
   })();
 
+  /* ---- Active Call Mini Banner on Other Pages (No Iframe) ---- */
+  (function () {
+    if (/^\/messages\b/.test(location.pathname)) return;
+    function renderPageCallMini() {
+      let data = null;
+      try { data = JSON.parse(localStorage.getItem("wt_active_call") || "null"); } catch {}
+      const old = document.getElementById("wt-global-call-mini");
+      if (!data || !data.groupId || (Date.now() - (data.ts || 0)) > 4 * 3600 * 1000) {
+        if (old) old.remove();
+        return;
+      }
+      if (!document.getElementById("wt-global-call-css")) {
+        const st = document.createElement("style");
+        st.id = "wt-global-call-css";
+        st.textContent = `
+          #wt-global-call-mini{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:999px;background:var(--card,#1e1e24);color:var(--text,#fff);box-shadow:0 8px 28px rgba(0,0,0,.38);border:1px solid var(--surface,#333);max-width:calc(100vw - 24px)}
+          #wt-global-call-mini .gcm-dot{width:10px;height:10px;border-radius:50%;background:#4caf50;box-shadow:0 0 0 4px rgba(76,175,80,.22);flex-shrink:0}
+          #wt-global-call-mini .gcm-lbl{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+          #wt-global-call-mini button{border:0;border-radius:999px;padding:6px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:var(--surface,#2b2b33);color:var(--text,#fff)}
+          #wt-global-call-mini button.p{background:var(--primary,#6750a4);color:var(--on-primary,#fff)}
+          #wt-global-call-mini button.bad{background:#c62828;color:#fff}
+        `;
+        document.head.appendChild(st);
+      }
+      let mini = old;
+      if (!mini) {
+        mini = document.createElement("div");
+        mini.id = "wt-global-call-mini";
+        mini.innerHTML = `<span class="gcm-dot"></span><span class="gcm-lbl"></span>
+          <button type="button" class="p" id="gcmBack"><span class="ms" style="font-size:15px">call</span>Return to Call</button>
+          <button type="button" class="bad" id="gcmEnd"><span class="ms" style="font-size:15px">call_end</span>Leave</button>`;
+        document.body.appendChild(mini);
+      }
+      const lbl = mini.querySelector(".gcm-lbl");
+      if (lbl) lbl.textContent = `${data.title || "Voice call"} · ${data.count || 1} in call`;
+      mini.querySelector("#gcmBack").onclick = () => {
+        location.href = "/messages#call=" + encodeURIComponent(data.groupId);
+      };
+      mini.querySelector("#gcmEnd").onclick = () => {
+        try { localStorage.removeItem("wt_active_call"); } catch {}
+        mini.remove();
+      };
+    }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderPageCallMini);
+    else renderPageCallMini();
+    addEventListener("storage", e => { if (e.key === "wt_active_call") renderPageCallMini(); });
+  })();
+
   window.supabase = { createClient: () => client };
 })();

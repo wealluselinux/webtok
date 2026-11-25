@@ -242,8 +242,8 @@ function leaveCall(silent=false){
   if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
   $("audioBin").innerHTML="";
   callGroupId=null;
+  try{localStorage.removeItem("wt_active_call");}catch{}
   callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};
-  if(typeof window.wtCloseBrowseFrame==="function") window.wtCloseBrowseFrame(false);
   dockChatTo(false);
   $("callScreen").classList.add("hidden");
   renderCallUI();
@@ -384,15 +384,13 @@ function renderCallUI(){
     scr.classList.add("hidden");
     dockChatTo(false);
     bar.classList.remove("hidden");
-    bar.innerHTML=`<div class="call-peers">${peersHtml}</div><div class="call-ctrls">${ctrlsHtml}<button class="head-chip" id="btnBrowseCall"><span class="ms" style="font-size:16px">explore</span>Scroll &amp; Browse</button><button class="head-chip p" id="btnFullCall"><span class="ms" style="font-size:16px">open_in_full</span>Full screen</button></div>`;
-    $("btnBrowseCall").onclick=()=>window.wtBrowseInCall("/scroll#fyp");
+    bar.innerHTML=`<div class="call-peers">${peersHtml}</div><div class="call-ctrls">${ctrlsHtml}<button class="head-chip p" id="btnFullCall"><span class="ms" style="font-size:16px">open_in_full</span>Full screen</button></div>`;
     $("btnFullCall").onclick=()=>{callFull=true;renderCallUI();};
   } else {
     bar.classList.add("hidden");
     scr.classList.remove("hidden");
     $("csTop").innerHTML=`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:17px">${esc(title)}</b><div class="call-peers">${peersHtml}</div></div>
-      <div class="call-ctrls">${ctrlsHtml}<button class="head-chip" id="btnBrowseCall"><span class="ms" style="font-size:16px">explore</span>Scroll &amp; Browse</button><button class="head-chip" id="btnMinCall"><span class="ms" style="font-size:16px">close_fullscreen</span>Minimize</button><button class="head-chip bad" id="btnEndFull"><span class="ms" style="font-size:16px">call_end</span>Leave</button></div>`;
-    $("btnBrowseCall").onclick=()=>window.wtBrowseInCall("/scroll#fyp");
+      <div class="call-ctrls">${ctrlsHtml}<button class="head-chip" id="btnMinCall"><span class="ms" style="font-size:16px">close_fullscreen</span>Minimize</button><button class="head-chip bad" id="btnEndFull"><span class="ms" style="font-size:16px">call_end</span>Leave</button></div>`;
     $("btnMinCall").onclick=()=>{callFull=false;renderCallUI();};
     $("btnEndFull").onclick=()=>leaveCall();
     dockChatTo(true);
@@ -490,75 +488,23 @@ function openMicTest(){
 }
 
 
-/* ---------- Browse & Scroll While in Call + Persistent Mini Banner ---------- */
+/* ---------- Persist Active Call State Across Pages (No Iframe) ---------- */
 window.wtInActiveCall=()=>!!callGroupId;
 
-function ensureGlobalMiniStyles(){
-  if(document.getElementById("wt-global-call-css")) return;
-  const st=document.createElement("style");
-  st.id="wt-global-call-css";
-  st.textContent=`
-    #wt-browse-frame{position:fixed;inset:0;width:100%;height:100%;border:0;z-index:9000;background:var(--bg)}
-    #wt-global-call-mini{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9500;display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:999px;background:var(--card,#1e1e24);color:var(--text,#fff);box-shadow:0 8px 28px rgba(0,0,0,.38);border:1px solid var(--surface,#333);max-width:calc(100vw - 24px)}
-    #wt-global-call-mini .gcm-dot{width:10px;height:10px;border-radius:50%;background:#4caf50;box-shadow:0 0 0 4px rgba(76,175,80,.22);flex-shrink:0}
-    #wt-global-call-mini .gcm-lbl{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
-    #wt-global-call-mini button{border:0;border-radius:999px;padding:6px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:var(--surface,#2b2b33);color:var(--text,#fff)}
-    #wt-global-call-mini button.p{background:var(--primary,#6750a4);color:var(--on-primary,#fff)}
-    #wt-global-call-mini button.bad{background:#c62828;color:#fff}
-  `;
-  document.head.appendChild(st);
-}
-
 window.wtSyncGlobalCallMini=function(){
-  const mini=document.getElementById("wt-global-call-mini");
-  if(!mini) return;
-  if(!callGroupId){ mini.remove(); return; }
-  const title=cur?(curType==="group"?cur.name:(cur.display_name||"@"+cur.username)):"Voice call";
-  const count=callState.participants.length||1;
-  const lbl=mini.querySelector(".gcm-lbl");
-  if(lbl) lbl.textContent=`${title} · ${count} in call`;
-  const mBtn=mini.querySelector("#gcmMute");
-  if(mBtn) mBtn.innerHTML=`<span class="ms" style="font-size:15px">${isMuted?"mic_off":"mic"}</span>${isMuted?"Unmute":"Mute"}`;
-};
-
-window.wtBrowseInCall=function(url="/scroll#fyp"){
-  if(!callGroupId) return;
-  ensureGlobalMiniStyles();
-  callFull=false;
-  renderCallUI();
-  let fr=document.getElementById("wt-browse-frame");
-  if(!fr){
-    fr=document.createElement("iframe");
-    fr.id="wt-browse-frame";
-    fr.allow="autoplay; fullscreen";
-    document.body.appendChild(fr);
-  }
-  fr.src=url;
-  fr.classList.remove("hidden");
-
-  let mini=document.getElementById("wt-global-call-mini");
-  if(!mini){
-    mini=document.createElement("div");
-    mini.id="wt-global-call-mini";
-    mini.innerHTML=`<span class="gcm-dot"></span><span class="gcm-lbl"></span>
-      <button type="button" id="gcmMute"></button>
-      <button type="button" class="p" id="gcmBack"><span class="ms" style="font-size:15px">call</span>Return to Call</button>
-      <button type="button" class="bad" id="gcmEnd"><span class="ms" style="font-size:15px">call_end</span>Leave</button>`;
-    document.body.appendChild(mini);
-    mini.querySelector("#gcmMute").onclick=()=>toggleMute();
-    mini.querySelector("#gcmBack").onclick=()=>window.wtCloseBrowseFrame(true);
-    mini.querySelector("#gcmEnd").onclick=()=>leaveCall();
-  }
-  window.wtSyncGlobalCallMini();
-};
-
-window.wtCloseBrowseFrame=function(focusCall=false){
-  const fr=document.getElementById("wt-browse-frame");
-  if(fr){ fr.src="about:blank"; fr.remove(); }
-  const mini=document.getElementById("wt-global-call-mini");
-  if(mini) mini.remove();
-  if(focusCall && callGroupId){
-    callFull=true;
-    renderCallUI();
-  }
+  try{
+    if(!callGroupId){
+      localStorage.removeItem("wt_active_call");
+      return;
+    }
+    const title=cur?(curType==="group"?cur.name:(cur.display_name||"@"+cur.username)):"Voice call";
+    const count=callState.participants.length||1;
+    localStorage.setItem("wt_active_call",JSON.stringify({
+      groupId:callGroupId,
+      title,
+      count,
+      muted:!!isMuted,
+      ts:Date.now()
+    }));
+  }catch{}
 };
