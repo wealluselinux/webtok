@@ -9,9 +9,28 @@
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; } }
   function save(s) { session = s; try { s ? localStorage.setItem(KEY, JSON.stringify(s)) : localStorage.removeItem(KEY); } catch {} }
   function emit(ev) { listeners.forEach(cb => { try { cb(ev, session); } catch (e) { console.error(e); } }); }
+  if (typeof document !== "undefined" && !document.querySelector('script[src*="/js/bot-guard.js"]')) {
+    const s = document.createElement("script");
+    s.src = "/js/bot-guard.js";
+    s.defer = true;
+    (document.head || document.documentElement).appendChild(s);
+  }
   async function post(url, body, token) {
-    const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, body: JSON.stringify(body || {}) });
+    const botPass = typeof window.wtGetBotPass === "function" ? window.wtGetBotPass() : "";
+    const headers = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: "Bearer " + token } : {}),
+      ...(botPass ? { "x-wt-bot-pass": botPass } : {})
+    };
+    let r = await fetch(url, { method: "POST", headers, body: JSON.stringify(body || {}) });
     let j = {}; try { j = await r.json(); } catch {}
+    if (r.status === 429 && j && j.bot_check_required && typeof window.wtRequireBotCheck === "function") {
+      const newPass = await window.wtRequireBotCheck((j.error && j.error.message) || undefined);
+      if (newPass) {
+        r = await fetch(url, { method: "POST", headers: { ...headers, "x-wt-bot-pass": newPass }, body: JSON.stringify(body || {}) });
+        j = {}; try { j = await r.json(); } catch {}
+      }
+    }
     return { ok: r.ok, status: r.status, json: j };
   }
   const errOf = r => ({ message: (r.json.error && r.json.error.message) || r.json.error || "Request failed", code: r.json.error && r.json.error.code });
