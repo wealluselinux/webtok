@@ -234,7 +234,7 @@
       css += `#feed .player,#feed .player video,#feed .vcard,#feed .vframe,#feed video,.vid-card,.vid-wrap{border-radius:0!important}`;
     }
     if (t.vidShowCaptions === false) {
-      css += `#feed .cap{display:none!important}`;
+      css += `#feed .cap,#feed .wt-vid-cc{display:none!important}`;
     }
     if (t.vidFit === "contain" || t.vidFit === "cover") {
       css += `#feed .player video{object-fit:${t.vidFit}!important}`;

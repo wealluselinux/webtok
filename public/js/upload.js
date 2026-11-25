@@ -1,16 +1,10 @@
-/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check + sound picker + auto hashtags + description/captions) */
+/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check + sound picker) */
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false, uploadedSounds = [], upPreviewAudio = null, upPreviewIdx = -1;
 const _parseTags = s => typeof parseTags === "function"
   ? parseTags(s)
   : [...new Set(String(s || "").toLowerCase().match(/[a-z0-9_]{1,30}/g) || [])];
 
-function fmtEta(sec) {
-  if (!isFinite(sec) || sec <= 0) return "almost done";
-  if (sec < 60) return `~${sec}s left`;
-  const m = Math.floor(sec / 60), s = sec % 60;
-  return `~${m}m ${s}s left`;
-}
 
 function isAutoTagsOn() {
   try { return JSON.parse(localStorage.getItem("wt_theme") || "{}").autoHashtags !== false; } catch { return true; }
@@ -35,7 +29,8 @@ async function generateTagsForItem(item, idx, force = false) {
   const quick = localQuickTags(item.title, item.description);
   if (!item.tags || force) {
     item.tags = quick;
-    const inp = document.querySelector(`.up-tags[data-idx="${idx}"]`);
+    const curIdx = upQueue.indexOf(item);
+    const inp = curIdx >= 0 ? document.querySelector(`.up-tags[data-idx="${curIdx}"]`) : null;
     if (inp) inp.value = item.tags;
   }
   try {
@@ -50,10 +45,18 @@ async function generateTagsForItem(item, idx, force = false) {
     const arr = j?.data?.hashtags;
     if (Array.isArray(arr) && arr.length && (force || (!item.manualTags && isAutoTagsOn()))) {
       item.tags = arr.map(t => "#" + String(t).replace(/^#+/, "")).join(" ");
-      const inp = document.querySelector(`.up-tags[data-idx="${idx}"]`);
+      const curIdx = upQueue.indexOf(item);
+    const inp = curIdx >= 0 ? document.querySelector(`.up-tags[data-idx="${curIdx}"]`) : null;
       if (inp) inp.value = item.tags;
     }
   } catch {}
+}
+
+function fmtEta(sec) {
+  if (!isFinite(sec) || sec <= 0) return "almost done";
+  if (sec < 60) return `~${sec}s left`;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `~${m}m ${s}s left`;
 }
 
 function setStatusBar(phase, pct, etaText) {
@@ -163,7 +166,7 @@ function initFullUploadUI() {
   style.textContent = `
     #uploadDlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);overflow:hidden}
     #uploadDlg[open]{display:flex;flex-direction:column}
-    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg);gap:12px;flex-wrap:wrap}
+    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg)}
     .up-top h2{font-size:22px;font-weight:700}
     .up-body{flex:1;overflow-y:auto;padding:24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px}
     .up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer;transition:transform .15s}
@@ -383,7 +386,7 @@ async function submitBatchUpload() {
         let insRes = await sb.from("videos").insert({
           user_id: user.id, title, description, captions, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
         }).select("id").single();
-        if (insRes.error && /orientation|description|captions/i.test(insRes.error.message)) {
+        if (insRes.error && /orientation/i.test(insRes.error.message)) {
           insRes = await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath, hashtags: tags }).select("id").single();
         }
         if (insRes.error) throw insRes.error;
