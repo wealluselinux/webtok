@@ -1354,10 +1354,21 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   /* ---------- Homemade MCP & Auto-Update Announcements ---------- */
-  async function sendSystemAnnouncement(message, title = "", actorUid = NOTIF_ID) {
+  const MCP_FOOTER = "\n\n--this was provided by the gemini webtok MCP";
+  function withMcpFooter(text, maxLen = 2000) {
+    const clean = String(text || "").trim();
+    if (!clean) return "";
+    if (clean.endsWith("--this was provided by the gemini webtok MCP")) return clean.slice(0, maxLen);
+    const keep = Math.max(1, maxLen - MCP_FOOTER.length);
+    return `${clean.slice(0, keep)}${MCP_FOOTER}`;
+  }
+
+  async function sendSystemAnnouncement(message, title = "", actorUid = NOTIF_ID, appendMcpFooter = false) {
     const cleanMsg = String(message || "").trim().slice(0, 1000);
     if (!cleanMsg) throw new HttpError(400, "Announcement message is required.");
-    const fullBody = title ? `${String(title).trim().slice(0, 80)}\n\n${cleanMsg}`.slice(0, 1000) : cleanMsg;
+    const titlePart = title ? `${String(title).trim().slice(0, 80)}\n\n` : "";
+    const baseBody = `${titlePart}${cleanMsg}`;
+    const fullBody = appendMcpFooter ? withMcpFooter(baseBody, 1000) : baseBody.slice(0, 1000);
     const recipients = await run(
       "SELECT id FROM users WHERE id != ? AND COALESCE(banned, 0) = 0 AND COALESCE(role, 'user') != 'system'",
       [NOTIF_ID]
@@ -1765,7 +1776,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         const name = String(rpc.params?.name || "");
         const args = rpc.params?.arguments || {};
         if (name === "send_announcement") {
-          const out = await sendSystemAnnouncement(args.message, args.title || "", auth.uid);
+          const out = await sendSystemAnnouncement(args.message, args.title || "", auth.uid, true);
           return reply({ content: [{ type: "text", text: `Announcement sent to ${out.sentCount} user(s) at ${out.sentAt}.` }] });
         }
         if (name === "list_announcements") {
@@ -1803,7 +1814,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         }
         if (name === "reply_support_ticket") {
           const tid = String(args.ticketId || "").trim();
-          const body = String(args.message || "").trim().slice(0, 2000);
+          const body = withMcpFooter(args.message, 2000);
           if (!tid || !body) return fail(-32602, "ticketId and message are required.");
           const t = (await run("SELECT id, user_id, subject, contact_email FROM support_tickets WHERE id = ?", [tid]))[0];
           if (!t) return fail(-32602, `Support ticket not found: ${tid}`);
@@ -1829,7 +1840,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
             await app.locals.sendMail({
               to: t.contact_email,
               subject: `Re: ${t.subject} — Web Tok Support`,
-              text: `Web Tok Support replied to your ticket "${t.subject}":\n\n${body}\n\nStatus: ${status}\n\n— The Web Tok Team`,
+              text: `Web Tok Support replied to your ticket "${t.subject}":
+
+${body}
+
+Status: ${status}
+
+— The Web Tok Team`,
               html
             }).then(() => { emailed = true; }).catch(e => console.warn("MCP ticket email error:", e.message));
           }
