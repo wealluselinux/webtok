@@ -310,6 +310,30 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   /* ---------- account credentials & verification ---------- */
+  app.get("/api/account/theme", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const row = (await run("SELECT theme FROM profiles WHERE id = ?", [uid]))[0];
+    let theme = {};
+    try { theme = JSON.parse(row?.theme || "{}"); } catch {}
+    if (!theme || typeof theme !== "object" || Array.isArray(theme)) theme = {};
+    return { data: theme, error: null };
+  }));
+
+  app.post("/api/account/theme", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const row = (await run("SELECT theme FROM profiles WHERE id = ?", [uid]))[0];
+    if (!row) throw new HttpError(404, "Profile not found");
+    let cur = {};
+    try { cur = JSON.parse(row.theme || "{}"); } catch {}
+    if (!cur || typeof cur !== "object" || Array.isArray(cur)) cur = {};
+    const patch = (req.body && typeof req.body === "object" && !Array.isArray(req.body)) ? req.body : {};
+    const merged = { ...cur, ...patch };
+    const serialized = JSON.stringify(merged);
+    if (serialized.length > 32000) throw new HttpError(400, "Theme settings payload too large.");
+    await db.execute({ sql: "UPDATE profiles SET theme = ? WHERE id = ?", args: [serialized, uid] });
+    return { data: merged, error: null };
+  }));
+
   app.get("/api/account/me", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const u = (await run("SELECT u.id, u.email, p.username, p.display_name FROM users u LEFT JOIN profiles p ON p.id = u.id WHERE u.id = ?", [uid]))[0];

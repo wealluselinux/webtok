@@ -1,5 +1,6 @@
 /* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, attached sounds, share to Web Tok AI / friends / groups */
-let obs, muted = true;
+function getFeedPrefs() { try { return JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { return {}; } }
+let obs, muted = getFeedPrefs().vidStartUnmuted === true ? false : true;
 const AI_BOT_ID = "00000000-0000-0000-0000-000000000002";
 
 function fmtVidTime(sec) {
@@ -209,7 +210,7 @@ function slide(v) {
   const by = v.username ? `<small><a href="/profile?u=${encodeURIComponent(v.username)}">@${escapeHtml(v.username)}</a></small>` : "";
   const orientClass = v.orientation === "landscape" || v.orientation === "square" ? " " + v.orientation : "";
   const sndHtml = v.sound?.audio_url ? `<audio class="wt-vid-snd" loop preload="none" src="${escapeHtml(v.sound.audio_url)}"></audio>` : "";
-  s.innerHTML = `<div class="player${orientClass}"><video loop playsinline muted preload="none"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
+  s.innerHTML = `<div class="player${orientClass}"><video playsinline muted preload="none"></video><div class="cap"><span class="cap-t"></span>${by}</div></div>
     ${sndHtml}
     <div class="vid-seek-wrap">
       <input type="range" class="vid-seek" min="0" max="1000" value="0" aria-label="Seek video">
@@ -232,6 +233,8 @@ function slide(v) {
   let scrubbing = false;
 
   vid.dataset.src = v.src;
+  vid.loop = getFeedPrefs().vidLoop !== false;
+  if (sndEl) sndEl.loop = vid.loop;
   vid.onloadedmetadata = () => {
     if (!v.orientation) {
       if (vid.videoWidth > vid.videoHeight * 1.15) player.classList.add("landscape");
@@ -327,13 +330,18 @@ async function loadFeed() {
       if (e.isIntersecting) {
         if (!v.src && v.dataset.src) v.src = v.dataset.src;
         v.preload = "auto";
-        if (snd) {
-          v.muted = true;
-          snd.muted = muted;
-          v.play().then(() => { snd.play().catch(() => {}); }).catch(() => {});
-        } else {
-          v.muted = muted;
-          v.play().catch(() => {});
+        const fp = getFeedPrefs();
+        v.loop = fp.vidLoop !== false;
+        if (snd) snd.loop = v.loop;
+        if (fp.vidAutoplay !== false) {
+          if (snd) {
+            v.muted = true;
+            snd.muted = muted;
+            v.play().then(() => { snd.play().catch(() => {}); }).catch(() => {});
+          } else {
+            v.muted = muted;
+            v.play().catch(() => {});
+          }
         }
         activeVid = e.target.dataset.vid;
         trackView(activeVid);

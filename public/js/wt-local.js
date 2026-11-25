@@ -217,6 +217,7 @@
 
     function startRing() {
       stopRing();
+      try { const t = JSON.parse(localStorage.getItem("wt_theme") || "{}"); if (t.callRingtone === false) return; } catch {}
       playRingPulse();
       ringTimer = setInterval(playRingPulse, 2400);
     }
