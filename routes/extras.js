@@ -1661,7 +1661,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       version: "1.0.0",
       protocol: "2024-11-05",
       endpoint: `${base}/api/mcp`,
-      tools: ["send_announcement", "list_announcements", "get_site_stats"]
+      tools: ["send_announcement", "list_announcements", "get_site_stats", "list_support_tickets", "reply_support_ticket", "update_support_ticket_status"]
     });
   });
 
@@ -1721,6 +1721,42 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
               name: "get_site_stats",
               description: "Get Web Tok user count, online users, total videos, and open support tickets.",
               inputSchema: { type: "object", properties: {} }
+            },
+            {
+              name: "list_support_tickets",
+              description: "List Web Tok support tickets and their replies.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  status: { type: "string", description: "Filter by status: open, resolved, closed, or all (default: open)" },
+                  limit: { type: "number", description: "Max tickets to return (default 20)" }
+                }
+              }
+            },
+            {
+              name: "reply_support_ticket",
+              description: "Reply to a Web Tok support ticket and update its status (also emails guest tickets if configured).",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  ticketId: { type: "string", description: "The support ticket ID" },
+                  message: { type: "string", description: "Reply text (1-2000 chars)" },
+                  status: { type: "string", description: "New status: resolved, open, or closed (default: resolved)" }
+                },
+                required: ["ticketId", "message"]
+              }
+            },
+            {
+              name: "update_support_ticket_status",
+              description: "Update the status of a support ticket (open, resolved, or closed).",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  ticketId: { type: "string", description: "The support ticket ID" },
+                  status: { type: "string", description: "New status: open, resolved, or closed" }
+                },
+                required: ["ticketId", "status"]
+              }
             }
           ]
         });
@@ -1743,6 +1779,70 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
           const videos = (await run("SELECT COUNT(*) n FROM videos"))[0]?.n || 0;
           const tickets = (await run("SELECT COUNT(*) n FROM support_tickets WHERE status = 'open'"))[0]?.n || 0;
           return reply({ content: [{ type: "text", text: JSON.stringify({ totalUsers: Number(users), totalVideos: Number(videos), openSupportTickets: Number(tickets) }, null, 2) }] });
+        }
+        if (name === "list_support_tickets") {
+          const st = ["open", "resolved", "closed", "all"].includes(String(args.status || "open")) ? String(args.status || "open") : "open";
+          const lim = Math.min(Math.max(parseInt(args.limit, 10) || 20, 1), 50);
+          const tickets = await run(`
+            SELECT t.id, t.user_id, t.subject, t.message, t.status, t.contact_email, t.created_at, t.updated_at,
+              COALESCE(p.username, 'guest') AS username, COALESCE(p.display_name, 'Guest') AS display_name, COALESCE(u.email, t.contact_email) AS email
+            FROM support_tickets t
+            LEFT JOIN profiles p ON p.id = t.user_id
+            LEFT JOIN users u ON u.id = t.user_id
+            ${st !== "all" ? "WHERE t.status = ?" : ""}
+            ORDER BY CASE WHEN t.status = 'open' THEN 0 ELSE 1 END, t.updated_at DESC LIMIT ?`,
+            st !== "all" ? [st, lim] : [lim]
+          );
+          for (const t of tickets) {
+            t.replies = await run(`
+              SELECT r.id, r.is_admin, r.body, r.created_at, p.username
+              FROM support_replies r LEFT JOIN profiles p ON p.id = r.user_id
+              WHERE r.ticket_id = ? ORDER BY r.id ASC LIMIT 50`, [t.id]);
+          }
+          return reply({ content: [{ type: "text", text: JSON.stringify(tickets, null, 2) }] });
+        }
+        if (name === "reply_support_ticket") {
+          const tid = String(args.ticketId || "").trim();
+          const body = String(args.message || "").trim().slice(0, 2000);
+          if (!tid || !body) return fail(-32602, "ticketId and message are required.");
+          const t = (await run("SELECT id, user_id, subject, contact_email FROM support_tickets WHERE id = ?", [tid]))[0];
+          if (!t) return fail(-32602, `Support ticket not found: ${tid}`);
+          const status = ["open", "resolved", "closed"].includes(String(args.status || "resolved")) ? String(args.status || "resolved") : "resolved";
+          const ts = nowIso();
+          await db.batch([
+            { sql: "INSERT INTO support_replies (ticket_id, user_id, is_admin, body, created_at) VALUES (?,?,1,?,?)", args: [tid, auth.uid, body, ts] },
+            { sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, ts, tid] }
+          ], "write");
+          let emailed = false;
+          if (t.contact_email && app.locals.sendMail) {
+            const baseUrl = (process.env.RENDER_EXTERNAL_URL || "https://webtok.onrender.com").replace(/\/+$/, "");
+            const html = app.locals.buildEmailHtml ? app.locals.buildEmailHtml({
+              title: "Support Ticket Reply",
+              bannerBg: "#d0bcff",
+              bannerFg: "#1d192b",
+              greeting: "Hi there!",
+              intro: `Web Tok Support replied to your ticket "${t.subject}":`,
+              details: [["Reply", body], ["Status", status]],
+              ctaLabel: "Open Web Tok",
+              ctaUrl: `${baseUrl}/support`
+            }) : undefined;
+            await app.locals.sendMail({
+              to: t.contact_email,
+              subject: `Re: ${t.subject} — Web Tok Support`,
+              text: `Web Tok Support replied to your ticket "${t.subject}":\n\n${body}\n\nStatus: ${status}\n\n— The Web Tok Team`,
+              html
+            }).then(() => { emailed = true; }).catch(e => console.warn("MCP ticket email error:", e.message));
+          }
+          await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [auth.uid, "mcp_support_reply", `${t.subject.slice(0, 60)} (${status})`, ts] }).catch(() => {});
+          return reply({ content: [{ type: "text", text: `Replied to ticket "${t.subject}" (${tid}), status set to "${status}"${emailed ? ", and emailed guest" : ""}.` }] });
+        }
+        if (name === "update_support_ticket_status") {
+          const tid = String(args.ticketId || "").trim();
+          const status = ["open", "resolved", "closed"].includes(String(args.status || "")) ? String(args.status) : null;
+          if (!tid || !status) return fail(-32602, "Valid ticketId and status (open, resolved, closed) are required.");
+          await db.execute({ sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, nowIso(), tid] });
+          await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [auth.uid, "mcp_support_status", `${tid}: ${status}`, nowIso()] }).catch(() => {});
+          return reply({ content: [{ type: "text", text: `Ticket ${tid} status updated to "${status}".` }] });
         }
         return fail(-32601, `Unknown tool: ${name}`);
       }
