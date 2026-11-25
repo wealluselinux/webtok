@@ -39,6 +39,10 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     if (!ccols.includes("parent_id")) {
       await db.execute("ALTER TABLE comments ADD COLUMN parent_id TEXT");
     }
+    const tcols = (await db.execute("PRAGMA table_info(support_tickets)")).rows.map(r => r[1]);
+    if (tcols.length && !tcols.includes("contact_email")) {
+      await db.execute("ALTER TABLE support_tickets ADD COLUMN contact_email TEXT");
+    }
     const ucols = (await db.execute("PRAGMA table_info(users)")).rows.map(r => r[1]);
     for (const [n, d] of [["role", "TEXT NOT NULL DEFAULT 'user'"], ["restrictions", "TEXT NOT NULL DEFAULT '[]'"], ["banned", "INTEGER NOT NULL DEFAULT 0"],
       ["ban_reason", "TEXT"], ["sessions_valid_after", "TEXT"], ["tos_accepted_at", "TEXT"], ["tos_version", "TEXT"], ["last_login_at", "TEXT"], ["role_since", "TEXT"]]) {
@@ -55,7 +59,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, media_url TEXT NOT NULL, media_type TEXT NOT NULL, caption TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS sounds (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, storage_path TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS video_sounds (video_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sound_id TEXT NOT NULL, created_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', contact_email TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
@@ -167,18 +171,12 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     } catch (e) { console.warn("recordLoginDevice:", e.message); }
   };
 
-  /* ---------- Email verification code for signup ---------- */
-  const verifHash = (em, code) => crypto.createHash("sha256").update(`${em}:${code}`).digest("hex");
+  /* ---------- Email verification codes (Password Reset & Sensitive Account Changes) ---------- */
+  const verifHash = (key, code) => crypto.createHash("sha256").update(`${key}:${code}`).digest("hex");
 
-  app.post("/api/auth/send-verification", limit(6, 600000), wrap(async req => {
-    await ensure();
-    const em = String(req.body?.email || "").trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em) || em.length > 120) throw new HttpError(400, "Enter a valid email.");
-    if ((await run("SELECT 1 FROM users WHERE email = ?", [em])).length) {
-      throw new HttpError(422, "That email already has an account. Sign in instead.");
-    }
+  async function issueCode(key, toEmail, { title, intro, subjectPrefix }) {
     if (!app.locals.isMailerConfigured || !app.locals.isMailerConfigured() || !app.locals.sendMail) {
-      return { data: { sent: false, required: false }, error: null };
+      throw new HttpError(503, "Email service is not configured right now. Please submit a support ticket instead.");
     }
     const code = String(crypto.randomInt(100000, 1000000));
     const ts = nowIso();
@@ -186,50 +184,71 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     await db.execute({
       sql: `INSERT INTO email_verifications (email, code_hash, expires_at, attempts, created_at) VALUES (?,?,?,0,?)
             ON CONFLICT(email) DO UPDATE SET code_hash=excluded.code_hash, expires_at=excluded.expires_at, attempts=0, created_at=excluded.created_at`,
-      args: [em, verifHash(em, code), exp, ts]
+      args: [key, verifHash(key, code), exp, ts]
     });
     const html = app.locals.buildEmailHtml ? app.locals.buildEmailHtml({
-      title: "Verification Code",
+      title,
       bannerBg: "#d0bcff",
       bannerFg: "#1d192b",
       greeting: "Hi there!",
-      intro: "To finish creating your Web Tok account, enter the following verification code:",
+      intro,
       pillText: code,
       noteText: "For your protection, never share this code with anyone. It expires in 15 minutes. If you didn't request this code, please"
     }) : undefined;
     await app.locals.sendMail({
-      to: em,
-      subject: `Your Web Tok verification code is ${code}`,
-      text: `Your Web Tok verification code is ${code}\n\nThis code expires in 15 minutes. For your protection, never share this code with anyone.\n\n— The Web Tok Team`,
+      to: toEmail,
+      subject: `${subjectPrefix} ${code}`,
+      text: `${subjectPrefix} ${code}\n\nThis code expires in 15 minutes. For your protection, never share this code with anyone.\n\n— The Web Tok Team`,
       html
     });
-    return { data: { sent: true, required: true }, error: null };
+  }
+
+  async function verifyCode(key, code) {
+    if (!/^\d{6}$/.test(String(code || "").trim())) throw new HttpError(400, "Enter the 6-digit verification code.");
+    const row = (await run("SELECT * FROM email_verifications WHERE email = ?", [key]))[0];
+    if (!row) throw new HttpError(400, "Please request a verification code first.");
+    if (Date.parse(row.expires_at) < Date.now()) {
+      await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [key] });
+      throw new HttpError(400, "Verification code expired. Request a new code.");
+    }
+    if (row.attempts >= 5) throw new HttpError(429, "Too many wrong codes. Request a new verification code.");
+    if (row.code_hash !== verifHash(key, String(code).trim())) {
+      await db.execute({ sql: "UPDATE email_verifications SET attempts = attempts + 1 WHERE email = ?", args: [key] });
+      throw new HttpError(400, "Incorrect verification code.");
+    }
+    await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [key] });
+  }
+
+  app.post("/api/auth/forgot/send-code", limit(6, 600000), wrap(async req => {
+    await ensure();
+    const em = String(req.body?.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em) || em.length > 120) throw new HttpError(400, "Enter a valid email.");
+    const u = (await run("SELECT id, banned, role FROM users WHERE email = ?", [em]))[0];
+    if (!u || u.role === "system") throw new HttpError(404, "No account found with that email. Need help? Submit a support ticket.");
+    if (u.banned) throw new HttpError(403, "This account has been suspended.");
+    await issueCode(`reset:${em}`, em, {
+      title: "Password Reset Code",
+      intro: "To reset your Web Tok password, enter the following verification code:",
+      subjectPrefix: "Your Web Tok password reset code is"
+    });
+    return { data: { sent: true }, error: null };
   }));
 
-  app.post("/api/auth/signup", async (req, res, next) => {
-    try {
-      await ensure();
-      if (!app.locals.isMailerConfigured || !app.locals.isMailerConfigured()) return next();
-      const em = String(req.body?.email || "").trim().toLowerCase();
-      const code = String(req.body?.data?.verification_code || "").trim();
-      if (!/^\d{6}$/.test(code)) return deny(res, 400, "Enter the 6-digit verification code sent to your email.");
-      const row = (await run("SELECT * FROM email_verifications WHERE email = ?", [em]))[0];
-      if (!row) return deny(res, 400, "Please request a verification code for your email first.");
-      if (Date.parse(row.expires_at) < Date.now()) {
-        await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [em] });
-        return deny(res, 400, "Verification code expired. Request a new code.");
-      }
-      if (row.attempts >= 5) {
-        return deny(res, 429, "Too many wrong codes. Please request a new verification code.");
-      }
-      if (row.code_hash !== verifHash(em, code)) {
-        await db.execute({ sql: "UPDATE email_verifications SET attempts = attempts + 1 WHERE email = ?", args: [em] });
-        return deny(res, 400, "Incorrect verification code.");
-      }
-      await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [em] });
-      next();
-    } catch (e) { next(e); }
-  });
+  app.post("/api/auth/forgot/reset", limit(10, 600000), wrap(async req => {
+    await ensure();
+    const em = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    const newPw = String(req.body?.new_password || "");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw new HttpError(400, "Enter a valid email.");
+    if (weakPassword(newPw)) throw new HttpError(400, "Password needs 10+ characters with upper and lower case, a number and a symbol.");
+    const u = (await run("SELECT id, banned, role FROM users WHERE email = ?", [em]))[0];
+    if (!u || u.role === "system") throw new HttpError(404, "No account found with that email.");
+    if (u.banned) throw new HttpError(403, "This account has been suspended.");
+    await verifyCode(`reset:${em}`, code);
+    await db.execute({ sql: "UPDATE users SET encrypted_password = ?, sessions_valid_after = ? WHERE id = ?", args: [await bcrypt.hash(newPw, 10), nowIso(), u.id] });
+    forget(u.id);
+    return { data: true, error: null };
+  }));
 
   const deny = (res, code, message) => res.status(code).json({ data: null, error: { message } });
 
@@ -298,6 +317,18 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: { id: u.id, email: u.email, username: u.username || "", display_name: u.display_name || "" }, error: null };
   }));
 
+  app.post("/api/account/send-verification", limit(6, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const u = (await run("SELECT id, email FROM users WHERE id = ?", [uid]))[0];
+    if (!u || !u.email) throw new HttpError(404, "Account email not found");
+    await issueCode(`acct:${uid}:${u.email}`, u.email, {
+      title: "Security Verification Code",
+      intro: "To verify changes to your Web Tok account settings, enter the following verification code:",
+      subjectPrefix: "Your Web Tok security code is"
+    });
+    return { data: { sent: true }, error: null };
+  }));
+
   app.post("/api/account/credentials", limit(15, 600000), wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const u = (await run("SELECT id, email, encrypted_password, raw_user_meta_data FROM users WHERE id = ?", [uid]))[0];
@@ -309,6 +340,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const nextEmail = req.body?.email !== undefined ? String(req.body.email).trim().toLowerCase() : u.email;
     const newPw = req.body?.new_password ? String(req.body.new_password) : "";
     const curPw = req.body?.current_password ? String(req.body.current_password) : "";
+    const vCode = req.body?.verification_code ? String(req.body.verification_code).trim() : "";
 
     if (!/^[a-z0-9_.]{3,20}$/.test(nextUser)) throw new HttpError(400, "Username must be 3 to 20 characters (letters, numbers, _ or .).");
     if (nextUser !== (p?.username || "").toLowerCase()) {
@@ -319,9 +351,14 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     const emailChanged = nextEmail !== u.email;
     const pwChanged = newPw.length > 0;
     if (emailChanged || pwChanged) {
-      if (!curPw) throw new HttpError(403, "Enter your current password to verify email or password changes.");
-      const ok = await bcrypt.compare(curPw, u.encrypted_password);
-      if (!ok) throw new HttpError(403, "Current password is incorrect.");
+      if (curPw) {
+        const ok = await bcrypt.compare(curPw, u.encrypted_password);
+        if (!ok) throw new HttpError(403, "Current password is incorrect.");
+      } else if (vCode) {
+        await verifyCode(`acct:${uid}:${u.email}`, vCode);
+      } else {
+        throw new HttpError(403, "Enter your current password or a 6-digit verification code sent to your email.");
+      }
     }
 
     if (emailChanged) {
@@ -383,6 +420,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.get("/privacy", page("privacy.html"));
   app.get("/sounds", page("sounds.html"));
   app.get("/support", page("support.html"));
+  app.get("/forgot", page("forgot.html"));
 
   /* ---------- 24-hour Stories ---------- */
   app.get("/api/stories", wrap(async () => {
@@ -954,7 +992,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { data: row, error: null };
   }));
 
-  /* ---------- Support Tickets (user) ---------- */
+  /* ---------- Support Tickets (user + guest) ---------- */
   app.get("/api/support/tickets", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const tickets = await run(
@@ -971,17 +1009,23 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   app.post("/api/support/tickets", limit(10, 600000), wrap(async req => {
-    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await ensure();
+    const uid = uidFrom(req);
+    const contactEmail = String(req.body?.contact_email || "").trim().toLowerCase().slice(0, 120);
+    if (!uid && (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contactEmail))) {
+      throw new HttpError(400, "Enter a valid contact email so we can reply to you.");
+    }
     const subject = String(req.body?.subject || "").trim().slice(0, 120);
     const message = String(req.body?.message || "").trim().slice(0, 2000);
     if (subject.length < 3) throw new HttpError(400, "Subject must be at least 3 characters.");
     if (message.length < 5) throw new HttpError(400, "Message must be at least 5 characters.");
     const id = crypto.randomUUID(), ts = nowIso();
+    const ticketUid = uid || "guest";
     await db.execute({
-      sql: "INSERT INTO support_tickets (id, user_id, subject, message, status, created_at, updated_at) VALUES (?,?,?,?, 'open', ?,?)",
-      args: [id, uid, subject, message, ts, ts]
+      sql: "INSERT INTO support_tickets (id, user_id, subject, message, status, contact_email, created_at, updated_at) VALUES (?,?,?,?, 'open', ?,?,?)",
+      args: [id, ticketUid, subject, message, uid ? null : contactEmail, ts, ts]
     });
-    return { data: { id, user_id: uid, subject, message, status: "open", created_at: ts, updated_at: ts, replies: [] }, error: null };
+    return { data: { id, user_id: ticketUid, subject, message, status: "open", contact_email: uid ? null : contactEmail, created_at: ts, updated_at: ts, replies: [] }, error: null };
   }));
 
   app.post("/api/support/tickets/:id/reply", wrap(async req => {
@@ -1119,8 +1163,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.get("/api/admin/support", wrap(async req => {
     needAdmin(req);
     const tickets = await run(`
-      SELECT t.id, t.user_id, t.subject, t.message, t.status, t.created_at, t.updated_at,
-        p.username, p.display_name, u.email
+      SELECT t.id, t.user_id, t.subject, t.message, t.status, t.contact_email, t.created_at, t.updated_at,
+        COALESCE(p.username, 'guest') AS username, COALESCE(p.display_name, 'Guest') AS display_name, COALESCE(u.email, t.contact_email) AS email
       FROM support_tickets t
       LEFT JOIN profiles p ON p.id = t.user_id
       LEFT JOIN users u ON u.id = t.user_id
@@ -1137,7 +1181,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.post("/api/admin/support/:id/reply", wrap(async req => {
     const me = needAdmin(req);
     const tid = String(req.params.id || "");
-    const t = (await run("SELECT id, subject FROM support_tickets WHERE id = ?", [tid]))[0];
+    const t = (await run("SELECT id, user_id, subject, contact_email FROM support_tickets WHERE id = ?", [tid]))[0];
     if (!t) throw new HttpError(404, "Ticket not found");
     const body = String(req.body?.body || "").trim().slice(0, 2000);
     if (!body) throw new HttpError(400, "Write a reply first.");
@@ -1147,6 +1191,25 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       { sql: "INSERT INTO support_replies (ticket_id, user_id, is_admin, body, created_at) VALUES (?,?,1,?,?)", args: [tid, me.uid, body, ts] },
       { sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, ts, tid] }
     ], "write");
+    if (t.contact_email && app.locals.sendMail) {
+      const baseUrl = (process.env.RENDER_EXTERNAL_URL || "https://webtok.onrender.com").replace(/\/+$/, "");
+      const html = app.locals.buildEmailHtml ? app.locals.buildEmailHtml({
+        title: "Support Ticket Reply",
+        bannerBg: "#d0bcff",
+        bannerFg: "#1d192b",
+        greeting: "Hi there!",
+        intro: `Web Tok Support replied to your ticket "${t.subject}":`,
+        details: [["Reply", body], ["Status", status]],
+        ctaLabel: "Open Web Tok",
+        ctaUrl: `${baseUrl}/support`
+      }) : undefined;
+      app.locals.sendMail({
+        to: t.contact_email,
+        subject: `Re: ${t.subject} — Web Tok Support`,
+        text: `Web Tok Support replied to your ticket "${t.subject}":\n\n${body}\n\nStatus: ${status}\n\n— The Web Tok Team`,
+        html
+      }).catch(e => console.warn("Guest ticket email error:", e.message));
+    }
     await log(me, "support_reply", `${t.subject.slice(0, 60)} (${status})`);
     return { data: { status }, error: null };
   }));

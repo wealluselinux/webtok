@@ -14,8 +14,8 @@ body{overflow-y:auto;padding:24px 16px 64px;height:auto;min-height:100dvh}
 h1{font-size:28px;font-weight:700;letter-spacing:-.3px;display:flex;align-items:center;gap:10px}
 .card{background:var(--card);border-radius:var(--r-xl);padding:22px;box-shadow:0 4px 18px #0001;display:flex;flex-direction:column;gap:12px}
 .card h2{font-size:18px;font-weight:700}
-input[type=text],textarea{width:100%;padding:14px 18px;border-radius:var(--r-lg);border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;transition:border-color .15s}
-input[type=text]:focus,textarea:focus{outline:0;border-color:var(--primary)}
+input[type=text],input[type=email],textarea{width:100%;padding:14px 18px;border-radius:var(--r-lg);border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit;transition:border-color .15s}
+input:focus,textarea:focus{outline:0;border-color:var(--primary)}
 textarea{resize:vertical;min-height:110px}
 .t-card{background:var(--surface);border-radius:var(--r-xl);padding:18px;display:flex;flex-direction:column;gap:10px}
 .t-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
@@ -44,20 +44,16 @@ textarea{resize:vertical;min-height:110px}
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <a class="btn sm" href="/"><span class="ms" style="font-size:18px">home</span>Home</a>
       <a class="btn sm" href="/scroll"><span class="ms" style="font-size:18px">play_circle</span>Feed</a>
+      <a class="btn sm hidden" id="signInLink" href="/login"><span class="ms" style="font-size:18px">login</span>Sign in</a>
     </div>
   </div>
 
-  <div id="guestCard" class="card hidden">
-    <h2>Sign in to contact Support</h2>
-    <p style="font-size:14px;color:var(--muted);line-height:1.5">You need a signed-in Web Tok account to submit a support ticket and view replies from admins.</p>
-    <div><a class="btn primary sm" href="/login">Sign in</a></div>
-  </div>
-
-  <div id="supportApp" class="hidden">
+  <div id="supportApp">
     <div class="card">
       <h2>Submit a Support Ticket</h2>
-      <p style="font-size:13px;color:var(--muted)">Need help with your account, a bug, or a report? Send a ticket directly to Web Tok admins and the owner.</p>
-      <input type="text" id="tkSubject" maxlength="120" placeholder="Subject (e.g. Can't upload a video)">
+      <p style="font-size:13px;color:var(--muted)" id="tkDesc">Need help with your account, a bug, or a report? Send a ticket directly to Web Tok admins and the owner.</p>
+      <input type="email" id="tkEmail" class="hidden" maxlength="120" placeholder="Your contact email (so we can reply to you)">
+      <input type="text" id="tkSubject" maxlength="120" placeholder="Subject (e.g. Can't reset password)">
       <textarea id="tkMessage" maxlength="2000" placeholder="Describe what happened in detail…"></textarea>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
         <span class="hint" id="tkHint" style="margin:0"></span>
@@ -65,7 +61,7 @@ textarea{resize:vertical;min-height:110px}
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card hidden" id="yourTicketsCard" style="margin-top:16px">
       <h2>Your Tickets</h2>
       <div id="tkList"><div style="color:var(--muted);font-size:14px">Loading your tickets…</div></div>
     </div>
@@ -81,6 +77,7 @@ let tok = null;
 const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 async function loadTickets() {
+  if (!tok) return;
   const list = document.getElementById("tkList");
   try {
     const r = await fetch("/api/support/tickets", { headers: { Authorization: "Bearer " + tok } });
@@ -146,25 +143,31 @@ async function loadTickets() {
 }
 
 document.getElementById("tkSubmit").onclick = async () => {
+  const contact_email = document.getElementById("tkEmail").value.trim().toLowerCase();
   const subject = document.getElementById("tkSubject").value.trim();
   const message = document.getElementById("tkMessage").value.trim();
   const hint = document.getElementById("tkHint");
   const btn = document.getElementById("tkSubmit");
+  if (!tok && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(contact_email)) {
+    hint.textContent = "Enter a valid email so we can reply to you."; hint.className = "hint bad"; return;
+  }
   if (subject.length < 3) { hint.textContent = "Subject must be at least 3 characters."; hint.className = "hint bad"; return; }
   if (message.length < 5) { hint.textContent = "Please describe your issue (at least 5 characters)."; hint.className = "hint bad"; return; }
   btn.disabled = true; hint.textContent = "Submitting…"; hint.className = "hint";
   try {
+    const headers = { "Content-Type": "application/json" };
+    if (tok) headers.Authorization = "Bearer " + tok;
     const r = await fetch("/api/support/tickets", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok },
-      body: JSON.stringify({ subject, message })
+      headers,
+      body: JSON.stringify({ subject, message, ...(tok ? {} : { contact_email }) })
     });
     const j = await r.json();
     if (!r.ok || j.error) throw new Error(j.error?.message || "Could not submit ticket");
     document.getElementById("tkSubject").value = "";
     document.getElementById("tkMessage").value = "";
-    hint.textContent = "Ticket submitted! Admins will reply here.";
-    await loadTickets();
+    hint.textContent = tok ? "Ticket submitted! Admins will reply here." : "Ticket submitted! Admins will reply to your email.";
+    if (tok) await loadTickets();
   } catch (e) {
     hint.textContent = e.message; hint.className = "hint bad";
   } finally {
@@ -175,11 +178,13 @@ document.getElementById("tkSubmit").onclick = async () => {
 (async () => {
   const { data } = await sb.auth.getSession();
   if (!data?.session) {
-    document.getElementById("guestCard").classList.remove("hidden");
+    document.getElementById("tkEmail").classList.remove("hidden");
+    document.getElementById("signInLink").classList.remove("hidden");
+    document.getElementById("tkDesc").textContent = "No account needed! Enter your email and describe your issue, and Web Tok admins will reply to you.";
     return;
   }
   tok = data.session.access_token;
-  document.getElementById("supportApp").classList.remove("hidden");
+  document.getElementById("yourTicketsCard").classList.remove("hidden");
   loadTickets();
 })();
 </script>

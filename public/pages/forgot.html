@@ -1,33 +1,150 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Web Tok · Forgot password</title>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Tok · Forgot Password</title>
 <link rel="icon" href="/images/logo.png">
 <style>
-:root{--bg:#fff0ee;--surface:#ffe3e8;--card:#fbd5de;--primary:#7b3f8c;--on:#fff;--text:#3b1f2b;--muted:#85626f;--ok:#2e7d4f;--bad:#b3261e}
-@media(prefers-color-scheme:dark){:root{--bg:#22141b;--surface:#33202a;--card:#47303c;--primary:#e7b6f2;--on:#3a1745;--text:#f7dde5;--muted:#c3a1ae;--ok:#8fd5a6;--bad:#ffb4ab}}
+:root{--bg:#f6f1fc;--surface:#ede5f7;--card:#e2d4f4;--primary:#6750a4;--on:#fff;--text:#1d192b;--muted:#625b71;--ok:#2e7d4f;--bad:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#16121e;--surface:#221c2e;--card:#312842;--primary:#d0bcff;--on:#381e72;--text:#ebe3f7;--muted:#b4abc5;--ok:#8fd5a6;--bad:#ffb4ab}}
 *{box-sizing:border-box;margin:0}
 body{font-family:"Google Sans",Roboto,system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:grid;place-items:center;padding:20px}
-.card{width:min(100%,430px);background:var(--card);border-radius:32px;padding:28px}
-h1{font-size:26px;margin-bottom:6px}.sub{color:var(--muted);margin-bottom:16px}
+.card{width:min(100%,440px);background:var(--card);border-radius:32px;padding:28px;box-shadow:0 12px 40px #0002}
+.logo{font-size:30px;font-weight:700;margin-bottom:4px;color:var(--primary)}.sub{color:var(--muted);margin-bottom:18px}
+.step{display:none}.step.on{display:block}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 4px 4px;font-weight:600}
 input{width:100%;padding:15px 18px;border-radius:24px;border:2px solid transparent;background:var(--surface);color:var(--text);font:inherit}
 input:focus{outline:0;border-color:var(--primary)}
-.btn{padding:15px 26px;border-radius:999px;border:0;font:inherit;font-weight:600;cursor:pointer;background:var(--primary);color:var(--on)}
-.btn:disabled{opacity:.5}.row{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:10px;flex-wrap:wrap}
-a{color:var(--primary)}.hint{font-size:14px;min-height:20px;margin:10px 4px 0;color:var(--muted)}.ok{color:var(--ok)}.bad{color:var(--bad)}
-</style>
-</head>
-<body>
+.btn{padding:14px 24px;border-radius:999px;border:0;font:inherit;font-weight:700;cursor:pointer;background:var(--surface);color:var(--text);text-decoration:none;display:inline-block}
+.btn.p{background:var(--primary);color:var(--on)}.btn:disabled{opacity:.45;cursor:default}
+.row{display:flex;gap:10px;justify-content:space-between;margin-top:18px;flex-wrap:wrap;align-items:center}
+.hint{font-size:13px;min-height:18px;margin:8px 4px;color:var(--muted)}.ok{color:var(--ok)}.bad{color:var(--bad)}
+.rules{list-style:none;padding:0;font-size:13px;margin:8px 4px}.rules li::before{content:"○ "}.rules li.y{color:var(--ok)}.rules li.y::before{content:"● "}
+.link{background:none;border:0;color:var(--primary);font:inherit;cursor:pointer;text-decoration:underline;padding:4px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);margin:10px 4px;cursor:pointer}.chk input{width:auto}
+</style></head><body>
 <main class="card">
-  <h1>Forgot your password?</h1>
-  <p class="sub">Please contact the site owner to reset your password.</p>
-  <p style="margin:14px 4px 4px">Email them at:</p>
-  <p style="margin:0 4px 18px;font-weight:700;font-size:18px;word-break:break-all"><a id="owner" href="mailto:meganlayow440@gmail.com?subject=Web%20Tok%20password%20reset">meganlayow440@gmail.com</a></p>
-  <p class="hint">Include the email address you signed up with, and your username.</p>
-  <div class="row"><a href="/login">Back to sign in</a></div>
+  <a href="/" style="text-decoration:none;color:inherit"><div class="logo">Web Tok</div></a>
+  <p class="sub" id="sub">Reset your password</p>
+
+  <section class="step on" id="s-email">
+    <label>Account email</label>
+    <input id="fp-email" type="email" autocomplete="email" placeholder="you@example.com">
+    <div class="hint" id="h-email">We'll email you a 6-digit verification code.</div>
+    <div class="row">
+      <a class="btn" href="/login">Back to sign in</a>
+      <button class="btn p" id="send-code">Send code</button>
+    </div>
+  </section>
+
+  <section class="step" id="s-reset">
+    <label>6-digit verification code</label>
+    <input id="fp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px;text-align:center;font-weight:700;font-size:20px">
+    <div style="margin:4px 4px 8px"><button type="button" class="link" id="resend-code">Resend code</button></div>
+    <label>New password</label>
+    <input id="fp-pw" type="password" autocomplete="new-password">
+    <label>Confirm new password</label>
+    <input id="fp-pw2" type="password" autocomplete="new-password">
+    <label class="chk"><input type="checkbox" id="showpw"> Show password</label>
+    <ul class="rules" id="rules"></ul>
+    <div class="hint" id="h-reset"></div>
+    <div class="row">
+      <button class="btn" id="back-email">Back</button>
+      <button class="btn p" id="do-reset" disabled>Reset password</button>
+    </div>
+  </section>
+
+  <section class="step" id="s-done">
+    <p style="font-size:15px;line-height:1.5;margin-bottom:16px">Your password has been updated and all older sessions were signed out.</p>
+    <a class="btn p" id="go-login" href="/login">Sign in</a>
+  </section>
+
+  <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:18px;line-height:1.5">
+    Can't access your email or didn't get the code? <a href="/support" style="color:var(--primary);font-weight:700">Submit a support ticket</a> (no account needed).
+  </p>
 </main>
+
 <script src="/js/capri-pet.js"></script>
-</body>
-</html>
+<script>
+const $ = id => document.getElementById(id);
+let email = "";
+const COMMON = ["password", "123456", "qwerty", "letmein", "welcome", "admin", "iloveyou", "webtok"];
+const RULES = [
+  ["At least 10 characters", p => p.length >= 10],
+  ["Upper and lower case", p => /[a-z]/.test(p) && /[A-Z]/.test(p)],
+  ["A number", p => /\d/.test(p)],
+  ["A symbol", p => /[^A-Za-z0-9]/.test(p)],
+  ["Not a common password", p => !COMMON.some(w => p.toLowerCase().includes(w))]
+];
+
+function showStep(id, sub) {
+  document.querySelectorAll(".step").forEach(s => s.classList.toggle("on", s.id === id));
+  $("sub").textContent = sub;
+}
+function say(id, msg, cls) {
+  const e = $(id); e.textContent = msg; e.className = "hint " + (cls || "");
+}
+function checkForm() {
+  const codeOk = /^\d{6}$/.test($("fp-code").value.trim());
+  const p = $("fp-pw").value;
+  let all = true;
+  $("rules").innerHTML = RULES.map(([t, f]) => { const y = f(p); all = all && y; return `<li class="${y ? "y" : ""}">${t}</li>`; }).join("");
+  const match = p && p === $("fp-pw2").value;
+  if ($("fp-pw2").value) say("h-reset", match ? "Passwords match" : "Passwords don't match", match ? "ok" : "bad");
+  else say("h-reset", "");
+  $("do-reset").disabled = !(codeOk && all && match);
+}
+
+$("fp-code").oninput = () => { $("fp-code").value = $("fp-code").value.replace(/\D/g, "").slice(0, 6); checkForm(); };
+$("fp-pw").oninput = $("fp-pw2").oninput = checkForm;
+$("showpw").onchange = () => {
+  const t = $("showpw").checked ? "text" : "password";
+  $("fp-pw").type = $("fp-pw2").type = t;
+};
+$("back-email").onclick = () => showStep("s-email", "Reset your password");
+
+async function sendCode() {
+  const em = $("fp-email").value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return say("h-email", "Enter a valid email.", "bad");
+  $("send-code").disabled = true; $("resend-code").disabled = true;
+  say("h-email", "Sending verification code…");
+  try {
+    const r = await fetch("/api/auth/forgot/send-code", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: em })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Could not send code");
+    email = em;
+    showStep("s-reset", `Enter the code sent to ${email}`);
+    checkForm();
+    say("h-reset", `We sent a 6-digit code to ${email}.`, "ok");
+  } catch (e) {
+    say("h-email", e.message, "bad");
+    say("h-reset", e.message, "bad");
+  } finally {
+    $("send-code").disabled = false; $("resend-code").disabled = false;
+  }
+}
+
+$("send-code").onclick = sendCode;
+$("resend-code").onclick = sendCode;
+$("do-reset").onclick = async () => {
+  $("do-reset").disabled = true;
+  say("h-reset", "Resetting password…");
+  try {
+    const r = await fetch("/api/auth/forgot/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, code: $("fp-code").value.trim(), new_password: $("fp-pw").value })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Could not reset password");
+    $("go-login").href = "/login?email=" + encodeURIComponent(email);
+    showStep("s-done", "Password updated!");
+  } catch (e) {
+    say("h-reset", e.message, "bad");
+    $("do-reset").disabled = false;
+  }
+};
+</script></body></html>

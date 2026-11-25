@@ -60,13 +60,6 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
  <div class="row"><button class="btn" id="to-in">I have an account</button><button class="btn p" id="n-email">Next</button></div>
 </section>
 
-<section class="step" id="s-verify">
- <label>6-digit verification code</label><input id="vcode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="letter-spacing:6px;text-align:center;font-weight:700;font-size:20px">
- <div class="hint" id="h-verify"></div>
- <div style="margin:2px 4px 6px"><button type="button" class="link" id="resend-code">Resend code</button></div>
- <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-verify" disabled>Verify</button></div>
-</section>
-
 <section class="step" id="s-username">
  <label>Username</label><input id="username" autocomplete="off" maxlength="20" placeholder="3–20 letters, numbers, _ or .">
  <div class="hint" id="h-user"></div>
@@ -89,7 +82,7 @@ textarea{resize:none;height:84px}input:focus,textarea:focus{outline:0;border-col
  <p style="font-size:12px;color:var(--muted);margin:8px 4px 0;line-height:1.4">By clicking <b>Create account</b>, you agree to our <a href="/terms" target="_blank" rel="noopener" style="color:var(--primary)">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener" style="color:var(--primary)">Privacy Policy</a>.</p>
  <div class="row"><button class="btn" data-back>Back</button><button class="btn p" id="n-pw" disabled>Create account</button></div>
 </section>
-<p style="text-align:center;font-size:12px;color:var(--muted);margin-top:16px"><a href="/terms" style="color:inherit">Terms</a> · <a href="/privacy" style="color:inherit">Privacy</a></p>
+<p style="text-align:center;font-size:12px;color:var(--muted);margin-top:16px"><a href="/terms" style="color:inherit">Terms</a> · <a href="/privacy" style="color:inherit">Privacy</a> · <a href="/support" style="color:inherit">Support</a></p>
 </main>
 
 <div id="auth-overlay" role="status" aria-live="polite">
@@ -110,8 +103,8 @@ if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){document.querySelector(".card").innerH
 const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
 const qs=new URLSearchParams(location.search);
 const isAddMode=qs.get("add")==="1";
-const FLOW=["email","verify","username","profile","pass"], SUBS={in:isAddMode?"Add another account":"Welcome back",email:"What's your email?",verify:"Check your email",username:"Pick a username",profile:"Set up your profile",pass:"Create a password"};
-let d={}, avatar=null, cur="in", verifyRequired=false;
+const FLOW=["email","username","profile","pass"], SUBS={in:isAddMode?"Add another account":"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password"};
+let d={}, avatar=null, cur="in";
 
 function showAuthLoading(title, sub){
   $("ao-ic").className="ao-ic";
@@ -170,11 +163,7 @@ function go(s){
   $("dots").innerHTML=i<0?"":FLOW.map((_,k)=>`<i class="${k<=i?"on":""}"></i>`).join("");
 }
 function say(id,msg,cls){const e=$(id);e.textContent=msg;e.className="hint "+(cls||"")}
-document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>{
-  const idx=FLOW.indexOf(cur)-1;
-  const prev=FLOW[idx]==="verify" && !verifyRequired ? "email" : FLOW[idx];
-  go(prev);
-});
+document.querySelectorAll("[data-back]").forEach(b=>b.onclick=()=>go(FLOW[FLOW.indexOf(cur)-1]));
 $("to-up").onclick=()=>go("email"); $("to-in").onclick=()=>go("in");
 if(qs.get("email")) $("li-email").value=qs.get("email");
 
@@ -194,62 +183,11 @@ $("do-in").onclick=async()=>{
   say("h-in",error.message,"bad");
 };
 
-/* 1 email + send verification code */
-async function sendVerifCode(email){
-  const r=await fetch("/api/auth/send-verification",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email})});
-  const j=await r.json().catch(()=>({}));
-  if(!r.ok||j.error) throw new Error(j.error?.message||"Could not send verification code.");
-  return j.data||{sent:false,required:false};
-}
-
-$("n-email").onclick=async()=>{
+/* 1 email (no email verification required for signup) */
+$("n-email").onclick=()=>{
   const v=$("email").value.trim().toLowerCase();
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return say("h-email","Enter a valid email.","bad");
-  $("n-email").disabled=true; say("h-email","Sending verification code…");
-  try{
-    const res=await sendVerifCode(v);
-    d.email=v;
-    verifyRequired=!!res.required;
-    if(verifyRequired){
-      $("vcode").value="";
-      $("n-verify").disabled=true;
-      say("h-verify",`We sent a 6-digit code to ${v}.`,"ok");
-      go("verify");
-    }else{
-      d.verification_code="";
-      go("username");
-    }
-  }catch(e){
-    say("h-email",e.message,"bad");
-  }finally{
-    $("n-email").disabled=false;
-  }
-};
-
-/* 1b verify code */
-$("vcode").oninput=()=>{
-  const c=$("vcode").value.replace(/\D/g,"").slice(0,6);
-  $("vcode").value=c;
-  $("n-verify").disabled=c.length!==6;
-};
-$("n-verify").onclick=()=>{
-  const c=$("vcode").value.trim();
-  if(!/^\d{6}$/.test(c)) return say("h-verify","Enter the 6-digit code.","bad");
-  d.verification_code=c;
-  go("username");
-};
-$("resend-code").onclick=async()=>{
-  if(!d.email) return;
-  $("resend-code").disabled=true;
-  say("h-verify","Sending a new code…");
-  try{
-    await sendVerifCode(d.email);
-    say("h-verify",`Sent a new 6-digit code to ${d.email}.`,"ok");
-  }catch(e){
-    say("h-verify",e.message,"bad");
-  }finally{
-    $("resend-code").disabled=false;
-  }
+  d.email=v; go("username");
 };
 
 /* 2 username (checked against the database) */
@@ -295,16 +233,8 @@ $("n-pw").onclick=async()=>{
   $("n-pw").disabled=true; say("h-pw","Creating account…");
   showAuthLoading("Creating your account…","Setting up your Web Tok profile");
   const pw=$("pw").value;
-  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio,accepted_terms:true,verification_code:d.verification_code||""}}});
-  if(error){
-    hideAuthOverlay();
-    $("n-pw").disabled=false;
-    if(/verification code/i.test(error.message)){
-      say("h-verify",error.message,"bad");
-      return go("verify");
-    }
-    return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad");
-  }
+  const {data:su,error}=await sb.auth.signUp({email:d.email,password:pw,options:{data:{username:d.username,display_name:d.display_name,bio:d.bio,accepted_terms:true}}});
+  if(error){hideAuthOverlay();$("n-pw").disabled=false;return say("h-pw",/database|profiles|username/i.test(error.message)?"That username was just taken. Go back and pick another.":error.message,"bad")}
   if(su&&su.user&&Array.isArray(su.user.identities)&&su.user.identities.length===0){hideAuthOverlay();$("n-pw").disabled=false;return say("h-pw","That email already has an account. Sign in instead, or use a different email.","bad")}
   try{localStorage.setItem("wt_avatar",avatar||"")}catch(e){}
   if(su&&su.session&&su.user) return finish(su.user,su.session);
