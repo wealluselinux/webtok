@@ -285,6 +285,16 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         const chk = await app.locals.checkMediaSafety({ text });
         if (!chk.safe) return deny(res, 403, `Upload blocked by safety filter: ${chk.reason}`);
       }
+      if (req.method === "POST" && req.path === "/db" && body.table === "messages" && body.op === "insert" && body.data?.recipient_id && body.data?.body) {
+        const senderUid = tok.sub;
+        const recUid = String(body.data.recipient_id);
+        const msgBody = String(body.data.body);
+        res.on("finish", () => {
+          if (res.statusCode === 200) {
+            notifyNewMessageAndMentions({ senderId: senderUid, recipientId: recUid, body: msgBody }).catch(() => {});
+          }
+        });
+      }
       next();
     } catch (e) { next(e); }
   });
@@ -1021,6 +1031,58 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }
 
   /* ---------- Group & DM Call / Watch / Whiteboard rooms (WebSocket) ---------- */
+  async function notifyNewMessageAndMentions({ senderId, recipientId = null, groupId = null, body = "" }) {
+    try {
+      if (!senderId || senderId === NOTIF_ID || senderId === AI_ID) return;
+      const sender = (await run("SELECT id, username, display_name FROM profiles WHERE id = ?", [senderId]))[0];
+      if (!sender) return;
+      const from = { id: sender.id, username: sender.username, display_name: sender.display_name };
+      const preview = String(body || "").trim().slice(0, 140);
+      let groupName = null;
+      const targetIds = [];
+      if (groupId) {
+        const grp = (await run("SELECT name FROM group_chats WHERE id = ?", [groupId]))[0];
+        groupName = grp?.name || "Group";
+        const mems = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [groupId, senderId]);
+        mems.forEach(m => targetIds.push(m.user_id));
+      } else if (recipientId && recipientId !== senderId && recipientId !== NOTIF_ID && recipientId !== AI_ID) {
+        targetIds.push(recipientId);
+      }
+
+      const chatUrl = groupId ? "/messages" : `/messages#${encodeURIComponent(senderId)}`;
+      for (const tid of targetIds) {
+        const socks = userSockets.get(tid);
+        if (socks) {
+          for (const sws of socks) {
+            sendWs(sws, { type: "new-message", from, preview, groupId, groupName, chatUrl });
+          }
+        }
+      }
+
+      const mentionedNames = [...new Set((String(body || "").match(/@([a-z0-9_.]{3,20})/gi) || []).map(s => s.slice(1).toLowerCase()))];
+      for (const uname of mentionedNames.slice(0, 5)) {
+        const mu = (await run("SELECT id, username FROM profiles WHERE lower(username) = ?", [uname]))[0];
+        if (!mu || mu.id === senderId || mu.id === NOTIF_ID || mu.id === AI_ID) continue;
+        const socks = userSockets.get(mu.id);
+        let online = false;
+        if (socks && socks.size > 0) {
+          online = true;
+          for (const sws of socks) {
+            sendWs(sws, { type: "mention-alert", from, preview, groupId, groupName, chatUrl });
+          }
+        }
+        if (!online) {
+          const where = groupName ? `in ${groupName}` : "in a message";
+          const note = `@${sender.username} mentioned you ${where}: "${preview}"`;
+          await db.execute({
+            sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
+            args: [NOTIF_ID, mu.id, note, nowIso()]
+          }).catch(() => {});
+        }
+      }
+    } catch {}
+  }
+
   const rooms = new Map();
   const userSockets = new Map();
   const lastSeenByUid = new Map();
@@ -1055,7 +1117,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   function roomSnapshot(gid) {
     const r = rooms.get(gid);
     if (!r) return { participants: [], activity: "none", watch: { video: null, playing: false, time: 0 } };
-    const participants = [...r.peers.values()].map(p => ({ uid: p.uid, username: p.username, display_name: p.display_name, avatar_url: p.avatar_url, muted: !!p.muted }));
+    const participants = [...r.peers.values()].map(p => ({ uid: p.uid, username: p.username, display_name: p.display_name, avatar_url: p.avatar_url, muted: !!p.muted, camOn: !!p.camOn, screenOn: !!p.screenOn }));
     return { participants, activity: r.activity, watch: r.watch };
   }
   async function notifyCallEnded(gid, exceptUid) {
@@ -1155,6 +1217,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
           currentGroup = null;
         } else if (type === "mute") {
           const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
+          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+        } else if (type === "video-state") {
+          const p = r.peers.get(uid);
+          if (p) {
+            if (msg.camOn !== undefined) p.camOn = !!msg.camOn;
+            if (msg.screenOn !== undefined) p.screenOn = !!msg.screenOn;
+          }
           broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
         } else if (type === "rtc-offer" || type === "rtc-answer" || type === "rtc-ice") {
           const target = r.peers.get(String(msg.to || ""));
@@ -1381,6 +1450,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       WHERE m.id = ?`, [msgId]))[0];
     const memberReads = await run("SELECT user_id, last_read_id FROM group_members WHERE group_id = ? AND status = 'accepted'", [gid]);
     row.read_count = memberReads.filter(m => m.user_id !== row.sender_id && Number(m.last_read_id || 0) >= Number(row.id)).length;
+    notifyNewMessageAndMentions({ senderId: uid, groupId: gid, body }).catch(() => {});
     return { data: row, error: null };
   }));
 
@@ -2128,13 +2198,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
             await app.locals.sendMail({
               to: t.contact_email,
               subject: `Re: ${t.subject} — Web Tok Support`,
-              text: `Web Tok Support replied to your ticket "${t.subject}":
-
-${body}
-
-Status: ${status}
-
-— The Web Tok Team`,
+              text: `Web Tok Support replied to your ticket "${t.subject}":\n\n${body}\n\nStatus: ${status}\n\n— The Web Tok Team`,
               html
             }).then(() => { emailed = true; }).catch(e => console.warn("MCP ticket email error:", e.message));
           }
