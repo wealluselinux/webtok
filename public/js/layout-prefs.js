@@ -1,4 +1,4 @@
-/* Layout & Customization Engine: General Settings, Video Preferences, Sidebar/Rail order, Corner roundness */
+/* Layout & Customization Engine: General Settings, Video Preferences, Sidebar/Rail order, Corner roundness, & DB Persistence */
 (function () {
   if (window.wtApplyLayoutPrefs) return;
 
@@ -49,6 +49,9 @@
         const merged = { ...getPrefs(), ...j.data };
         try { localStorage.setItem("wt_theme", JSON.stringify(merged)); } catch {}
         window.wtApplyLayoutPrefs(merged);
+        if (typeof window.applyTheme === "function") {
+          try { window.applyTheme(merged); } catch {}
+        }
       }
     } catch {}
   }
@@ -61,7 +64,6 @@
     await syncThemeToDb(patch);
   }
 
-  // Wrap global saveTheme (from theme.js) so every theme/layout setting also saves reliably to the DB
   function wrapSaveTheme() {
     if (typeof window.saveTheme === "function" && !window.saveTheme.__wtWrapped) {
       const orig = window.saveTheme;
@@ -111,9 +113,9 @@
     if (!themeSec || document.getElementById("st-sec-general")) return;
 
     const p = getPrefs();
-    const genSec = document.createElement("div");
+    const genSec = document.createElement("section");
     genSec.id = "st-sec-general";
-    genSec.className = themeSec.className || "st-sec";
+    genSec.className = "st-sec hidden";
     genSec.style.display = "none";
 
     const vidCard = document.createElement("div");
@@ -145,34 +147,39 @@
     genSec.append(vidCard, appCard);
     themeSec.parentElement.insertBefore(genSec, themeSec);
 
-    // Wire a "General" tab button into the settings tab bar
-    const dlg = themeSec.closest("dialog, .st-dlg, .modal, main, body") || document;
-    const tabBtns = [...dlg.querySelectorAll("button, .st-tab")].filter(b => {
-      const txt = (b.textContent || "").trim().toLowerCase();
-      return b.dataset?.sec || b.dataset?.tab || ["theme", "appearance", "account", "security", "layout"].some(k => txt.includes(k));
-    });
-    const tabBar = tabBtns.length ? tabBtns[0].parentElement : null;
-    if (tabBar && !document.getElementById("st-tab-general")) {
-      const refBtn = tabBtns[0];
+    // Wire "General" tab button into .st-nav without breaking profile-settings.js section switching
+    const nav = document.querySelector(".st-nav");
+    if (nav && !document.getElementById("st-tab-general")) {
       const genBtn = document.createElement("button");
       genBtn.type = "button";
       genBtn.id = "st-tab-general";
-      genBtn.className = refBtn.className.replace(/\b(act|on|active)\b/g, "").trim();
-      genBtn.innerHTML = `<span class="ms" style="font-size:18px;vertical-align:middle;margin-right:4px">tune</span>General`;
-      tabBar.insertBefore(genBtn, refBtn);
+      genBtn.className = "st-nav-btn";
+      genBtn.dataset.sec = "general";
+      genBtn.innerHTML = `<span class="ms">tune</span>General`;
+      nav.insertBefore(genBtn, nav.firstChild);
 
-      const allSecs = [...themeSec.parentElement.children].filter(el => el.id && el.id.startsWith("st-sec-"));
-      genBtn.addEventListener("click", () => {
-        allSecs.forEach(s => { s.style.display = s === genSec ? "" : "none"; s.classList.toggle("hidden", s !== genSec); });
-        tabBar.querySelectorAll("button, .st-tab").forEach(b => b.classList.remove("act", "on", "active"));
-        genBtn.classList.add("act", "on");
+      const getOtherSecs = () => [...themeSec.parentElement.querySelectorAll(".st-sec")].filter(s => s !== genSec);
+
+      genBtn.addEventListener("click", e => {
+        e.stopPropagation();
+        nav.querySelectorAll(".st-nav-btn").forEach(b => b.classList.remove("on"));
+        genBtn.classList.add("on");
+        getOtherSecs().forEach(s => { s.classList.add("hidden"); s.classList.remove("on"); s.style.display = "none"; });
+        genSec.classList.remove("hidden");
+        genSec.classList.add("on");
+        genSec.style.display = "block";
       });
-      tabBar.addEventListener("click", e => {
-        const b = e.target.closest("button, .st-tab");
+
+      nav.addEventListener("click", e => {
+        const b = e.target.closest(".st-nav-btn");
         if (!b || b === genBtn) return;
-        genBtn.classList.remove("act", "on", "active");
-        genSec.style.display = "none";
+        genBtn.classList.remove("on");
         genSec.classList.add("hidden");
+        genSec.classList.remove("on");
+        genSec.style.display = "none";
+        const targetSec = b.dataset.sec ? document.getElementById("st-sec-" + b.dataset.sec) : null;
+        getOtherSecs().forEach(s => { s.style.display = ""; });
+        if (targetSec) targetSec.style.display = "";
       });
     }
   }
@@ -302,6 +309,8 @@
   window.wtApplyLayoutPrefs();
   loadThemeFromDb();
   wrapSaveTheme();
+  setTimeout(wrapSaveTheme, 300);
+  setTimeout(wrapSaveTheme, 1200);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => { wrapSaveTheme(); ensureGeneralSettings(); });
   } else {
