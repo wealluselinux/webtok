@@ -1354,10 +1354,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   /* ---------- Homemade MCP & Auto-Update Announcements ---------- */
-  async function sendSystemAnnouncement(message, title = "", actorUid = NOTIF_ID) {
-    const cleanMsg = String(message || "").trim().slice(0, 1000);
+  async function sendSystemAnnouncement(message, title = "", actorUid = NOTIF_ID, viaMcp = false) {
+    const mcpFooter = viaMcp ? "\n\n— Sent via Gemini Web Tok MCP" : "";
+    const maxLen = 1000 - mcpFooter.length;
+    const cleanMsg = String(message || "").trim().slice(0, maxLen);
     if (!cleanMsg) throw new HttpError(400, "Announcement message is required.");
-    const fullBody = title ? `${String(title).trim().slice(0, 80)}\n\n${cleanMsg}`.slice(0, 1000) : cleanMsg;
+    const baseBody = title ? `${String(title).trim().slice(0, 80)}\n\n${cleanMsg}`.slice(0, maxLen) : cleanMsg;
+    const fullBody = `${baseBody}${mcpFooter}`;
     const recipients = await run(
       "SELECT id FROM users WHERE id != ? AND COALESCE(banned, 0) = 0 AND COALESCE(role, 'user') != 'system'",
       [NOTIF_ID]
@@ -1765,8 +1768,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         const name = String(rpc.params?.name || "");
         const args = rpc.params?.arguments || {};
         if (name === "send_announcement") {
-          const out = await sendSystemAnnouncement(args.message, args.title || "", auth.uid);
-          return reply({ content: [{ type: "text", text: `Announcement sent to ${out.sentCount} user(s) at ${out.sentAt}.` }] });
+          const out = await sendSystemAnnouncement(args.message, args.title || "", auth.uid, true);
+          return reply({ content: [{ type: "text", text: `Announcement sent via Gemini Web Tok MCP to ${out.sentCount} user(s) at ${out.sentAt}.` }] });
         }
         if (name === "list_announcements") {
           const lim = Math.min(Math.max(parseInt(args.limit, 10) || 10, 1), 30);
@@ -1803,8 +1806,10 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         }
         if (name === "reply_support_ticket") {
           const tid = String(args.ticketId || "").trim();
-          const body = String(args.message || "").trim().slice(0, 2000);
-          if (!tid || !body) return fail(-32602, "ticketId and message are required.");
+          const mcpFooter = "\n\n— Sent via Gemini Web Tok MCP";
+          const rawBody = String(args.message || "").trim().slice(0, 2000 - mcpFooter.length);
+          if (!tid || !rawBody) return fail(-32602, "ticketId and message are required.");
+          const body = `${rawBody}${mcpFooter}`;
           const t = (await run("SELECT id, user_id, subject, contact_email FROM support_tickets WHERE id = ?", [tid]))[0];
           if (!t) return fail(-32602, `Support ticket not found: ${tid}`);
           const status = ["open", "resolved", "closed"].includes(String(args.status || "resolved")) ? String(args.status || "resolved") : "resolved";
@@ -1821,28 +1826,55 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
               bannerBg: "#d0bcff",
               bannerFg: "#1d192b",
               greeting: "Hi there!",
-              intro: `Web Tok Support replied to your ticket "${t.subject}":`,
-              details: [["Reply", body], ["Status", status]],
+              intro: `Web Tok Support replied to your ticket "${t.subject}" (sent via Gemini Web Tok MCP):`,
+              details: [["Reply", rawBody], ["Status", status], ["Sent via", "Gemini Web Tok MCP"]],
               ctaLabel: "Open Web Tok",
               ctaUrl: `${baseUrl}/support`
             }) : undefined;
             await app.locals.sendMail({
               to: t.contact_email,
               subject: `Re: ${t.subject} — Web Tok Support`,
-              text: `Web Tok Support replied to your ticket "${t.subject}":\n\n${body}\n\nStatus: ${status}\n\n— The Web Tok Team`,
+              text: `Web Tok Support replied to your ticket "${t.subject}" (sent via Gemini Web Tok MCP):\n\n${rawBody}\n\nStatus: ${status}\n\n— The Web Tok Team (via Gemini Web Tok MCP)`,
               html
             }).then(() => { emailed = true; }).catch(e => console.warn("MCP ticket email error:", e.message));
           }
           await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [auth.uid, "mcp_support_reply", `${t.subject.slice(0, 60)} (${status})`, ts] }).catch(() => {});
-          return reply({ content: [{ type: "text", text: `Replied to ticket "${t.subject}" (${tid}), status set to "${status}"${emailed ? ", and emailed guest" : ""}.` }] });
+          return reply({ content: [{ type: "text", text: `Replied to ticket "${t.subject}" (${tid}) via Gemini Web Tok MCP, status set to "${status}"${emailed ? ", and emailed guest" : ""}.` }] });
         }
         if (name === "update_support_ticket_status") {
           const tid = String(args.ticketId || "").trim();
           const status = ["open", "resolved", "closed"].includes(String(args.status || "")) ? String(args.status) : null;
           if (!tid || !status) return fail(-32602, "Valid ticketId and status (open, resolved, closed) are required.");
-          await db.execute({ sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, nowIso(), tid] });
-          await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [auth.uid, "mcp_support_status", `${tid}: ${status}`, nowIso()] }).catch(() => {});
-          return reply({ content: [{ type: "text", text: `Ticket ${tid} status updated to "${status}".` }] });
+          const t = (await run("SELECT id, subject, contact_email FROM support_tickets WHERE id = ?", [tid]))[0];
+          if (!t) return fail(-32602, `Support ticket not found: ${tid}`);
+          const ts = nowIso();
+          const note = `Ticket status updated to "${status}".\n\n— Sent via Gemini Web Tok MCP`;
+          await db.batch([
+            { sql: "INSERT INTO support_replies (ticket_id, user_id, is_admin, body, created_at) VALUES (?,?,1,?,?)", args: [tid, auth.uid, note, ts] },
+            { sql: "UPDATE support_tickets SET status = ?, updated_at = ? WHERE id = ?", args: [status, ts, tid] }
+          ], "write");
+          let emailed = false;
+          if (t.contact_email && app.locals.sendMail) {
+            const baseUrl = (process.env.RENDER_EXTERNAL_URL || "https://webtok.onrender.com").replace(/\/+$/, "");
+            const html = app.locals.buildEmailHtml ? app.locals.buildEmailHtml({
+              title: "Support Ticket Update",
+              bannerBg: "#d0bcff",
+              bannerFg: "#1d192b",
+              greeting: "Hi there!",
+              intro: `Your Web Tok support ticket "${t.subject}" was updated (sent via Gemini Web Tok MCP):`,
+              details: [["Status", status], ["Sent via", "Gemini Web Tok MCP"]],
+              ctaLabel: "Open Web Tok",
+              ctaUrl: `${baseUrl}/support`
+            }) : undefined;
+            await app.locals.sendMail({
+              to: t.contact_email,
+              subject: `Update: ${t.subject} — Web Tok Support`,
+              text: `Your Web Tok support ticket "${t.subject}" was updated to "${status}" (sent via Gemini Web Tok MCP).\n\n— The Web Tok Team (via Gemini Web Tok MCP)`,
+              html
+            }).then(() => { emailed = true; }).catch(e => console.warn("MCP ticket status email error:", e.message));
+          }
+          await db.execute({ sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)", args: [auth.uid, "mcp_support_status", `${tid}: ${status}`, ts] }).catch(() => {});
+          return reply({ content: [{ type: "text", text: `Ticket ${tid} status updated to "${status}" via Gemini Web Tok MCP${emailed ? " (guest emailed)" : ""}.` }] });
         }
         return fail(-32601, `Unknown tool: ${name}`);
       }
