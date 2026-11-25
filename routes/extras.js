@@ -68,6 +68,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS system_announcements (id TEXT PRIMARY KEY, sent_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS mcp_oauth_clients (client_id TEXT PRIMARY KEY, client_secret TEXT, client_name TEXT, redirect_uris TEXT NOT NULL, token_endpoint_auth_method TEXT, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS mcp_oauth_codes (code TEXT PRIMARY KEY, client_id TEXT NOT NULL, user_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, code_challenge TEXT, code_challenge_method TEXT, scope TEXT, expires_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS webify_playlists (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, is_public INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS webify_playlist_tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id TEXT NOT NULL, source TEXT NOT NULL, sound_id TEXT, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, cover_url TEXT, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
@@ -587,6 +589,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   app.get("/terms", page("terms.html"));
   app.get("/privacy", page("privacy.html"));
   app.get("/sounds", page("sounds.html"));
+  app.get("/webify", page("webify.html"));
   app.get("/support", page("support.html"));
   app.get("/forgot", page("forgot.html"));
 
@@ -667,6 +670,117 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       out[r.video_id] = { id: r.id, title: r.title, artist: r.artist, audio_url: r.audio_url, username: r.username || null, display_name: r.display_name || null };
     });
     return { data: out, error: null };
+  }));
+
+  /* ---------- Webify (Spotify-style music & playlist player: Web Tok Sounds + External Discover) ---------- */
+  app.get("/api/webify/discover", limit(40, 600000), wrap(async req => {
+    const q = String(req.query.q || "").trim().slice(0, 80) || "top hits";
+    try {
+      const ac = new AbortController();
+      const tm = setTimeout(() => ac.abort(), 5000);
+      const url = `https://itunes.apple.com/search?media=music&entity=song&limit=24&term=${encodeURIComponent(q)}`;
+      const r = await fetch(url, { signal: ac.signal });
+      clearTimeout(tm);
+      if (!r.ok) return { data: [], error: null };
+      const j = await r.json();
+      const tracks = (Array.isArray(j?.results) ? j.results : [])
+        .filter(x => x.previewUrl)
+        .map(x => ({
+          id: "ext_" + String(x.trackId || crypto.randomUUID()),
+          source: "discover",
+          sound_id: null,
+          title: String(x.trackName || "Untitled").slice(0, 80),
+          artist: String(x.artistName || "Unknown Artist").slice(0, 60),
+          album: String(x.collectionName || "").slice(0, 80),
+          audio_url: x.previewUrl,
+          cover_url: String(x.artworkUrl100 || "").replace("100x100", "300x300") || null
+        }));
+      return { data: tracks, error: null };
+    } catch {
+      return { data: [], error: null };
+    }
+  }));
+
+  app.get("/api/webify/playlists", wrap(async req => {
+    await ensure();
+    const uid = uidFrom(req);
+    const rows = await run(`
+      SELECT pl.id, pl.user_id, pl.name, pl.description, pl.is_public, pl.created_at, pl.updated_at,
+        p.username, p.display_name
+      FROM webify_playlists pl
+      LEFT JOIN profiles p ON p.id = pl.user_id
+      WHERE pl.is_public = 1 ${uid ? "OR pl.user_id = ?" : ""}
+      ORDER BY CASE WHEN pl.user_id = ? THEN 0 ELSE 1 END, pl.updated_at DESC LIMIT 60`,
+      uid ? [uid, uid] : [""]
+    );
+    for (const pl of rows) {
+      pl.tracks = await run(
+        "SELECT id, playlist_id, source, sound_id, title, artist, audio_url, cover_url, created_at FROM webify_playlist_tracks WHERE playlist_id = ? ORDER BY id ASC LIMIT 200",
+        [pl.id]
+      );
+    }
+    return { data: rows, error: null };
+  }));
+
+  app.post("/api/webify/playlists", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const name = String(req.body?.name || "").trim().slice(0, 60);
+    const description = String(req.body?.description || "").trim().slice(0, 200);
+    const is_public = req.body?.is_public === false ? 0 : 1;
+    if (name.length < 1) throw new HttpError(400, "Enter a playlist name.");
+    const id = crypto.randomUUID(), ts = nowIso();
+    await db.execute({
+      sql: "INSERT INTO webify_playlists (id, user_id, name, description, is_public, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+      args: [id, uid, name, description || null, is_public, ts, ts]
+    });
+    return { data: { id, user_id: uid, name, description: description || null, is_public, created_at: ts, updated_at: ts, tracks: [] }, error: null };
+  }));
+
+  app.delete("/api/webify/playlists/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const pid = String(req.params.id || "");
+    const pl = (await run("SELECT user_id FROM webify_playlists WHERE id = ?", [pid]))[0];
+    if (!pl) throw new HttpError(404, "Playlist not found");
+    if (pl.user_id !== uid) throw new HttpError(403, "You can only delete your own playlists.");
+    await db.batch([
+      { sql: "DELETE FROM webify_playlist_tracks WHERE playlist_id = ?", args: [pid] },
+      { sql: "DELETE FROM webify_playlists WHERE id = ? AND user_id = ?", args: [pid, uid] }
+    ], "write");
+    return { data: true, error: null };
+  }));
+
+  app.post("/api/webify/playlists/:id/tracks", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const pid = String(req.params.id || "");
+    const pl = (await run("SELECT user_id FROM webify_playlists WHERE id = ?", [pid]))[0];
+    if (!pl) throw new HttpError(404, "Playlist not found");
+    if (pl.user_id !== uid) throw new HttpError(403, "You can only edit your own playlists.");
+    const source = req.body?.source === "discover" ? "discover" : "webtok";
+    const sound_id = req.body?.sound_id ? String(req.body.sound_id).trim().slice(0, 80) : null;
+    const title = String(req.body?.title || "").trim().slice(0, 80);
+    const artist = String(req.body?.artist || "Unknown").trim().slice(0, 60);
+    const audio_url = String(req.body?.audio_url || "").trim();
+    const cover_url = req.body?.cover_url ? String(req.body.cover_url).trim().slice(0, 400) : null;
+    if (!title || !/^https?:\/\//i.test(audio_url)) throw new HttpError(400, "Invalid track data.");
+    const ts = nowIso();
+    const rs = await db.execute({
+      sql: "INSERT INTO webify_playlist_tracks (playlist_id, source, sound_id, title, artist, audio_url, cover_url, created_at) VALUES (?,?,?,?,?,?,?,?)",
+      args: [pid, source, sound_id, title, artist, audio_url, cover_url, ts]
+    });
+    await db.execute({ sql: "UPDATE webify_playlists SET updated_at = ? WHERE id = ?", args: [ts, pid] });
+    return { data: { id: Number(rs.lastInsertRowid), playlist_id: pid, source, sound_id, title, artist, audio_url, cover_url, created_at: ts }, error: null };
+  }));
+
+  app.delete("/api/webify/playlists/:id/tracks/:trackId", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const pid = String(req.params.id || "");
+    const tid = parseInt(req.params.trackId, 10) || 0;
+    const pl = (await run("SELECT user_id FROM webify_playlists WHERE id = ?", [pid]))[0];
+    if (!pl) throw new HttpError(404, "Playlist not found");
+    if (pl.user_id !== uid) throw new HttpError(403, "You can only edit your own playlists.");
+    await db.execute({ sql: "DELETE FROM webify_playlist_tracks WHERE id = ? AND playlist_id = ?", args: [tid, pid] });
+    await db.execute({ sql: "UPDATE webify_playlists SET updated_at = ? WHERE id = ?", args: [nowIso(), pid] });
+    return { data: true, error: null };
   }));
 
   app.post("/api/video-sounds", wrap(async req => {
