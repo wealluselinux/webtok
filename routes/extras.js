@@ -65,6 +65,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS system_announcements (id TEXT PRIMARY KEY, sent_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
@@ -1349,6 +1350,155 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     await log(me, "delete_comment", String(c.text).slice(0, 80));
     return { data: true, error: null };
   }));
+
+  /* ---------- Homemade MCP & Auto-Update Announcements ---------- */
+  async function sendSystemAnnouncement(message, title = "", actorUid = NOTIF_ID) {
+    const cleanMsg = String(message || "").trim().slice(0, 1000);
+    if (!cleanMsg) throw new HttpError(400, "Announcement message is required.");
+    const fullBody = title ? `${String(title).trim().slice(0, 80)}\n\n${cleanMsg}`.slice(0, 1000) : cleanMsg;
+    const recipients = await run(
+      "SELECT id FROM users WHERE id != ? AND COALESCE(banned, 0) = 0 AND COALESCE(role, 'user') != 'system'",
+      [NOTIF_ID]
+    );
+    const ts = nowIso();
+    const stmts = recipients.map(r => ({
+      sql: "INSERT INTO messages (sender_id, recipient_id, body, created_at) VALUES (?,?,?,?)",
+      args: [NOTIF_ID, r.id, fullBody, ts]
+    }));
+    for (let i = 0; i < stmts.length; i += 50) {
+      await db.batch(stmts.slice(i, i + 50), "write");
+    }
+    await db.execute({
+      sql: "INSERT INTO admin_log (admin_id, action, detail, created_at) VALUES (?,?,?,?)",
+      args: [actorUid, "mcp_announce", `Sent to ${recipients.length} user(s): ${fullBody.slice(0, 80)}`, ts]
+    }).catch(() => {});
+    return { sentCount: recipients.length, body: fullBody, sentAt: ts };
+  }
+
+  async function runAutoUpdateAnnouncements() {
+    try {
+      await ensure();
+      const annFile = path.join(__dirname, "..", "announcements.json");
+      if (!fs.existsSync(annFile)) return;
+      const list = JSON.parse(fs.readFileSync(annFile, "utf8"));
+      if (!Array.isArray(list)) return;
+      for (const item of list) {
+        const id = String(item?.id || "").trim().slice(0, 80);
+        const msg = String(item?.message || "").trim();
+        if (!id || !msg) continue;
+        const already = (await run("SELECT 1 FROM system_announcements WHERE id = ?", [id]))[0];
+        if (already) continue;
+        await sendSystemAnnouncement(msg, item?.title || "", NOTIF_ID);
+        await db.execute({ sql: "INSERT OR IGNORE INTO system_announcements (id, sent_at) VALUES (?,?)", args: [id, nowIso()] });
+      }
+    } catch (e) { console.warn("auto-announce:", e.message); }
+  }
+  setTimeout(runAutoUpdateAnnouncements, 2500);
+
+  function isMcpAuthorized(req) {
+    const mcpKey = (process.env.MCP_API_KEY || "").trim();
+    const auth = String(req.headers.authorization || "");
+    const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : String(req.headers["x-mcp-key"] || "").trim();
+    if (mcpKey && bearer && bearer.length === mcpKey.length && crypto.timingSafeEqual(Buffer.from(bearer), Buffer.from(mcpKey))) {
+      return { ok: true, uid: NOTIF_ID };
+    }
+    if (req.wt && ["admin", "owner"].includes(req.wt.role)) {
+      return { ok: true, uid: req.wt.uid };
+    }
+    return { ok: false };
+  }
+
+  app.get("/api/mcp", (_req, res) => {
+    res.json({
+      name: "webtok-homemade-mcp",
+      version: "1.0.0",
+      protocol: "2024-11-05",
+      endpoint: "/api/mcp",
+      auth: "Bearer <MCP_API_KEY> or Admin/Owner token",
+      tools: ["send_announcement", "list_announcements", "get_site_stats"]
+    });
+  });
+
+  app.post("/api/mcp", async (req, res) => {
+    const rpc = req.body || {};
+    const id = rpc.id !== undefined ? rpc.id : null;
+    const reply = (result) => res.json({ jsonrpc: "2.0", id, result });
+    const fail = (code, message) => res.status(code === -32001 ? 401 : 200).json({ jsonrpc: "2.0", id, error: { code, message } });
+
+    try {
+      await ensure();
+      const auth = isMcpAuthorized(req);
+      if (!auth.ok) return fail(-32001, "Unauthorized: provide Bearer MCP_API_KEY or an Admin/Owner session token.");
+
+      const method = String(rpc.method || "");
+      if (method === "initialize") {
+        return reply({
+          protocolVersion: "2024-11-05",
+          capabilities: { tools: {} },
+          serverInfo: { name: "webtok-homemade-mcp", version: "1.0.0" }
+        });
+      }
+      if (method === "notifications/initialized") {
+        return reply({});
+      }
+      if (method === "tools/list") {
+        return reply({
+          tools: [
+            {
+              name: "send_announcement",
+              description: "Send an official @notifications announcement to all active Web Tok users.",
+              inputSchema: {
+                type: "object",
+                properties: {
+                  title: { type: "string", description: "Optional short title for the announcement" },
+                  message: { type: "string", description: "Announcement message (1-1000 chars)" }
+                },
+                required: ["message"]
+              }
+            },
+            {
+              name: "list_announcements",
+              description: "List recent official announcements sent via @notifications or auto-update.",
+              inputSchema: {
+                type: "object",
+                properties: { limit: { type: "number", description: "Max items to return (default 10)" } }
+              }
+            },
+            {
+              name: "get_site_stats",
+              description: "Get Web Tok user count, online users, total videos, and open support tickets.",
+              inputSchema: { type: "object", properties: {} }
+            }
+          ]
+        });
+      }
+      if (method === "tools/call") {
+        const name = String(rpc.params?.name || "");
+        const args = rpc.params?.arguments || {};
+        if (name === "send_announcement") {
+          const out = await sendSystemAnnouncement(args.message, args.title || "", auth.uid);
+          return reply({ content: [{ type: "text", text: `Announcement sent to ${out.sentCount} user(s) at ${out.sentAt}.` }] });
+        }
+        if (name === "list_announcements") {
+          const lim = Math.min(Math.max(parseInt(args.limit, 10) || 10, 1), 30);
+          const logs = await run("SELECT action, detail, created_at FROM admin_log WHERE action IN ('announce','mcp_announce') ORDER BY id DESC LIMIT ?", [lim]);
+          const auto = await run("SELECT id, sent_at FROM system_announcements ORDER BY sent_at DESC LIMIT ?", [lim]);
+          return reply({ content: [{ type: "text", text: JSON.stringify({ manual: logs, autoUpdates: auto }, null, 2) }] });
+        }
+        if (name === "get_site_stats") {
+          const users = (await run("SELECT COUNT(*) n FROM users WHERE role != 'system'"))[0]?.n || 0;
+          const videos = (await run("SELECT COUNT(*) n FROM videos"))[0]?.n || 0;
+          const tickets = (await run("SELECT COUNT(*) n FROM support_tickets WHERE status = 'open'"))[0]?.n || 0;
+          return reply({ content: [{ type: "text", text: JSON.stringify({ totalUsers: Number(users), totalVideos: Number(videos), openSupportTickets: Number(tickets) }, null, 2) }] });
+        }
+        return fail(-32601, `Unknown tool: ${name}`);
+      }
+      return fail(-32601, `Unknown MCP method: ${method}`);
+    } catch (e) {
+      return fail(-32603, e?.message || "Internal MCP error");
+    }
+  });
+
   app.get("/api/admin/log", wrap(async req => {
     const me = needAdmin(req); if (me.role !== "owner") throw new HttpError(403, "Only the owner can see the log");
     return { data: await run(`SELECT l.action, l.detail, l.created_at, p.username AS admin FROM admin_log l LEFT JOIN profiles p ON p.id = l.admin_id ORDER BY l.id DESC LIMIT 100`), error: null };
