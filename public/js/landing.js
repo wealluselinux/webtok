@@ -6,6 +6,19 @@ if (startBtn) startBtn.onclick = e => {
 };
 if (typeof initAuth === "function") initAuth();
 
+// Update sign-in button based on auth state
+(async () => {
+  if (!window.sb) return;
+  try {
+    const { data } = await window.sb.auth.getSession();
+    const signinBtn = document.getElementById("signin");
+    if (signinBtn && data?.session?.user) {
+      signinBtn.textContent = "Go to Web Tok";
+      signinBtn.href = "/scroll";
+    }
+  } catch {}
+})();
+
 async function loadHomeStats() {
   try {
     const r = await fetch("/api/stats/users");

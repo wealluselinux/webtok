@@ -1,4 +1,4 @@
-/* Web Tok /developer Studio: Python, Scratch Blocks, HTML/JS + Update Section + AI Game Builder */
+/* Web Tok /developer Studio: Python, Scratch Blocks, HTML/JS + Update Section + AI Game Builder + API Keys */
 let curLang = "python", curGameId = null, myTok = null;
 
 const STARTERS = {
@@ -36,7 +36,7 @@ let x=200,y=200,vx=3,vy=2.5;
   ctx.fillStyle="#d0bcff";ctx.beginPath();ctx.arc(x,y,16,0,7);ctx.fill();
   requestAnimationFrame(loop);
 })();
-<\/script></body></html>`
+<\/script><\/body><\/html>`
 };
 
 function buildPyDoc(py) {
@@ -44,12 +44,12 @@ function buildPyDoc(py) {
     <div id="mycanvas" style="width:400px;height:360px;background:#1d192b;border-radius:16px"></div>
     <pre id="out" style="margin:6px 0 0;font-size:12px;color:#d0bcff;max-height:48px;overflow:auto"></pre>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"><\/script>
-    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulkt-stdlib.js"><\/script>
     <script>
       Sk.configure({output:t=>document.getElementById("out").textContent+=t,read:x=>{if(!Sk.builtinFiles?.files[x])throw "File not found: "+x;return Sk.builtinFiles.files[x]}});
       (Sk.TurtleGraphics||(Sk.TurtleGraphics={})).target="mycanvas";
       Sk.misceval.asyncToPromise(()=>Sk.importMainWithBody("<stdin>",false,${JSON.stringify(py)},true)).catch(e=>{document.getElementById("out").textContent=String(e)});
-    <\/script></body></html>`;
+    <\/script><\/body><\/html>`;
 }
 
 function buildScratchDoc(jsCode) {
@@ -59,7 +59,7 @@ function buildScratchDoc(jsCode) {
     let score=0;const player={x:200,y:340,vx:0,vy:0,onGround:true};
     addEventListener("keydown",e=>{if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();keys[e.key]=true;});
     addEventListener("keyup",e=>{keys[e.key]=false;});
-    try{${jsCode}}catch(e){ctx.fillStyle="#ff8a80";ctx.font="14px monospace";ctx.fillText(e.message,12,24)}<\/script></body></html>`;
+    try{${jsCode}}catch(e){ctx.fillStyle="#ff8a80";ctx.font="14px monospace";ctx.fillText(e.message,12,24)}<\/script><\/body><\/html>`;
 }
 
 function syncEditingUi(title) {
@@ -222,6 +222,105 @@ $("btnAiBuild").onclick = () => askAi("build");
 $("btnPub").onclick = saveOrUpdateGame;
 $("btnUpdateGame").onclick = saveOrUpdateGame;
 
+/* ---- API Key management ---- */
+async function loadApiKey() {
+  const sec = $("apikeySection");
+  if (!myTok) return;
+  try {
+    const r = await fetch("/api/developer/apikey", { headers: { Authorization: "Bearer " + myTok } });
+    const j = await r.json();
+    if (r.status === 403) {
+      // Not admin/owner — keep section hidden
+      sec.classList.add("hidden");
+      return;
+    }
+    // Admin or owner: show the section
+    sec.classList.remove("hidden");
+    const keyRow = $("akKeyRow"), genRow = $("akGenRow"), status = $("akStatus"), mcpBlock = $("akMcpBlock");
+    if (j.data?.key) {
+      $("akKeyField").value = j.data.key;
+      status.textContent = `Active key — created ${new Date(j.data.created_at).toLocaleDateString()}`;
+      keyRow.style.display = "flex";
+      genRow.style.display = "none";
+      showMcpSnippet(j.data.key);
+    } else {
+      status.textContent = "No API key yet. Generate one below.";
+      keyRow.style.display = "none";
+      genRow.style.display = "flex";
+      mcpBlock.classList.add("hidden");
+    }
+  } catch (e) {
+    $("akStatus").textContent = "Could not load API key: " + e.message;
+  }
+}
+
+function showMcpSnippet(key) {
+  const mcpBlock = $("akMcpBlock");
+  const snippet = {
+    mcpServers: {
+      webtok: {
+        command: "npx",
+        args: ["-y", "@webtok/mcp-server"],
+        env: {
+          WEBTOK_API_KEY: key,
+          WEBTOK_API_URL: window.location.origin
+        }
+      }
+    }
+  };
+  $("akMcpSnippet").textContent = JSON.stringify(snippet, null, 2);
+  mcpBlock.classList.remove("hidden");
+}
+
+if ($("btnAkGenerate")) $("btnAkGenerate").onclick = async () => {
+  if (!(await wtConfirm({ title: "Generate API Key", message: "This will create a new API key for your account. Continue?" }))) return;
+  $("btnAkGenerate").disabled = true;
+  try {
+    const r = await fetch("/api/developer/apikey", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + myTok }
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Failed to generate key");
+    await loadApiKey();
+  } catch (e) {
+    await wtAlert({ title: "Error", message: e.message });
+  } finally { $("btnAkGenerate").disabled = false; }
+};
+
+if ($("btnAkRevoke")) $("btnAkRevoke").onclick = async () => {
+  if (!(await wtConfirm({ title: "Revoke API Key", message: "Are you sure? This will permanently delete your current API key.", danger: true }))) return;
+  try {
+    const r = await fetch("/api/developer/apikey", {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + myTok }
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Failed to revoke key");
+    await loadApiKey();
+  } catch (e) {
+    await wtAlert({ title: "Error", message: e.message });
+  }
+};
+
+if ($("btnAkCopy")) $("btnAkCopy").onclick = () => {
+  const v = $("akKeyField").value;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    $("btnAkCopy").textContent = "Copied!";
+    setTimeout(() => { $("btnAkCopy").innerHTML = '<span class="ms" style="font-size:16px">content_copy</span>Copy'; }, 1800);
+  });
+};
+
+if ($("btnAkCopyMcp")) $("btnAkCopyMcp").onclick = () => {
+  const v = $("akMcpSnippet").textContent;
+  if (!v) return;
+  navigator.clipboard.writeText(v).then(() => {
+    $("btnAkCopyMcp").textContent = "Copied!";
+    setTimeout(() => { $("btnAkCopyMcp").innerHTML = '<span class="ms" style="font-size:16px">content_copy</span>Copy MCP Config'; }, 1800);
+  });
+};
+
 (async () => {
   const { data } = await sb.auth.getSession();
   if (!data?.session) { location.href = "/login"; return; }
@@ -230,4 +329,5 @@ $("btnUpdateGame").onclick = saveOrUpdateGame;
   syncEditingUi();
   runPreview();
   loadMyGames();
+  loadApiKey();
 })();
