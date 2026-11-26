@@ -6,19 +6,6 @@ if (startBtn) startBtn.onclick = e => {
 };
 if (typeof initAuth === "function") initAuth();
 
-// Update sign-in button based on auth state
-(async () => {
-  if (!window.sb) return;
-  try {
-    const { data } = await window.sb.auth.getSession();
-    const signinBtn = document.getElementById("signin");
-    if (signinBtn && data?.session?.user) {
-      signinBtn.textContent = "Go to Web Tok";
-      signinBtn.href = "/scroll";
-    }
-  } catch {}
-})();
-
 async function loadHomeStats() {
   try {
     const r = await fetch("/api/stats/users");
@@ -31,3 +18,15 @@ async function loadHomeStats() {
 }
 loadHomeStats();
 setInterval(() => { if (!document.hidden) loadHomeStats(); }, 15000);
+
+(async () => {
+  try {
+    if (!sb?.auth?.getSession) return;
+    const { data } = await sb.auth.getSession();
+    const btn = $("signin");
+    if (btn && data?.session) {
+      btn.textContent = "Go to Web Tok";
+      btn.href = "/scroll";
+    }
+  } catch {}
+})();

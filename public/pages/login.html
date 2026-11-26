@@ -106,15 +106,6 @@ const isAddMode=qs.get("add")==="1";
 const FLOW=["email","username","profile","pass"], SUBS={in:isAddMode?"Add another account":"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password"};
 let d={}, avatar=null, cur="in";
 
-// If already signed in and not in add-account mode, send straight to Web Tok
-if (!isAddMode) {
-  sb.auth.getSession().then(({ data }) => {
-    if (data?.session?.user) {
-      location.replace("/scroll");
-    }
-  }).catch(() => {});
-}
-
 function showAuthLoading(title, sub){
   $("ao-ic").className="ao-ic";
   $("ao-ic").textContent="login";
@@ -233,7 +224,7 @@ const RULES=[["At least 10 characters",p=>p.length>=10],["Upper and lower case",
  ["Not a common password",p=>!COMMON.some(w=>p.toLowerCase().includes(w))],["Doesn't contain your username or email name",p=>![d.username,(d.email||"").split("@")[0]].some(w=>w&&w.length>2&&p.toLowerCase().includes(w))]];
 function checkPw(){
   const p=$("pw").value; let all=true;
-  $("rules").innerHTML=RULES.map(([t,f])=>{const y=f(p);all=all&&y;return`<li class="${y?"y":""}">$${t}</li>`}).join("");
+  $("rules").innerHTML=RULES.map(([t,f])=>{const y=f(p);all=all&&y;return`<li class="${y?"y":""}">${t}</li>`}).join("");
   const m=p&&p===$("pw2").value; say("h-pw",$("pw2").value?(m?"Passwords match":"Passwords don't match"):"",m?"ok":"bad");
   $("n-pw").disabled=!(all&&m);
 }
@@ -275,5 +266,13 @@ async function finish(user,sess){
 }
 sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur!=="in") setTimeout(()=>finish(sess.user,sess),0); });
 
-go(location.hash==="#signup"?"email":"in");
+(async()=>{
+  if(!isAddMode){
+    try{
+      const {data}=await sb.auth.getSession();
+      if(data?.session){ location.replace("/scroll"); return; }
+    }catch{}
+  }
+  go(location.hash==="#signup"?"email":"in");
+})();
 </script></body></html>
