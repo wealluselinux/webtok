@@ -62,7 +62,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS stories (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, media_url TEXT NOT NULL, media_type TEXT NOT NULL, caption TEXT, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS sounds (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, storage_path TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS video_sounds (video_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, sound_id TEXT NOT NULL, created_at TEXT NOT NULL)",
-      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS support_tickets (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', contact_email TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS support_replies (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL, user_id TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS email_verifications (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS system_announcements (id TEXT PRIMARY KEY, sent_at TEXT NOT NULL)",
@@ -227,77 +227,6 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     await db.execute({ sql: "DELETE FROM email_verifications WHERE email = ?", args: [key] });
   }
 
-  app.post("/api/auth/forgot/send-code", limit(6, 600000), wrap(async req => {
-    await ensure();
-    const em = String(req.body?.email || "").trim().toLowerCase();
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em) || em.length > 120) throw new HttpError(400, "Enter a valid email.");
-    const u = (await run("SELECT id, banned, role FROM users WHERE email = ?", [em]))[0];
-    if (!u || u.role === "system") throw new HttpError(404, "No account found with that email. Need help? Submit a support ticket.");
-    if (u.banned) throw new HttpError(403, "This account has been suspended.");
-    await issueCode(`reset:${em}`, em, {
-      title: "Password Reset Code",
-      intro: "To reset your Web Tok password, enter the following verification code:",
-      subjectPrefix: "Your Web Tok password reset code is"
-    });
-    return { data: { sent: true }, error: null };
-  }));
-
-  app.post("/api/auth/forgot/reset", limit(10, 600000), wrap(async req => {
-    await ensure();
-    const em = String(req.body?.email || "").trim().toLowerCase();
-    const code = String(req.body?.code || "").trim();
-    const newPw = String(req.body?.new_password || "");
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw new HttpError(400, "Enter a valid email.");
-    if (weakPassword(newPw)) throw new HttpError(400, "Password needs 10+ characters with upper and lower case, a number and a symbol.");
-    const u = (await run("SELECT id, banned, role FROM users WHERE email = ?", [em]))[0];
-    if (!u || u.role === "system") throw new HttpError(404, "No account found with that email.");
-    if (u.banned) throw new HttpError(403, "This account has been suspended.");
-    await verifyCode(`reset:${em}`, code);
-    await db.execute({ sql: "UPDATE users SET encrypted_password = ?, sessions_valid_after = ? WHERE id = ?", args: [await bcrypt.hash(newPw, 10), nowIso(), u.id] });
-    forget(u.id);
-    return { data: true, error: null };
-  }));
-
-  const deny = (res, code, message) => res.status(code).json({ data: null, error: { message } });
-
-  /* ---------- checks that run before every /api request ---------- */
-  app.use("/api", async (req, res, next) => {
-    try {
-      await ensure();
-      let tok = null;
-      const h = req.headers.authorization || "";
-      if (h.startsWith("Bearer ")) { try { tok = jwt.verify(h.slice(7), SECRET); } catch { tok = null; } }
-      if (!tok && req.path === "/auth/refresh" && req.body && req.body.refresh_token) { try { tok = jwt.verify(String(req.body.refresh_token), SECRET); } catch { tok = null; } }
-      if (!tok || !tok.sub) return next();
-      const st = await stateOf(tok.sub);
-      if (!st) return next();
-      if (st.banned) return deny(res, 403, "This account has been suspended." + (st.reason ? " Reason: " + st.reason : ""));
-      if (tok.iat < Math.floor(st.after / 1000)) return deny(res, 401, "Session expired. Please sign in again.");
-      req.wt = { uid: tok.sub, ...st };
-      if (req.path !== "/presence/offline") touchPresence(tok.sub);
-      const body = req.body || {};
-      let need = null;
-      if (req.method === "POST" && req.path === "/db" && (body.op === "insert" || body.op === "upsert")) need = { comments: "comment", messages: "message", videos: "post" }[body.table] || null;
-      if (req.method === "POST" && req.path === "/storage/presign" && body.bucket === "videos") need = "post";
-      if (need && st.restrictions.includes(need)) return deny(res, 403, `You aren't allowed to ${need === "post" ? "post videos" : need === "comment" ? "comment" : "send messages"} right now.`);
-      if (req.method === "POST" && req.path === "/db" && body.table === "videos" && body.op === "insert" && app.locals.checkMediaSafety) {
-        const text = `${body.data?.title || ""} ${(Array.isArray(body.data?.hashtags) ? body.data.hashtags.join(" ") : "")}`.trim();
-        const chk = await app.locals.checkMediaSafety({ text });
-        if (!chk.safe) return deny(res, 403, `Upload blocked by safety filter: ${chk.reason}`);
-      }
-      if (req.method === "POST" && req.path === "/db" && body.table === "messages" && body.op === "insert" && body.data?.recipient_id && body.data?.body) {
-        const senderUid = tok.sub;
-        const recUid = String(body.data.recipient_id);
-        const msgBody = String(body.data.body);
-        res.on("finish", () => {
-          if (res.statusCode === 200) {
-            notifyNewMessageAndMentions({ senderId: senderUid, recipientId: recUid, body: msgBody }).catch(() => {});
-          }
-        });
-      }
-      next();
-    } catch (e) { next(e); }
-  });
   /* ---------- Bot Protection & CAPTCHA Verification ---------- */
   const botTracker = new Map();
   function botIp(req) {
@@ -392,6 +321,78 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   app.use(["/api/auth/login", "/api/auth/signup", "/api/auth/forgot/send-code"], botGuardAuth);
+
+  app.post("/api/auth/forgot/send-code", limit(6, 600000), wrap(async req => {
+    await ensure();
+    const em = String(req.body?.email || "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em) || em.length > 120) throw new HttpError(400, "Enter a valid email.");
+    const u = (await run("SELECT id, banned, role FROM users WHERE email = ?", [em]))[0];
+    if (!u || u.role === "system") throw new HttpError(404, "No account found with that email. Need help? Submit a support ticket.");
+    if (u.banned) throw new HttpError(403, "This account has been suspended.");
+    await issueCode(`reset:${em}`, em, {
+      title: "Password Reset Code",
+      intro: "To reset your Web Tok password, enter the following verification code:",
+      subjectPrefix: "Your Web Tok password reset code is"
+    });
+    return { data: { sent: true }, error: null };
+  }));
+
+  app.post("/api/auth/forgot/reset", limit(10, 600000), wrap(async req => {
+    await ensure();
+    const em = String(req.body?.email || "").trim().toLowerCase();
+    const code = String(req.body?.code || "").trim();
+    const newPw = String(req.body?.new_password || "");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw new HttpError(400, "Enter a valid email.");
+    if (weakPassword(newPw)) throw new HttpError(400, "Password needs 10+ characters with upper and lower case, a number and a symbol.");
+    const u = (await run("SELECT id, banned, role FROM users WHERE email = ?", [em]))[0];
+    if (!u || u.role === "system") throw new HttpError(404, "No account found with that email.");
+    if (u.banned) throw new HttpError(403, "This account has been suspended.");
+    await verifyCode(`reset:${em}`, code);
+    await db.execute({ sql: "UPDATE users SET encrypted_password = ?, sessions_valid_after = ? WHERE id = ?", args: [await bcrypt.hash(newPw, 10), nowIso(), u.id] });
+    forget(u.id);
+    return { data: true, error: null };
+  }));
+
+  const deny = (res, code, message) => res.status(code).json({ data: null, error: { message } });
+
+  /* ---------- checks that run before every /api request ---------- */
+  app.use("/api", async (req, res, next) => {
+    try {
+      await ensure();
+      let tok = null;
+      const h = req.headers.authorization || "";
+      if (h.startsWith("Bearer ")) { try { tok = jwt.verify(h.slice(7), SECRET); } catch { tok = null; } }
+      if (!tok && req.path === "/auth/refresh" && req.body && req.body.refresh_token) { try { tok = jwt.verify(String(req.body.refresh_token), SECRET); } catch { tok = null; } }
+      if (!tok || !tok.sub) return next();
+      const st = await stateOf(tok.sub);
+      if (!st) return next();
+      if (st.banned) return deny(res, 403, "This account has been suspended." + (st.reason ? " Reason: " + st.reason : ""));
+      if (tok.iat < Math.floor(st.after / 1000)) return deny(res, 401, "Session expired. Please sign in again.");
+      req.wt = { uid: tok.sub, ...st };
+      if (req.path !== "/presence/offline") touchPresence(tok.sub);
+      const body = req.body || {};
+      let need = null;
+      if (req.method === "POST" && req.path === "/db" && (body.op === "insert" || body.op === "upsert")) need = { comments: "comment", messages: "message", videos: "post" }[body.table] || null;
+      if (req.method === "POST" && req.path === "/storage/presign" && body.bucket === "videos") need = "post";
+      if (need && st.restrictions.includes(need)) return deny(res, 403, `You aren't allowed to ${need === "post" ? "post videos" : need === "comment" ? "comment" : "send messages"} right now.`);
+      if (req.method === "POST" && req.path === "/db" && body.table === "videos" && body.op === "insert" && app.locals.checkMediaSafety) {
+        const text = `${body.data?.title || ""} ${(Array.isArray(body.data?.hashtags) ? body.data.hashtags.join(" ") : "")}`.trim();
+        const chk = await app.locals.checkMediaSafety({ text });
+        if (!chk.safe) return deny(res, 403, `Upload blocked by safety filter: ${chk.reason}`);
+      }
+      if (req.method === "POST" && req.path === "/db" && body.table === "messages" && body.op === "insert" && body.data?.recipient_id && body.data?.body) {
+        const senderUid = tok.sub;
+        const recUid = String(body.data.recipient_id);
+        const msgBody = String(body.data.body);
+        res.on("finish", () => {
+          if (res.statusCode === 200) {
+            notifyNewMessageAndMentions({ senderId: senderUid, recipientId: recUid, body: msgBody }).catch(() => {});
+          }
+        });
+      }
+      next();
+    } catch (e) { next(e); }
+  });
 
   app.use("/api/auth/login", async (req, res, next) => {
     try {
@@ -575,6 +576,11 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
   }));
 
   /* ---------- security alerts API ---------- */
+  app.post("/api/security/login-check", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const alerts = await run("SELECT id, user_agent, created_at FROM login_alerts WHERE user_id = ? AND seen = 0 ORDER BY created_at DESC LIMIT 10", [uid]);
+    return { data: { ok: true, alerts }, error: null };
+  }));
   app.get("/api/security/alerts", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const alerts = await run("SELECT id, user_agent, created_at FROM login_alerts WHERE user_id = ? AND seen = 0 ORDER BY created_at DESC LIMIT 10", [uid]);
@@ -1166,87 +1172,91 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       userSockets.get(uid).add(ws);
       touchPresence(uid);
 
-      const prof = (await run("SELECT id, username, display_name, avatar_url FROM profiles WHERE id = ?", [uid]))[0] || { id: uid, username: "user", display_name: "User", avatar_url: null };
+      const profPromise = run("SELECT id, username, display_name, avatar_url FROM profiles WHERE id = ?", [uid])
+        .then(rows => rows[0] || { id: uid, username: "user", display_name: "User", avatar_url: null })
+        .catch(() => ({ id: uid, username: "user", display_name: "User", avatar_url: null }));
+      let msgChain = Promise.resolve();
 
-      ws.on("message", async raw => {
-        touchPresence(uid);
-        let msg; try { msg = JSON.parse(String(raw)); } catch { return; }
-        const type = msg.type;
-        if (type === "join-call") {
-          const gid = String(msg.groupId || "");
-          try { await requireCallRoomAccess(gid, uid); } catch (e) { sendWs(ws, { type: "error", message: e.message || "Access denied" }); return; }
-          if (currentGroup && currentGroup !== gid) {
-            removeUserFromRoom(currentGroup, uid);
-          }
-          currentGroup = gid;
-          const r = getRoom(gid);
-          // Replace any stale socket for same user
-          if (r.peers.has(uid)) r.peers.delete(uid);
-          const existing = [...r.peers.keys()].filter(k => k !== uid);
-          r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
-          sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
-          broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
-          // Ring the other DM friend or all online group members when starting a call
-          if (existing.length === 0) {
-            const caller = { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url };
-            if (gid.startsWith("dm:")) {
-              const parts = gid.slice(3).split(":");
-              const other = parts[0] === uid ? parts[1] : parts[0];
-              const socks = userSockets.get(other);
-              if (socks) {
-                for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: caller });
-              }
-            } else {
-              const grp = (await run("SELECT name FROM group_chats WHERE id = ?", [gid]))[0];
-              const members = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [gid, uid]);
-              for (const m of members) {
-                const socks = userSockets.get(m.user_id);
+      ws.on("message", raw => {
+        msgChain = msgChain.then(async () => {
+          const prof = await profPromise;
+          touchPresence(uid);
+          let msg; try { msg = JSON.parse(String(raw)); } catch { return; }
+          const type = msg.type;
+          if (type === "join-call") {
+            const gid = String(msg.groupId || "");
+            try { await requireCallRoomAccess(gid, uid); } catch (e) { sendWs(ws, { type: "error", message: e.message || "Access denied" }); return; }
+            if (currentGroup && currentGroup !== gid) {
+              removeUserFromRoom(currentGroup, uid);
+            }
+            currentGroup = gid;
+            const r = getRoom(gid);
+            if (r.peers.has(uid)) r.peers.delete(uid);
+            const existing = [...r.peers.keys()].filter(k => k !== uid);
+            r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
+            sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
+            broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
+            if (existing.length === 0) {
+              const caller = { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url };
+              if (gid.startsWith("dm:")) {
+                const parts = gid.slice(3).split(":");
+                const other = parts[0] === uid ? parts[1] : parts[0];
+                const socks = userSockets.get(other);
                 if (socks) {
-                  for (const sws of socks) sendWs(sws, { type: "group-call-ring", groupId: gid, groupName: grp?.name || "Group", from: caller });
+                  for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: caller });
+                }
+              } else {
+                const grp = (await run("SELECT name FROM group_chats WHERE id = ?", [gid]))[0];
+                const members = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [gid, uid]);
+                for (const m of members) {
+                  const socks = userSockets.get(m.user_id);
+                  if (socks) {
+                    for (const sws of socks) sendWs(sws, { type: "group-call-ring", groupId: gid, groupName: grp?.name || "Group", from: caller });
+                  }
                 }
               }
             }
+            return;
           }
-          return;
-        }
-        if (!currentGroup) return;
-        const r = rooms.get(currentGroup); if (!r || !r.peers.has(uid)) return;
+          if (!currentGroup) return;
+          const r = rooms.get(currentGroup); if (!r || !r.peers.has(uid)) return;
 
-        if (type === "leave-call") {
-          removeUserFromRoom(currentGroup, uid);
-          currentGroup = null;
-        } else if (type === "mute") {
-          const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
-          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
-        } else if (type === "video-state") {
-          const p = r.peers.get(uid);
-          if (p) {
-            if (msg.camOn !== undefined) p.camOn = !!msg.camOn;
-            if (msg.screenOn !== undefined) p.screenOn = !!msg.screenOn;
+          if (type === "leave-call") {
+            removeUserFromRoom(currentGroup, uid);
+            currentGroup = null;
+          } else if (type === "mute") {
+            const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
+            broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+          } else if (type === "video-state") {
+            const p = r.peers.get(uid);
+            if (p) {
+              if (msg.camOn !== undefined) p.camOn = !!msg.camOn;
+              if (msg.screenOn !== undefined) p.screenOn = !!msg.screenOn;
+            }
+            broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+          } else if (type === "rtc-offer" || type === "rtc-answer" || type === "rtc-ice") {
+            const target = r.peers.get(String(msg.to || ""));
+            if (target) sendWs(target.ws, { ...msg, from: uid });
+          } else if (type === "set-activity") {
+            r.activity = ["none", "watch", "whiteboard"].includes(msg.activity) ? msg.activity : "none";
+            broadcastRoom(currentGroup, { type: "activity", activity: r.activity, by: prof.username });
+          } else if (type === "watch-sync") {
+            r.activity = "watch";
+            r.watch = { video: msg.video || r.watch.video, playing: !!msg.playing, time: Number(msg.time) || 0, updatedAt: Date.now() };
+            broadcastRoom(currentGroup, { type: "watch-sync", ...r.watch, by: prof.username }, uid);
+          } else if (type === "watch-react") {
+            broadcastRoom(currentGroup, { type: "watch-react", icon: String(msg.icon || ""), stickerUrl: msg.stickerUrl || null, by: prof.display_name || prof.username });
+          } else if (type === "wb-stroke") {
+            r.activity = "whiteboard";
+            const st = { x0: Number(msg.x0), y0: Number(msg.y0), x1: Number(msg.x1), y1: Number(msg.y1), color: String(msg.color || "#6750a4").slice(0, 20), size: Math.min(Math.max(Number(msg.size) || 4, 1), 32) };
+            r.strokes.push(st);
+            if (r.strokes.length > 800) r.strokes.shift();
+            broadcastRoom(currentGroup, { type: "wb-stroke", ...st }, uid);
+          } else if (type === "wb-clear") {
+            r.strokes = [];
+            broadcastRoom(currentGroup, { type: "wb-clear" });
           }
-          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
-        } else if (type === "rtc-offer" || type === "rtc-answer" || type === "rtc-ice") {
-          const target = r.peers.get(String(msg.to || ""));
-          if (target) sendWs(target.ws, { ...msg, from: uid });
-        } else if (type === "set-activity") {
-          r.activity = ["none", "watch", "whiteboard"].includes(msg.activity) ? msg.activity : "none";
-          broadcastRoom(currentGroup, { type: "activity", activity: r.activity, by: prof.username });
-        } else if (type === "watch-sync") {
-          r.activity = "watch";
-          r.watch = { video: msg.video || r.watch.video, playing: !!msg.playing, time: Number(msg.time) || 0, updatedAt: Date.now() };
-          broadcastRoom(currentGroup, { type: "watch-sync", ...r.watch, by: prof.username }, uid);
-        } else if (type === "watch-react") {
-          broadcastRoom(currentGroup, { type: "watch-react", icon: String(msg.icon || ""), stickerUrl: msg.stickerUrl || null, by: prof.display_name || prof.username });
-        } else if (type === "wb-stroke") {
-          r.activity = "whiteboard";
-          const st = { x0: Number(msg.x0), y0: Number(msg.y0), x1: Number(msg.x1), y1: Number(msg.y1), color: String(msg.color || "#6750a4").slice(0, 20), size: Math.min(Math.max(Number(msg.size) || 4, 1), 32) };
-          r.strokes.push(st);
-          if (r.strokes.length > 800) r.strokes.shift();
-          broadcastRoom(currentGroup, { type: "wb-stroke", ...st }, uid);
-        } else if (type === "wb-clear") {
-          r.strokes = [];
-          broadcastRoom(currentGroup, { type: "wb-clear" });
-        }
+        }).catch(() => {});
       });
 
       ws.on("close", () => {
