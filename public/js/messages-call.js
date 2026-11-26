@@ -467,7 +467,12 @@ function renderCallUI(){
   if(!callGroupId){ bar.classList.add("hidden"); scr.classList.add("hidden"); return; }
 
   const title=callTitle || (cur?(curType==="group"?cur.name:(cur.display_name||"@"+cur.username)):"Voice call");
-  const peersHtml=callState.participants.map(p=>`<div class="peer-pill" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`).join("");
+  const peersHtml=callState.participants.map(p=>{
+    const isMe=p.uid===me;
+    const hasCam=isMe?camOn:!!p.camOn;
+    const hasScr=isMe?screenOn:!!p.screenOn;
+    return `<div class="peer-pill" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><span>${esc(p.display_name||p.username)}</span>${hasScr?'<span class="ms" title="Sharing screen" style="font-size:14px;color:var(--primary)">screen_share</span>':""}${hasCam?'<span class="ms" title="Camera on" style="font-size:14px;color:var(--primary)">videocam</span>':""}${p.muted?'<span class="ms" style="font-size:14px;color:var(--bad)">mic_off</span>':""}</div>`;
+  }).join("");
   const ctrlsHtml=`<button class="head-chip" id="btnMute"><span class="ms" style="font-size:16px">${isMuted?"mic_off":"mic"}</span>${isMuted?"Unmute":"Mute"}</button>
     <button class="head-chip ${camOn?"p":""}" id="btnCam"><span class="ms" style="font-size:16px">${camOn?"videocam":"videocam_off"}</span>${camOn?"Cam On":"Camera"}</button>
     <button class="head-chip ${screenOn?"p":""}" id="btnScreen"><span class="ms" style="font-size:16px">${screenOn?"stop_screen_share":"screen_share"}</span>${screenOn?"Stop Share":"Share Screen"}</button>
@@ -511,20 +516,38 @@ function renderCallUI(){
       }
     } else {
       stage.dataset.mode="grid";
-      stage.innerHTML=`<div class="cs-grid">${callState.participants.map(p=>{
-        const isMe=p.uid===me;
-        const hasVid=isMe ? (camOn||screenOn) : (p.camOn||p.screenOn||!!remoteVideos[p.uid]);
-        return `<div class="cs-tile ${p.screenOn||(isMe&&screenOn)?"wide":""}" data-uid="${esc(p.uid)}" style="position:relative;overflow:hidden">
-          ${hasVid ? `<video id="vid-${esc(p.uid)}" autoplay playsinline ${isMe?"muted":""} style="width:100%;height:100%;max-height:360px;object-fit:contain;border-radius:16px;background:#000"></video>` : `<div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div>`}
-          <div style="display:flex;align-items:center;gap:6px;margin-top:6px"><b>${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:18px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:18px;color:var(--primary)">graphic_eq</span>'}</div>
+      const isSharer=p=>p.uid===me?(camOn||screenOn):(p.camOn||p.screenOn||!!remoteVideos[p.uid]);
+      const sharers=callState.participants.filter(isSharer);
+      const others=callState.participants.filter(p=>!isSharer(p));
+      if(sharers.length){
+        stage.innerHTML=`<div class="cs-stage-wrap">
+          <div class="cs-stage-main ${sharers.length===1?"one":"split"}">
+            ${sharers.map(p=>{
+              const isMe=p.uid===me;
+              const scr=isMe?screenOn:!!p.screenOn;
+              const cam=isMe?camOn:!!p.camOn;
+              return `<div class="cs-stage-tile" data-uid="${esc(p.uid)}">
+                <video id="vid-${esc(p.uid)}" autoplay playsinline ${isMe?"muted":""}></video>
+                <div class="cs-stage-lbl">
+                  ${scr?'<span class="ms" style="font-size:16px">screen_share</span>':""}
+                  ${cam?'<span class="ms" style="font-size:16px">videocam</span>':""}
+                  <span>${esc(p.display_name||p.username)}${isMe?" (You)":""}</span>
+                  ${p.muted?'<span class="ms" style="font-size:16px;color:#f87171">mic_off</span>':'<span class="ms" style="font-size:16px;color:#a78bfa">graphic_eq</span>'}
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+          ${others.length?`<div class="cs-bottom-strip">${others.map(p=>`<div class="cs-mini-tile" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><b style="font-size:13px">${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:16px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:16px;color:var(--primary)">graphic_eq</span>'}</div>`).join("")}</div>`:""}
         </div>`;
-      }).join("")}</div>`;
-      callState.participants.forEach(p=>{
-        const vEl=document.getElementById("vid-"+p.uid);
-        if(!vEl) return;
-        const st=p.uid===me ? (screenStream || camStream) : remoteVideos[p.uid];
-        if(st && vEl.srcObject!==st){ vEl.srcObject=st; vEl.play().catch(()=>{}); }
-      });
+        sharers.forEach(p=>{
+          const vEl=document.getElementById("vid-"+p.uid);
+          if(!vEl) return;
+          const st=p.uid===me?(screenStream||camStream):remoteVideos[p.uid];
+          if(st && vEl.srcObject!==st){ vEl.srcObject=st; vEl.play().catch(()=>{}); }
+        });
+      } else {
+        stage.innerHTML=`<div class="cs-grid">${callState.participants.map(p=>`<div class="cs-tile" data-uid="${esc(p.uid)}"><div class="av" ${avStyle(p)}>${p.avatar_url?"":esc((p.display_name||p.username||"?")[0].toUpperCase())}</div><div style="display:flex;align-items:center;gap:6px;margin-top:6px"><b>${esc(p.display_name||p.username)}</b>${p.muted?'<span class="ms" style="font-size:18px;color:var(--bad)">mic_off</span>':'<span class="ms" style="font-size:18px;color:var(--primary)">graphic_eq</span>'}</div></div>`).join("")}</div>`;
+      }
     }
   }
   $("btnMute").onclick=toggleMute;

@@ -191,6 +191,7 @@ function initFullUploadUI() {
     .up-snd-prev:disabled{opacity:.45;cursor:default}
     .up-snd-link{font-size:12px;font-weight:700;color:var(--primary);text-decoration:none;white-space:nowrap}
     .up-snd-link:hover{text-decoration:underline}
+    .up-tt-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);padding:12px 16px;border-radius:var(--r-xl)}
   `;
   document.head.appendChild(style);
 
@@ -214,6 +215,10 @@ function initFullUploadUI() {
         <span>MP4, WebM, or MOV · Up to 100 MB each · Select multiple at once</span>
       </label>
       <input type="file" id="upFile" accept="video/mp4,video/webm,video/quicktime" multiple hidden>
+      <div class="up-tt-row">
+        <input type="url" id="upTiktokUrl" placeholder="Or paste a TikTok video link to auto-import video, bio & #hashtags…" style="flex:1;min-width:220px;background:var(--bg);border:0;border-radius:999px;padding:10px 14px;color:var(--text);font:inherit;outline:0">
+        <button type="button" class="btn primary" id="upTiktokBtn">Import TikTok</button>
+      </div>
       <div class="up-bar-wrap hidden" id="upBarWrap">
         <div class="up-bar-head">
           <span id="upPhase">Preparing…</span>
@@ -245,6 +250,75 @@ function initFullUploadUI() {
     });
     renderUpQueue();
   };
+  const importTiktok = async () => {
+    const inp = $("upTiktokUrl"), btn = $("upTiktokBtn"), hint = $("upHint");
+    const url = (inp?.value || "").trim();
+    if (!url) { hint.textContent = "Paste a TikTok video link first."; hint.className = "hint bad"; return; }
+    btn.disabled = true;
+    btn.textContent = "Importing…";
+    hint.className = "hint";
+    hint.textContent = "Grabbing TikTok video & bio…";
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session?.access_token) throw new Error("Sign in first to import videos.");
+      const r = await fetch("/api/videos/import-tiktok", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ url })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error?.message || "Could not import TikTok link.");
+      const info = j.data;
+      hint.textContent = "Downloading video to queue…";
+      const fr = await fetch(`/api/videos/import-tiktok/${encodeURIComponent(info.importId)}/file`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if (!fr.ok) {
+        const fj = await fr.json().catch(() => ({}));
+        throw new Error(fj.error?.message || "Could not download TikTok video.");
+      }
+      const blob = await fr.blob();
+      const fname = `${(info.author || "tiktok").replace(/[^a-z0-9_-]/gi, "")}-tiktok.mp4`;
+      const file = new File([blob], fname, { type: "video/mp4" });
+      const tagsStr = Array.isArray(info.hashtags) && info.hashtags.length ? info.hashtags.join(" ") : "";
+      const item = {
+        file,
+        title: info.title || "TikTok Video",
+        description: info.description || "",
+        captions: "",
+        tags: tagsStr,
+        manualTags: !!tagsStr,
+        orientation: "portrait",
+        soundId: "",
+        status: "Ready",
+        url: URL.createObjectURL(file)
+      };
+      if (!item.tags && isAutoTagsOn()) item.tags = localQuickTags(item.title, item.description);
+      const probe = document.createElement("video");
+      probe.preload = "metadata";
+      probe.src = item.url;
+      probe.onloadedmetadata = () => {
+        if (probe.videoWidth > probe.videoHeight * 1.15) item.orientation = "landscape";
+        else if (Math.abs(probe.videoWidth - probe.videoHeight) <= probe.videoWidth * 0.15) item.orientation = "square";
+        renderUpQueue();
+      };
+      upQueue.push(item);
+      const newIdx = upQueue.length - 1;
+      if (!item.manualTags && isAutoTagsOn()) setTimeout(() => generateTagsForItem(item, newIdx, false), 50);
+      inp.value = "";
+      renderUpQueue();
+      hint.textContent = "Added TikTok video to upload queue!";
+      hint.className = "hint ok";
+    } catch (e) {
+      hint.textContent = e.message || "TikTok import failed.";
+      hint.className = "hint bad";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Import TikTok";
+    }
+  };
+  $("upTiktokBtn").onclick = importTiktok;
+  $("upTiktokUrl").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); importTiktok(); } };
   $("upSubmit").onclick = submitBatchUpload;
 }
 
