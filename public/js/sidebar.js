@@ -48,7 +48,7 @@ const items=[
   ["explore","explore","Explore","/scroll"],
   ["following","person_check","Following","/scroll#following"],
   ["friends","group","Friends","/scroll#friends"],
-  ["upload","add_box","Upload",null],
+  ["upload","add_box","Upload","/upload"],
   ["games","sports_esports","Games","/games"],
   ["activity","notifications","Activity","/activity"],
   ["messages","chat_bubble","Messages","/messages"],
@@ -161,7 +161,6 @@ document.addEventListener("click",e=>{
 });
 nav.querySelector("#sbq").onsubmit=e=>{e.preventDefault();const q=sInput.value.trim();sRes.classList.add("hidden");if(q)location.href="/scroll#search="+encodeURIComponent(q)};
 
-nav.querySelector('[data-id="upload"]').onclick=()=>{const b=document.getElementById("openUpload");if(b&&!b.classList.contains("hidden"))b.click();else location.href="/scroll"};
 nav.querySelector("#sbmore").onclick=e=>{e.stopPropagation();nav.querySelector("#sbmenu").classList.toggle("open");};
 nav.querySelector("#sbout").onclick=async()=>{try{await getSb().auth.signOut()}catch(e){}location.href="/"};
 })();

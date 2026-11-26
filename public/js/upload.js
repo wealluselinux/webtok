@@ -1,4 +1,4 @@
-/* Full-screen Material You batch upload studio (R2 direct upload + status bar + ETA + AI safety check + sound picker) */
+/* Dedicated /upload studio & batch upload (R2 direct upload + status bar + ETA + AI safety check + sound picker + TikTok URL importer) */
 const MAX_INPUT_BYTES = 100 * 1024 * 1024;
 let upQueue = [], uploadUIReady = false, uploadedSounds = [], upPreviewAudio = null, upPreviewIdx = -1;
 const _parseTags = s => typeof parseTags === "function"
@@ -46,7 +46,7 @@ async function generateTagsForItem(item, idx, force = false) {
     if (Array.isArray(arr) && arr.length && (force || (!item.manualTags && isAutoTagsOn()))) {
       item.tags = arr.map(t => "#" + String(t).replace(/^#+/, "")).join(" ");
       const curIdx = upQueue.indexOf(item);
-    const inp = curIdx >= 0 ? document.querySelector(`.up-tags[data-idx="${curIdx}"]`) : null;
+      const inp = curIdx >= 0 ? document.querySelector(`.up-tags[data-idx="${curIdx}"]`) : null;
       if (inp) inp.value = item.tags;
     }
   } catch {}
@@ -92,7 +92,7 @@ async function loadUploadSounds() {
   } catch {
     uploadedSounds = [];
   }
-  if ($("uploadDlg")?.open) renderUpQueue();
+  if ($("uploadPageMount") || $("uploadDlg")?.open) renderUpQueue();
 }
 
 function soundSelectHtml(selectedId) {
@@ -156,19 +156,25 @@ async function uploadToSupabaseStorage(file, path, token, onProgress) {
   });
 }
 
-function initFullUploadUI() {
+function initFullUploadUI(targetEl) {
   if (uploadUIReady) return;
   uploadUIReady = true;
+  const pageMount = targetEl || $("uploadPageMount");
   const dlg = $("uploadDlg");
-  if (!dlg) return;
+  const host = pageMount || dlg;
+  if (!host) return;
+  const isPage = !!pageMount;
 
   const style = document.createElement("style");
   style.textContent = `
     #uploadDlg{position:fixed;inset:0;width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg);color:var(--text);overflow:hidden}
     #uploadDlg[open]{display:flex;flex-direction:column}
-    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg)}
+    .up-top{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--surface);background:var(--bg);gap:12px;flex-wrap:wrap}
     .up-top h2{font-size:22px;font-weight:700}
     .up-body{flex:1;overflow-y:auto;padding:24px;max-width:860px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+    .up-page-card{background:var(--bg);border-radius:var(--r-xl);display:flex;flex-direction:column;gap:18px}
+    .up-page-card .up-top{padding:8px 0 16px;background:transparent}
+    .up-page-card .up-body{padding:0;overflow:visible}
     .up-drop{background:var(--card);border:2px dashed var(--primary);border-radius:var(--r-xl);padding:28px 20px;text-align:center;cursor:pointer;transition:transform .15s}
     .up-drop:hover{transform:scale(.995)}
     .up-drop b{display:block;font-size:17px;margin-bottom:4px}
@@ -194,11 +200,12 @@ function initFullUploadUI() {
     .up-tt-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--card);padding:12px 16px;border-radius:var(--r-xl)}
   `;
   document.head.appendChild(style);
+  if (isPage) host.classList.add("up-page-card");
 
-  dlg.innerHTML = `
+  host.innerHTML = `
     <div class="up-top">
       <div style="display:flex;align-items:center;gap:12px">
-        <button type="button" class="btn icon" id="upClose">✕</button>
+        ${isPage ? `<a class="btn icon" href="/scroll" title="Back to Feed"><span class="ms">arrow_back</span></a>` : `<button type="button" class="btn icon" id="upClose">✕</button>`}
         <h2>Upload videos</h2>
       </div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -229,8 +236,14 @@ function initFullUploadUI() {
       <div class="up-list" id="upQueue"></div>
     </div>`;
 
-  dlg.addEventListener("close", stopSoundPreview);
-  $("upClose").onclick = () => { stopSoundPreview(); dlg.close(); };
+  if ($("upAutoTags")) {
+    $("upAutoTags").checked = isAutoTagsOn();
+    $("upAutoTags").onchange = e => setAutoTagsPref(e.target.checked);
+  }
+  if (!isPage && dlg) {
+    dlg.addEventListener("close", stopSoundPreview);
+    $("upClose").onclick = () => { stopSoundPreview(); dlg.close(); };
+  }
   $("upFile").onchange = e => {
     [...(e.target.files || [])].forEach(file => {
       const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
@@ -419,7 +432,8 @@ async function submitBatchUpload() {
   setStatusBar("Starting upload…", 0, "");
   try {
     const { data: { session } } = await sb.auth.getSession();
-    if (!session?.access_token) throw new Error("Session expired. Sign in again.");
+    if (!session?.access_token || !session?.user?.id) throw new Error("Session expired. Sign in again.");
+    const uid = (typeof user !== "undefined" && user?.id) || session.user.id;
 
     let okCount = 0;
     for (let i = 0; i < upQueue.length; i++) {
@@ -437,7 +451,7 @@ async function submitBatchUpload() {
       try {
         setStatusBar(`Uploading video (${i + 1} of ${upQueue.length})…`, 0, "estimating…");
         const ext = (item.file.name.split(".").pop() || "mp4").toLowerCase();
-        const path = `${user.id}/${Date.now()}_${i}.${ext}`;
+        const path = `${uid}/${Date.now()}_${i}.${ext}`;
         const title = item.title.trim() || item.file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
         const frame = await captureVideoFrame(item.url);
         const { url, storagePath } = await uploadToSupabaseStorage(item.file, path, session.access_token, (pct, eta) => {
@@ -458,10 +472,10 @@ async function submitBatchUpload() {
         const description = (item.description || "").trim().slice(0, 300) || null;
         const captions = (item.captions || "").trim().slice(0, 500) || null;
         let insRes = await sb.from("videos").insert({
-          user_id: user.id, title, description, captions, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
+          user_id: uid, title, description, captions, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
         }).select("id").single();
         if (insRes.error && /orientation/i.test(insRes.error.message)) {
-          insRes = await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath, hashtags: tags }).select("id").single();
+          insRes = await sb.from("videos").insert({ user_id: uid, title, video_url: url, storage_path: storagePath, hashtags: tags }).select("id").single();
         }
         if (insRes.error) throw insRes.error;
         if (item.soundId && insRes.data?.id) {
@@ -484,12 +498,21 @@ async function submitBatchUpload() {
     }
     hideStatusBar();
     if (okCount === upQueue.length) {
-      $("uploadDlg").close();
-      await loadFeed();
+      if (typeof loadFeed === "function") {
+        $("uploadDlg")?.close();
+        await loadFeed();
+      } else {
+        upQueue = [];
+        renderUpQueue();
+        $("upSubmit").disabled = false;
+        $("upHint").textContent = `Uploaded ${okCount} video${okCount === 1 ? "" : "s"}! Taking you to the feed…`;
+        $("upHint").className = "hint ok";
+        setTimeout(() => { location.href = "/scroll"; }, 800);
+      }
     } else {
       $("upSubmit").disabled = false;
       $("upHint").textContent = `Uploaded ${okCount} of ${upQueue.length} videos.`;
-      if (okCount > 0) await loadFeed();
+      if (okCount > 0 && typeof loadFeed === "function") await loadFeed();
     }
   } catch (e) {
     hideStatusBar();
@@ -499,20 +522,15 @@ async function submitBatchUpload() {
   }
 }
 
-$("openUpload").onclick = () => requireLogin(() => {
-  initFullUploadUI();
-  hideStatusBar();
-  stopSoundPreview();
-  upQueue = [];
-  $("upFile").value = "";
-  $("upHint").textContent = "";
-  $("upHint").className = "hint";
-  $("upSubmit").disabled = false;
-  if ($("upAutoTags")) {
-    $("upAutoTags").checked = isAutoTagsOn();
-    $("upAutoTags").onchange = e => setAutoTagsPref(e.target.checked);
-  }
-  renderUpQueue();
-  loadUploadSounds();
-  $("uploadDlg").showModal();
-});
+if ($("uploadPageMount")) {
+  (async () => {
+    try {
+      const { data } = await sb.auth.getSession();
+      if (!data?.session) { location.replace("/login"); return; }
+    } catch {}
+    initFullUploadUI($("uploadPageMount"));
+    loadUploadSounds();
+  })();
+} else if ($("openUpload")) {
+  $("openUpload").onclick = () => { location.href = "/upload"; };
+}

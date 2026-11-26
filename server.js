@@ -404,6 +404,7 @@ app.post("/api/storage/remove", wrap(async req => {
 
 const page = f => (_q, res) => res.sendFile(path.join(__dirname, "public", "pages", f));
 app.get(["/scroll", "/feed"], page("scroll.html"));
+app.get("/upload", page("upload.html"));
 app.get("/messages", page("messages.html"));
 app.get("/activity", page("activity.html"));
 app.get(["/login", "/sign-in", "/signin"], page("login.html"));
