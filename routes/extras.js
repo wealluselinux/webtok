@@ -4,7 +4,7 @@
    3) Admin panel API (/api/admin/*) + /api/admin/announce + owner-only account deletion
    4) Sign-up accepted_terms
    5) Group chats with friend invites, acceptance, owner kick & delete
-   6) Custom user stickers & comment replies
+   6) Custom user stickers, comment deletion, comment polls, & comment replies
    7) Group & DM Voice Calls (WebRTC signaling), Group Watch, Shared Whiteboard
    8) Security hardening: new-device login alerts
    9) 24-hour Stories (/api/stories) & User-uploaded Sounds (/api/sounds, /sounds)
@@ -71,6 +71,8 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS mcp_api_keys (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, prefix TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT)",
       "CREATE TABLE IF NOT EXISTS webify_playlists (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, is_public INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS webify_playlist_tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id TEXT NOT NULL, source TEXT NOT NULL, sound_id TEXT, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, cover_url TEXT, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS comment_polls (id TEXT PRIMARY KEY, video_id TEXT NOT NULL, user_id TEXT NOT NULL, question TEXT NOT NULL, options_json TEXT NOT NULL, ends_at TEXT NOT NULL, created_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS comment_poll_votes (poll_id TEXT NOT NULL, user_id TEXT NOT NULL, option_idx INTEGER NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY (poll_id, user_id))",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
       "CREATE INDEX IF NOT EXISTS idx_gmsg_group ON group_messages(group_id, id)",
       "CREATE INDEX IF NOT EXISTS idx_ustk_created ON user_stickers(created_at DESC)",
@@ -80,6 +82,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE INDEX IF NOT EXISTS idx_vsnd_user ON video_sounds(user_id)",
       "CREATE INDEX IF NOT EXISTS idx_tickets_user ON support_tickets(user_id, updated_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_ticket_replies ON support_replies(ticket_id, id)",
+      "CREATE INDEX IF NOT EXISTS idx_cpoll_vid ON comment_polls(video_id, created_at DESC)",
     ], "write");
 
     const ownerEmail = (process.env.OWNER_EMAIL || "").trim().toLowerCase();
@@ -906,6 +909,141 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       args: [videoId, uid, soundId, nowIso()]
     });
     return { data: { videoId, soundId, sound: s }, error: null };
+  }));
+
+  /* ---------- Delete own/video-owner comments ---------- */
+  app.delete("/api/comments/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const cid = String(req.params.id || "").trim();
+    const c = (await run(`
+      SELECT c.id, c.user_id, c.video_id, v.user_id AS video_owner_id
+      FROM comments c LEFT JOIN videos v ON v.id = c.video_id
+      WHERE c.id = ?`, [cid]))[0];
+    if (!c) throw new HttpError(404, "Comment not found");
+    const isAdmin = ["admin", "owner"].includes(req.wt?.role);
+    if (c.user_id !== uid && c.video_owner_id !== uid && !isAdmin) {
+      throw new HttpError(403, "You can only delete your own comments or comments on your videos.");
+    }
+    const reps = await run("SELECT id FROM comments WHERE parent_id = ?", [cid]);
+    await db.batch([
+      { sql: "DELETE FROM comments WHERE parent_id = ?", args: [cid] },
+      { sql: "DELETE FROM comments WHERE id = ?", args: [cid] }
+    ], "write");
+    return { data: { deleted: cid, removedCount: 1 + reps.length }, error: null };
+  }));
+
+  /* ---------- Comment Polls (Video Owner creates, viewers vote, shows end date & vote counts) ---------- */
+  async function formatPollRow(p, uid) {
+    const options = safeArr(p.options_json);
+    const votes = await run("SELECT option_idx, COUNT(*) n FROM comment_poll_votes WHERE poll_id = ? GROUP BY option_idx", [p.id]);
+    const counts = options.map(() => 0);
+    let totalVotes = 0;
+    votes.forEach(v => {
+      const idx = Number(v.option_idx);
+      const n = Number(v.n || 0);
+      if (idx >= 0 && idx < counts.length) {
+        counts[idx] = n;
+        totalVotes += n;
+      }
+    });
+    let myVote = null;
+    if (uid) {
+      const mv = (await run("SELECT option_idx FROM comment_poll_votes WHERE poll_id = ? AND user_id = ?", [p.id, uid]))[0];
+      if (mv !== undefined && mv !== null) myVote = Number(mv.option_idx);
+    }
+    const ended = Date.parse(p.ends_at) <= Date.now();
+    return {
+      id: p.id,
+      video_id: p.video_id,
+      user_id: p.user_id,
+      question: p.question,
+      options,
+      counts,
+      totalVotes,
+      myVote,
+      ends_at: p.ends_at,
+      ended,
+      created_at: p.created_at
+    };
+  }
+
+  app.get("/api/videos/:id/polls", wrap(async req => {
+    await ensure();
+    const vid = String(req.params.id || "").trim();
+    const uid = uidFrom(req);
+    const rows = await run("SELECT * FROM comment_polls WHERE video_id = ? ORDER BY created_at DESC LIMIT 10", [vid]);
+    const out = [];
+    for (const p of rows) out.push(await formatPollRow(p, uid));
+    return { data: out, error: null };
+  }));
+
+  app.post("/api/videos/:id/polls", limit(20, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    if (req.wt?.restrictions?.includes("comment")) throw new HttpError(403, "You aren't allowed to post right now.");
+    const vid = String(req.params.id || "").trim();
+    const v = (await run("SELECT id, user_id FROM videos WHERE id = ?", [vid]))[0];
+    if (!v) throw new HttpError(404, "Video not found");
+    if (v.user_id !== uid) throw new HttpError(403, "Only the owner of the video can create comment polls.");
+
+    const question = String(req.body?.question || "").trim().slice(0, 160);
+    if (question.length < 2) throw new HttpError(400, "Enter a poll question (at least 2 characters).");
+    const rawOpts = Array.isArray(req.body?.options) ? req.body.options : ["Yes", "No"];
+    const options = rawOpts.map(o => String(o || "").trim().slice(0, 60)).filter(Boolean).slice(0, 4);
+    if (options.length < 2) throw new HttpError(400, "Provide at least 2 poll options.");
+
+    const endsMs = Date.parse(String(req.body?.ends_at || ""));
+    if (!isFinite(endsMs) || endsMs <= Date.now() + 60000) {
+      throw new HttpError(400, "Pick an end date/time in the future.");
+    }
+    if (endsMs > Date.now() + 90 * 24 * 3600 * 1000) {
+      throw new HttpError(400, "Poll end date must be within 90 days.");
+    }
+
+    if (app.locals.checkTextSafety) {
+      const chk = await app.locals.checkTextSafety(`${question} | ${options.join(" / ")}`, "Comment Poll");
+      if (!chk.safe) throw new HttpError(403, `Poll blocked by safety filter: ${chk.reason}`);
+    }
+
+    const id = crypto.randomUUID(), ts = nowIso(), endsAt = new Date(endsMs).toISOString();
+    await db.execute({
+      sql: "INSERT INTO comment_polls (id, video_id, user_id, question, options_json, ends_at, created_at) VALUES (?,?,?,?,?,?,?)",
+      args: [id, vid, uid, question, JSON.stringify(options), endsAt, ts]
+    });
+    const row = (await run("SELECT * FROM comment_polls WHERE id = ?", [id]))[0];
+    return { data: await formatPollRow(row, uid), error: null };
+  }));
+
+  app.post("/api/polls/:id/vote", limit(60, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const pid = String(req.params.id || "").trim();
+    const p = (await run("SELECT * FROM comment_polls WHERE id = ?", [pid]))[0];
+    if (!p) throw new HttpError(404, "Poll not found");
+    if (Date.parse(p.ends_at) <= Date.now()) throw new HttpError(400, "This poll has already ended.");
+    const options = safeArr(p.options_json);
+    const idx = parseInt(req.body?.optionIndex, 10);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= options.length) {
+      throw new HttpError(400, "Invalid poll option.");
+    }
+    await db.execute({
+      sql: `INSERT INTO comment_poll_votes (poll_id, user_id, option_idx, created_at) VALUES (?,?,?,?)
+            ON CONFLICT(poll_id, user_id) DO UPDATE SET option_idx=excluded.option_idx, created_at=excluded.created_at`,
+      args: [pid, uid, idx, nowIso()]
+    });
+    return { data: await formatPollRow(p, uid), error: null };
+  }));
+
+  app.delete("/api/polls/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const pid = String(req.params.id || "").trim();
+    const p = (await run("SELECT id, user_id FROM comment_polls WHERE id = ?", [pid]))[0];
+    if (!p) throw new HttpError(404, "Poll not found");
+    const isAdmin = ["admin", "owner"].includes(req.wt?.role);
+    if (p.user_id !== uid && !isAdmin) throw new HttpError(403, "Only the video owner can delete this poll.");
+    await db.batch([
+      { sql: "DELETE FROM comment_poll_votes WHERE poll_id = ?", args: [pid] },
+      { sql: "DELETE FROM comment_polls WHERE id = ?", args: [pid] }
+    ], "write");
+    return { data: true, error: null };
   }));
 
   /* ---------- custom + built-in stickers (with AI safety check) ---------- */

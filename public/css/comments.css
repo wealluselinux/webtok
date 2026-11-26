@@ -1,18 +1,34 @@
-/* Comments side panel, replies, custom stickers, M3 Expressive up/down buttons (scroll.html) */
+/* Comments side panel, replies, delete, polls, custom stickers, M3 Expressive up/down buttons (scroll.html) */
 .cmt-list{max-height:46vh;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
 .cmt-item{display:flex;gap:10px;align-items:flex-start;background:var(--surface);padding:12px 16px;border-radius:22px}
 .cmt-replies{margin-left:28px;padding-left:10px;border-left:2px solid var(--card);display:flex;flex-direction:column;gap:6px}
 .cmt-item.is-reply{background:var(--card);border-radius:18px;padding:10px 14px}
 .cmt-reply-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 14px;padding:7px 14px;border-radius:999px;background:var(--card);font-size:12px}
 .cmt-reply-x{background:none;border:0;color:var(--text);cursor:pointer;display:grid;place-items:center;padding:2px}
-.cmt-reply-btn{background:none;border:0;color:var(--primary);font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:0;margin-left:10px}
-.cmt-reply-btn:hover{text-decoration:underline}
+.cmt-reply-btn,.cmt-del-btn{background:none;border:0;color:var(--primary);font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:0;margin-left:10px}
+.cmt-del-btn{color:var(--bad,#b3261e)}
+.cmt-reply-btn:hover,.cmt-del-btn:hover{text-decoration:underline}
+.cmt-poll-comp{margin:0 16px 12px;padding:14px;border-radius:22px;background:var(--card);display:flex;flex-direction:column;gap:8px}
+.cmt-poll-comp input{width:100%;border:0;border-radius:14px;padding:9px 12px;background:var(--bg);color:var(--text);font:inherit;font-size:13px;outline:0}
+.cmt-poll-opts-in{display:flex;flex-direction:column;gap:6px}
+.cmt-poll-card{background:var(--card);border-radius:22px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;border:1px solid var(--surface)}
+.cmt-poll-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.cmt-poll-badge{display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:var(--on-primary);padding:2px 9px;border-radius:999px;font-weight:700}
+.cmt-poll-q{font-size:14px;font-weight:700;line-height:1.35}
+.cmt-poll-opts{display:flex;flex-direction:column;gap:6px}
+.cmt-poll-opt{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;padding:10px 14px;border-radius:16px;border:1px solid transparent;background:var(--surface);color:var(--text);font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:transform .12s,border-color .15s}
+.cmt-poll-opt:hover:not(:disabled){border-color:var(--primary)}
+.cmt-poll-opt:disabled{cursor:default;opacity:.92}
+.cmt-poll-opt.chosen{border-color:var(--primary)}
+.cmt-poll-bar{position:absolute;left:0;top:0;bottom:0;background:color-mix(in srgb,var(--primary) 24%,transparent);pointer-events:none;transition:width .25s ease}
+.cmt-poll-lbl,.cmt-poll-stat{position:relative;z-index:1;display:inline-flex;align-items:center;gap:5px}
+.cmt-poll-stat{font-size:12px;font-weight:700;color:var(--primary);white-space:nowrap}
 .cmt-form{display:flex;gap:8px;align-items:center}
 .cmt-form input{flex:1}
 /* ---------- Comments side panel ---------- */
 #commentsDlg{position:fixed;inset:12px 12px 12px auto;margin:0;width:min(400px,calc(100vw - 24px));height:calc(100dvh - 24px);max-height:none;border:0;border-radius:32px;padding:0;background:var(--bg);color:var(--text);box-shadow:0 16px 48px #0005;z-index:40;overflow:hidden}
 #commentsDlg[open]{display:flex;flex-direction:column}
-#commentsDlg .dlg-head{padding:20px 22px 12px;display:flex;justify-content:space-between;align-items:center}
+#commentsDlg .dlg-head{padding:20px 22px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px}
 #commentsDlg .cmt-list{flex:1;overflow-y:auto;padding:0 16px}
 #commentsDlg .cmt-form{display:flex;gap:8px;align-items:center;padding:12px 14px}
 #commentsDlg .cmt-form input{flex:1;min-width:0;border-radius:999px;padding:12px 16px;background:var(--surface)}
