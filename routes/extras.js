@@ -68,6 +68,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       "CREATE TABLE IF NOT EXISTS system_announcements (id TEXT PRIMARY KEY, sent_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS mcp_oauth_clients (client_id TEXT PRIMARY KEY, client_secret TEXT, client_name TEXT, redirect_uris TEXT NOT NULL, token_endpoint_auth_method TEXT, created_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS mcp_oauth_codes (code TEXT PRIMARY KEY, client_id TEXT NOT NULL, user_id TEXT NOT NULL, redirect_uri TEXT NOT NULL, code_challenge TEXT, code_challenge_method TEXT, scope TEXT, expires_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS mcp_api_keys (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, key_hash TEXT NOT NULL UNIQUE, prefix TEXT NOT NULL, created_at TEXT NOT NULL, last_used_at TEXT)",
       "CREATE TABLE IF NOT EXISTS webify_playlists (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, is_public INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
       "CREATE TABLE IF NOT EXISTS webify_playlist_tracks (id INTEGER PRIMARY KEY AUTOINCREMENT, playlist_id TEXT NOT NULL, source TEXT NOT NULL, sound_id TEXT, title TEXT NOT NULL, artist TEXT NOT NULL, audio_url TEXT NOT NULL, cover_url TEXT, created_at TEXT NOT NULL)",
       "CREATE INDEX IF NOT EXISTS idx_gm_user ON group_members(user_id, status)",
@@ -2019,11 +2020,53 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         }
       } catch {}
     }
+    if (bearer && bearer.startsWith("wt_mcp_")) {
+      try {
+        const kh = crypto.createHash("sha256").update(bearer).digest("hex");
+        const krow = (await run("SELECT id, user_id FROM mcp_api_keys WHERE key_hash = ?", [kh]))[0];
+        if (krow) {
+          const st = await stateOf(krow.user_id);
+          if (st && !st.banned && ["admin", "owner"].includes(st.role)) {
+            db.execute({ sql: "UPDATE mcp_api_keys SET last_used_at = ? WHERE id = ?", args: [nowIso(), krow.id] }).catch(() => {});
+            return { ok: true, uid: krow.user_id };
+          }
+        }
+      } catch {}
+    }
     if (req.wt && ["admin", "owner"].includes(req.wt.role)) {
       return { ok: true, uid: req.wt.uid };
     }
     return { ok: false };
   }
+
+  app.get("/api/mcp/keys", wrap(async req => {
+    const me = needAdmin(req);
+    const rows = await run("SELECT id, name, prefix, created_at, last_used_at FROM mcp_api_keys WHERE user_id = ? ORDER BY created_at DESC LIMIT 20", [me.uid]);
+    return { data: rows, error: null };
+  }));
+
+  app.post("/api/mcp/keys", limit(15, 600000), wrap(async req => {
+    const me = needAdmin(req);
+    const name = String(req.body?.name || "My MCP Key").trim().slice(0, 50) || "My MCP Key";
+    const existing = await run("SELECT COUNT(*) n FROM mcp_api_keys WHERE user_id = ?", [me.uid]);
+    if (Number(existing[0]?.n || 0) >= 10) throw new HttpError(400, "Maximum of 10 MCP API keys reached. Delete an old key first.");
+    const rawKey = "wt_mcp_" + crypto.randomBytes(24).toString("hex");
+    const keyHash = crypto.createHash("sha256").update(rawKey).digest("hex");
+    const prefix = rawKey.slice(0, 14) + "…";
+    const id = crypto.randomUUID(), ts = nowIso();
+    await db.execute({
+      sql: "INSERT INTO mcp_api_keys (id, user_id, name, key_hash, prefix, created_at) VALUES (?,?,?,?,?,?)",
+      args: [id, me.uid, name, keyHash, prefix, ts]
+    });
+    return { data: { id, name, prefix, apiKey: rawKey, created_at: ts }, error: null };
+  }));
+
+  app.delete("/api/mcp/keys/:id", wrap(async req => {
+    const me = needAdmin(req);
+    const id = String(req.params.id || "");
+    await db.execute({ sql: "DELETE FROM mcp_api_keys WHERE id = ? AND user_id = ?", args: [id, me.uid] });
+    return { data: true, error: null };
+  }));
 
   app.get("/api/mcp", async (req, res) => {
     const base = mcpBaseUrl(req);
