@@ -4,6 +4,45 @@ const _parseTags = s => typeof parseTags === "function"
   ? parseTags(s)
   : [...new Set(String(s || "").toLowerCase().match(/[a-z0-9_]{1,30}/g) || [])];
 
+
+function isProfAutoTagsOn() {
+  try { return JSON.parse(localStorage.getItem("wt_theme") || "{}").autoHashtags !== false; } catch { return true; }
+}
+function profLocalQuickTags(title, desc) {
+  const stop = new Set(["the","and","for","with","this","that","from","your","you","are","was","were","have","has","had","not","but","out","all","just","like","into","about","video","clip","mp4","mov","webm","new","my","our"]);
+  const words = `${title || ""} ${desc || ""}`.toLowerCase().match(/[a-z0-9_]{3,20}/g) || [];
+  const uniq = [...new Set(words.filter(w => !stop.has(w) && !/^\d+$/.test(w)))].slice(0, 4);
+  if (!uniq.length) uniq.push("webtok", "fyp");
+  return uniq.map(w => "#" + w).join(" ");
+}
+async function profGenerateTagsForItem(item, force = false) {
+  if (!force && (!isProfAutoTagsOn() || item.manualTags)) return;
+  const quick = profLocalQuickTags(item.title, item.description);
+  if (!item.tags || force) {
+    item.tags = quick;
+    const curIdx = upQueue.indexOf(item);
+    const inp = curIdx >= 0 ? document.querySelector(`.up-tags[data-idx="${curIdx}"]`) : null;
+    if (inp) inp.value = item.tags;
+  }
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session?.access_token) return;
+    const r = await fetch("/api/ai/hashtags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ title: item.title || "", description: item.description || "" })
+    });
+    const j = await r.json().catch(() => ({}));
+    const arr = j?.data?.hashtags;
+    if (Array.isArray(arr) && arr.length && (force || (!item.manualTags && isProfAutoTagsOn()))) {
+      item.tags = arr.map(t => "#" + String(t).replace(/^#+/, "")).join(" ");
+      const curIdx = upQueue.indexOf(item);
+      const inp = curIdx >= 0 ? document.querySelector(`.up-tags[data-idx="${curIdx}"]`) : null;
+      if (inp) inp.value = item.tags;
+    }
+  } catch {}
+}
+
 function ensureProfUploadSoundCss() {
   if (document.getElementById("wt-up-snd-css")) return;
   const st = document.createElement("style");
@@ -139,8 +178,13 @@ function renderUpQueue() {
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(item.file.name)} (${mb} MB)</span>
           <span data-st="${idx}" style="font-weight:700;color:${over ? "var(--bad)" : "var(--primary)"}">${over ? "Over 100 MB" : escapeHtml(item.status)}</span>
         </div>
-        <input type="text" value="${escapeHtml(item.title)}" placeholder="Caption / Title" maxlength="100" style="background:var(--bg)">
-        <input type="text" class="up-tags" value="${escapeHtml(item.tags || "")}" placeholder="#hashtags (1 to 5, required)" maxlength="120" style="background:var(--bg)">
+        <input type="text" class="up-title" value="${escapeHtml(item.title)}" placeholder="Video name / title" maxlength="100" style="background:var(--bg)">
+        <textarea class="up-desc" rows="2" placeholder="Video bio / description (optional)" maxlength="300" style="background:var(--bg);border-radius:16px;padding:10px 14px;border:0;color:var(--text);font:inherit;font-size:13px;resize:vertical;outline:0">${escapeHtml(item.description || "")}</textarea>
+        <textarea class="up-caps" rows="2" placeholder="Captions / subtitles text (optional, shown on video)" maxlength="500" style="background:var(--bg);border-radius:16px;padding:10px 14px;border:0;color:var(--text);font:inherit;font-size:13px;resize:vertical;outline:0">${escapeHtml(item.captions || "")}</textarea>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="text" class="up-tags" data-idx="${idx}" value="${escapeHtml(item.tags || "")}" placeholder="#hashtags (1 to 5, required)" maxlength="120" style="background:var(--bg);flex:1">
+          <button type="button" class="up-or up-auto-btn" title="Auto-generate hashtags"><span class="ms" style="font-size:15px">auto_awesome</span>Auto</button>
+        </div>
         <div class="up-orients">
           <button type="button" class="up-or ${item.orientation === "portrait" ? "on" : ""}" data-o="portrait">Portrait (9:16)</button>
           <button type="button" class="up-or ${item.orientation === "landscape" ? "on" : ""}" data-o="landscape">Landscape (16:9)</button>
@@ -153,8 +197,18 @@ function renderUpQueue() {
         </div>
       </div>
       <button type="button" class="btn icon" title="Remove">✕</button>`;
-    card.querySelector("input").oninput = e => { item.title = e.target.value; };
-    card.querySelector(".up-tags").oninput = e => { item.tags = e.target.value; };
+    let tagTmr = null;
+    card.querySelector(".up-title").oninput = e => {
+      item.title = e.target.value;
+      if (isProfAutoTagsOn() && !item.manualTags) {
+        clearTimeout(tagTmr);
+        tagTmr = setTimeout(() => profGenerateTagsForItem(item, false), 550);
+      }
+    };
+    card.querySelector(".up-desc").oninput = e => { item.description = e.target.value; };
+    card.querySelector(".up-caps").oninput = e => { item.captions = e.target.value; };
+    card.querySelector(".up-tags").oninput = e => { item.tags = e.target.value; item.manualTags = !!e.target.value.trim(); };
+    card.querySelector(".up-auto-btn").onclick = () => { item.manualTags = false; profGenerateTagsForItem(item, true); };
     card.querySelectorAll(".up-or[data-o]").forEach(b => {
       b.onclick = () => { item.orientation = b.dataset.o; renderUpQueue(); };
     });
@@ -211,7 +265,8 @@ $("btn-upload-acct").onclick = openUpload;
 $("upFile").onchange = e => {
   [...(e.target.files || [])].forEach(file => {
     const defTitle = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim().slice(0, 100);
-    const item = { file, title: defTitle, orientation: "portrait", soundId: "", status: "Ready", url: URL.createObjectURL(file) };
+    const item = { file, title: defTitle, description: "", captions: "", tags: "", manualTags: false, orientation: "portrait", soundId: "", status: "Ready", url: URL.createObjectURL(file) };
+    if (isProfAutoTagsOn()) item.tags = profLocalQuickTags(defTitle, "");
     const probe = document.createElement("video");
     probe.preload = "metadata";
     probe.src = item.url;
@@ -221,6 +276,7 @@ $("upFile").onchange = e => {
       renderUpQueue();
     };
     upQueue.push(item);
+    if (isProfAutoTagsOn()) setTimeout(() => profGenerateTagsForItem(item, false), 50);
   });
   renderUpQueue();
 };
@@ -271,8 +327,10 @@ $("upSubmit").onclick = async () => {
         if (!chkR.ok || chkJ.error) throw new Error(chkJ.error?.message || "Blocked by safety filter.");
         setSt("Saving…");
         setStatusBar(`Saving post (${i + 1} of ${upQueue.length})…`, 100, "");
+        const description = (item.description || "").trim().slice(0, 300) || null;
+        const captions = (item.captions || "").trim().slice(0, 500) || null;
         let insRes = await sb.from("videos").insert({
-          user_id: user.id, title, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
+          user_id: user.id, title, description, captions, video_url: url, storage_path: storagePath, orientation: item.orientation, hashtags: tags
         }).select("id").single();
         if (insRes.error && /orientation/i.test(insRes.error.message)) {
           insRes = await sb.from("videos").insert({ user_id: user.id, title, video_url: url, storage_path: storagePath, hashtags: tags }).select("id").single();

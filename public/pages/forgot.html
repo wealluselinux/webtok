@@ -63,6 +63,7 @@ input:focus{outline:0;border-color:var(--primary)}
   </p>
 </main>
 
+<script src="/js/bot-guard.js" defer></script>
 <script src="/js/capri-pet.js"></script>
 <script>
 const $ = id => document.getElementById(id);
@@ -108,12 +109,25 @@ async function sendCode() {
   $("send-code").disabled = true; $("resend-code").disabled = true;
   say("h-email", "Sending verification code…");
   try {
-    const r = await fetch("/api/auth/forgot/send-code", {
+    const botPass = typeof window.wtGetBotPass === "function" ? window.wtGetBotPass() : "";
+    const headers = { "Content-Type": "application/json", ...(botPass ? { "x-wt-bot-pass": botPass } : {}) };
+    let r = await fetch("/api/auth/forgot/send-code", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ email: em })
     });
-    const j = await r.json().catch(() => ({}));
+    let j = await r.json().catch(() => ({}));
+    if (r.status === 429 && j?.bot_check_required && typeof window.wtRequireBotCheck === "function") {
+      const newPass = await window.wtRequireBotCheck(j.error?.message);
+      if (newPass) {
+        r = await fetch("/api/auth/forgot/send-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-wt-bot-pass": newPass },
+          body: JSON.stringify({ email: em })
+        });
+        j = await r.json().catch(() => ({}));
+      }
+    }
     if (!r.ok || j.error) throw new Error(j.error?.message || "Could not send code");
     email = em;
     showStep("s-reset", `Enter the code sent to ${email}`);

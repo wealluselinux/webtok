@@ -1,4 +1,4 @@
-/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, attached sounds, descriptions/captions, share */
+/* Video feed: loading, slides, M3 shaped buttons, left mute button, seek bar, attached sounds, share to Web Tok AI / friends / groups */
 function getFeedPrefs() { try { return JSON.parse(localStorage.getItem("wt_theme") || "{}"); } catch { return {}; } }
 let obs, muted = getFeedPrefs().vidStartUnmuted === true ? false : true;
 const AI_BOT_ID = "00000000-0000-0000-0000-000000000002";
@@ -13,7 +13,7 @@ async function listVideos() {
   if (!sb) return [];
   let { data: vids, error } = await sb
     .from("videos")
-    .select("id, user_id, title, description, captions, video_url, orientation, created_at")
+    .select("id, user_id, title, description, captions, video_url, orientation, hashtags, created_at")
     .order("created_at", { ascending: false });
   if (error) {
     const res = await sb

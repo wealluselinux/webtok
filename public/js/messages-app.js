@@ -198,7 +198,7 @@ async function openChat(f){
     const rid=dmRoomId(me,f.id);
     $("btnCall").onclick=()=>{if(callGroupId===rid)leaveCall();else joinCall(rid);};
     $("btnMicTest").onclick=()=>openMicTest();
-    if(callGroupId!==rid){
+    if(!callGroupId){
       try{callState=await api(`/api/groups/${encodeURIComponent(rid)}/call`);}catch{callState={participants:[],activity:"none",watch:{video:null,playing:false,time:0}};}
     }
     renderCallUI();
@@ -309,7 +309,7 @@ async function openGroupChat(g){
     };
   }
   $("btnInvMore").onclick=()=>openInviteMore(g);
-  if(callGroupId!==g.id){ try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{} }
+  if(!callGroupId){ try{const cs=await api(`/api/groups/${encodeURIComponent(g.id)}/call`);callState=cs;}catch{} }
   renderCallUI();
 
   const msgs=await api(`/api/groups/${encodeURIComponent(g.id)}/messages`);
@@ -530,7 +530,7 @@ async function loadGroupsAndInvites(){
     if(!w) return;
     if(w.startsWith("call=")){
       const gid=decodeURIComponent(w.slice(5));
-      if(gid.startsWith("dm:")){
+      if(gid.startsWith("dm_")){
         const f=friends.find(x=>dmRoomId(me,x.id)===gid);
         if(f && (!cur || curType!=="dm" || cur.id!==f.id)) await openChat(f);
       } else {

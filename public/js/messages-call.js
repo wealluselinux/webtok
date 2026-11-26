@@ -232,13 +232,23 @@ async function handleWs(m){
 }
 
 async function joinCall(gid){
+  if(callGroupId){
+    if(callGroupId===gid) return;
+    leaveCall();
+  }
   try{
     localStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
   }catch(err){
     await wtAlert({title:"Microphone needed",message:"Microphone access is needed for voice calls ("+(err?.message||"permission denied")+")."});
     return;
   }
-  await ensureWs();
+  try{
+    await ensureWs();
+  }catch(err){
+    if(localStream){localStream.getTracks().forEach(t=>t.stop());localStream=null;}
+    await wtAlert({title:"Connection failed",message:"Could not connect to the call server ("+(err?.message||"WebSocket error")+")."});
+    return;
+  }
   callGroupId=gid;
   callTitle=cur?(curType==="group"?cur.name:(cur.display_name||"@"+cur.username)):"Voice call";
   isMuted=false; camOn=false; screenOn=false; callFull=true;
