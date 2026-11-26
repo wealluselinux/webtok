@@ -1,9 +1,30 @@
-/* Tok Coins, Profile Frames, Card Decorations, Video Banners, Capri Bundle & Coin Transfers Shop API (Turso) */
+/* Tok Coins, Profile Frames, Card Decorations, Video Banners, Limited-Time Turkey Bundle & Coin Transfers Shop API (Turso) */
 const crypto = require("crypto");
 
 const LIKE_REWARD = 10;
 const COMMENT_REWARD = 15;
 const CUSTOM_PRICE = 130;
+
+const TURKEY_ART_SVG = "data:image/svg+xml;utf8," + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+    <g opacity="0.95">
+      <path d="M60 12 C48 28,44 46,60 58 C76 46,72 28,60 12Z" fill="#dc2626"/>
+      <path d="M36 20 C32 38,38 54,56 60 C62 42,50 28,36 20Z" fill="#ea580c"/>
+      <path d="M84 20 C70 28,58 42,64 60 C82 54,88 38,84 20Z" fill="#d97706"/>
+      <path d="M18 42 C24 58,38 66,54 64 C52 48,34 40,18 42Z" fill="#f59e0b"/>
+      <path d="M102 42 C86 40,68 48,66 64 C82 66,96 58,102 42Z" fill="#b45309"/>
+    </g>
+    <ellipse cx="60" cy="76" rx="22" ry="20" fill="#78350f"/>
+    <circle cx="60" cy="54" r="13" fill="#92400e"/>
+    <circle cx="55" cy="51" r="2.2" fill="#fff"/><circle cx="65" cy="51" r="2.2" fill="#fff"/>
+    <circle cx="55" cy="51" r="1.1" fill="#111"/><circle cx="65" cy="51" r="1.1" fill="#111"/>
+    <polygon points="56,56 64,56 60,62" fill="#fbbf24"/>
+    <path d="M61 58 C65 62,64 67,60 66 C58 64,59 60,61 58Z" fill="#ef4444"/>
+    <path d="M22 92 L28 84 L34 90 L30 98 Z" fill="#ea580c"/>
+    <path d="M88 90 L95 83 L100 92 L92 98 Z" fill="#dc2626"/>
+    <path d="M46 98 L52 91 L58 98 L52 105 Z" fill="#f59e0b"/>
+  </svg>`
+);
 
 const CATALOG = [
   { id: "av_neon_ring", slot: "avatar", name: "Neon Prism Frame", desc: "Glowing Material You gradient frame around your profile picture.", price: 60, style: "prism", color: "#d0bcff", icon: "auto_awesome" },
@@ -11,30 +32,32 @@ const CATALOG = [
   { id: "av_sakura_bloom", slot: "avatar", name: "Sakura Frame", desc: "Soft blossom frame with rosy petal glow.", price: 80, style: "sakura", color: "#ff9ed2", icon: "local_florist" },
   { id: "av_gold_crown", slot: "avatar", name: "Golden Crown Frame", desc: "Royal gold frame with a floating crown crest.", price: 90, style: "crown", color: "#ffca28", icon: "workspace_premium" },
   { id: "av_cyber_glitch", slot: "avatar", name: "Cyber Glitch Frame", desc: "Electric cyan & magenta cyber frame.", price: 110, style: "cyber", color: "#4dd0e1", icon: "bolt" },
-  { id: "av_capri_frame", slot: "avatar", name: "Capri Glitch Frame", desc: "Crimson-magenta & neon-green Capri frame with mini Capri sprite.", price: 80, style: "capri", color: "#ff1744", icon: "auto_awesome", sprite: "/images/capri_assets/grin.webp" },
+  { id: "av_turkey_leaves", slot: "avatar", name: "Turkey Leaves Frame", desc: "Thanksgiving picture frame with autumn fall leaves & turkey crest.", price: 115, style: "turkey", color: "#d97706", icon: "eco", sprite: TURKEY_ART_SVG },
 
   { id: "pr_aurora_glow", slot: "profile", name: "Aurora Card Glow", desc: "Iridescent aurora border and ambient glow on your profile card.", price: 70, style: "aurora", color: "#a8dab5", icon: "nights_stay" },
   { id: "pr_emerald_wave", slot: "profile", name: "Emerald Wave", desc: "Mint-emerald expressive trim and crest on your profile card.", price: 85, style: "emerald", color: "#66bb6a", icon: "waves" },
   { id: "pr_retro_arcade", slot: "profile", name: "Arcade Neon", desc: "Retro arcade neon outline and gamer badge on your profile.", price: 95, style: "arcade", color: "#f48fb1", icon: "sports_esports" },
   { id: "pr_vip_badge", slot: "profile", name: "Creator Crest", desc: "Bold Material You creator crest & gold accent border.", price: 100, style: "crest", color: "#ffd58a", icon: "verified" },
-  { id: "pr_capri_card", slot: "profile", name: "Capri Profile Card", desc: "Crimson & neon-green Capri glitch border with Capri crest.", price: 85, style: "capri", color: "#00e676", icon: "bolt", sprite: "/images/capri_assets/glitch.webp" },
+  { id: "pr_turkey_card", slot: "profile", name: "Fall Leaves Profile Frame", desc: "Thanksgiving profile frame lined with colorful fall leaves along the bottom.", price: 120, style: "turkey", color: "#b45309", icon: "eco", sprite: TURKEY_ART_SVG },
 
   { id: "bn_neon_spotlight", slot: "banner", name: "Spotlight Banner", desc: "Glowing Material You top banner on any video you choose.", price: 75, style: "spotlight", color: "#d0bcff", icon: "auto_awesome" },
   { id: "bn_gold_premiere", slot: "banner", name: "Gold Premiere Banner", desc: "Royal gold premiere ribbon banner for your featured video.", price: 95, style: "premiere", color: "#ffca28", icon: "workspace_premium" },
   { id: "bn_cyber_ticker", slot: "banner", name: "Cyber Neon Banner", desc: "Electric cyan & pink neon banner across the top of your video.", price: 105, style: "cyber", color: "#4dd0e1", icon: "bolt" },
-  { id: "bn_capri_banner", slot: "banner", name: "Capri Video Banner", desc: "Crimson-magenta & neon-green Capri banner for your video.", price: 85, style: "capri", color: "#ff1744", icon: "auto_awesome", sprite: "/images/capri_assets/idle.webp" }
+  { id: "bn_turkey_banner", slot: "banner", name: "Harvest Turkey Banner", desc: "Warm Thanksgiving autumn-leaf & turkey banner for your featured video.", price: 110, style: "turkey", color: "#d97706", icon: "eco", sprite: TURKEY_ART_SVG }
 ];
 
 const BUNDLES = [
   {
-    id: "capri_bundle",
-    name: "Capri Bundle",
-    desc: "Complete Capri set: Capri Glitch Frame, Capri Profile Card, and Capri Video Banner!",
-    price: 195,
-    color: "#ff1744",
-    accent: "#00e676",
-    preview: "/images/capri_assets/idle.webp",
-    items: ["av_capri_frame", "pr_capri_card", "bn_capri_banner"]
+    id: "turkey_bundle",
+    name: "Turkey Bundle",
+    desc: "Limited-time 3-day Thanksgiving set with fall leaves: Turkey Leaves Picture Frame, Fall Leaves Profile Frame (leaves along the bottom), and Harvest Turkey Video Banner!",
+    price: 300,
+    style: "turkey",
+    color: "#d97706",
+    accent: "#dc2626",
+    expiresAt: "2026-11-29T20:40:00Z",
+    preview: TURKEY_ART_SVG,
+    items: ["av_turkey_leaves", "pr_turkey_card", "bn_turkey_banner"]
   }
 ];
 
@@ -152,6 +175,8 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
       )
     ]);
     const eq = eqRows[0] || {};
+    const now = Date.now();
+    const activeBundles = BUNDLES.filter(b => !b.expiresAt || Date.parse(b.expiresAt) > now);
     return {
       data: {
         ...wallet,
@@ -159,7 +184,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
         commentReward: COMMENT_REWARD,
         customPrice: CUSTOM_PRICE,
         catalog: CATALOG,
-        bundles: BUNDLES,
+        bundles: activeBundles,
         owned,
         myVideos,
         videoBanners,
@@ -213,6 +238,9 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     const videoId = req.body?.videoId ? String(req.body.videoId).trim() : null;
     const bundle = BUNDLES.find(b => b.id === bundleId);
     if (!bundle) throw new HttpError(404, "Bundle not found");
+    if (bundle.expiresAt && Date.parse(bundle.expiresAt) <= Date.now()) {
+      throw new HttpError(410, "This limited-time bundle has expired.");
+    }
 
     const wallet = await getWallet(uid);
     const ownedRows = await run("SELECT item_id FROM user_shop_items WHERE user_id = ?", [uid]);

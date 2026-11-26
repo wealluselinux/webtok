@@ -28,8 +28,8 @@ body{overflow:auto;padding:24px 16px 96px}
 .s-desc{font-size:13px;color:var(--muted);line-height:1.4;flex:1}
 .s-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .s-vid-sel{width:100%;background:var(--surface);border:0;border-radius:999px;padding:9px 14px;color:var(--text);font:inherit;font-size:12px;outline:0}
-.bundle-card{background:linear-gradient(135deg,#2a0b16,#121a16);color:#fff;border-radius:var(--r-xl);padding:20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;border:2px solid #ff1744;box-shadow:0 10px 30px #ff174433}
-.bundle-art{width:92px;height:92px;clip-path:var(--m3-cookie-7);background:radial-gradient(circle,#ff174444,#00e67633);display:grid;place-items:center;flex:none}
+.bundle-card{background:linear-gradient(135deg,#3b1507,#1f1209);color:#fff;border-radius:var(--r-xl);padding:20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;border:2px solid #f59e0b;box-shadow:0 10px 30px #d9770633}
+.bundle-art{width:92px;height:92px;clip-path:var(--m3-cookie-7);background:radial-gradient(circle,#f59e0b44,#dc262633);display:grid;place-items:center;flex:none}
 .bundle-art img{height:80px;width:auto;object-fit:contain}
 .custom-box{background:var(--card);border-radius:var(--r-xl);padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 18px #0001}
 .c-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -56,7 +56,7 @@ body{overflow:auto;padding:24px 16px 96px}
     <span id="earnStats">Loading stats…</span>
   </div>
 
-  <div class="sec-h">Featured Bundle</div>
+  <div class="sec-h" id="bundleHead">Featured Bundle</div>
   <div id="bundleBox"></div>
 
   <div class="custom-box">
@@ -192,9 +192,9 @@ function bannerPreviewHtml(item) {
   const imgSrc = item.image_url || item.sprite;
   let bg = `linear-gradient(90deg, ${escapeHtml(item.color || "#d0bcff")}, var(--accent,#ffd8e4))`;
   let col = "#16121e", border = "none";
-  if (item.style === "capri") {
-    bg = "linear-gradient(90deg,#ff1744,#16121e,#00e676)";
-    col = "#fff"; border = "1px solid #ff1744";
+  if (item.style === "turkey") {
+    bg = "linear-gradient(90deg,#7c2d12,#b45309,#d97706,#991b1b)";
+    col = "#fff"; border = "1px solid #fbbf24";
   } else if (item.style === "cyber") {
     bg = "linear-gradient(90deg,#00e5ff,#ff4081)";
     col = "#fff";
@@ -203,6 +203,15 @@ function bannerPreviewHtml(item) {
     ? `<img src="${escapeHtml(imgSrc)}" alt=""><span>${escapeHtml(item.name)}</span>`
     : `<span class="ms fill" style="font-size:18px">${escapeHtml(item.icon || "auto_awesome")}</span><span>${escapeHtml(item.name)}</span>`;
   return `<div class="s-banner-prev" style="background:${bg};color:${col};border:${border}">${inner}</div>`;
+}
+
+function fmtBundleTimeLeft(iso) {
+  if (!iso) return "LIMITED TIME";
+  const ms = Date.parse(iso) - Date.now();
+  if (ms <= 0) return "ENDED";
+  const hrs = Math.floor(ms / 3600000);
+  const d = Math.floor(hrs / 24), h = hrs % 24;
+  return d > 0 ? `LIMITED · ${d}D ${h}H LEFT` : `LIMITED · ${Math.max(1, h)}H LEFT`;
 }
 
 function renderTransfers() {
@@ -220,8 +229,10 @@ function renderTransfers() {
 
 function renderBundles() {
   const box = $("bundleBox"); box.innerHTML = "";
+  const bundles = shopState.bundles || [];
+  $("bundleHead").classList.toggle("hidden", !bundles.length);
   const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
-  (shopState.bundles || []).forEach(b => {
+  bundles.forEach(b => {
     const allOwned = b.items.every(id => ownedIds.has(id));
     const el = document.createElement("div");
     el.className = "bundle-card";
@@ -230,19 +241,19 @@ function renderBundles() {
       <div style="flex:1;min-width:220px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
           <b style="font-size:20px">${escapeHtml(b.name)}</b>
-          <span style="background:#00e676;color:#0b1911;font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px">3-IN-1 BUNDLE</span>
+          <span style="background:#f59e0b;color:#271300;font-size:11px;font-weight:800;padding:3px 10px;border-radius:999px">${escapeHtml(fmtBundleTimeLeft(b.expiresAt))}</span>
         </div>
-        <div style="font-size:13px;opacity:.88;margin-bottom:10px">${escapeHtml(b.desc)}</div>
+        <div style="font-size:13px;opacity:.9;margin-bottom:10px">${escapeHtml(b.desc)}</div>
         <select class="s-vid-sel" id="bunVidSel" style="max-width:320px;margin-bottom:8px;background:#ffffff1a;color:#fff">${videoOptionsHtml()}</select>
       </div>
-      <button type="button" class="btn primary" style="background:#ff1744;color:#fff" ${allOwned ? "disabled" : ""}>${allOwned ? "Bundle Owned" : `Buy Bundle (${b.price} Coins)`}</button>`;
+      <button type="button" class="btn primary" style="background:#d97706;color:#fff" ${allOwned ? "disabled" : ""}>${allOwned ? "Bundle Owned" : `Buy Bundle (${b.price} Coins)`}</button>`;
     el.querySelector("button").onclick = async () => {
       try {
         const videoId = el.querySelector("#bunVidSel")?.value || null;
         await apiShop("/api/shop/buy-bundle", { method: "POST", body: JSON.stringify({ bundleId: b.id, videoId }) });
         await loadShop();
       } catch (e) {
-        if (window.wtAlert) await wtAlert({ title: "Capri Bundle", message: e.message });
+        if (window.wtAlert) await wtAlert({ title: b.name, message: e.message });
       }
     };
     box.appendChild(el);
