@@ -43,12 +43,17 @@ body{overflow:auto;padding:20px 16px 90px}
 .ai-row input{flex:1;min-width:200px;background:var(--bg);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
 #aiOut{font-size:13px;line-height:1.5;color:var(--text);background:var(--surface);padding:12px 14px;border-radius:18px;white-space:pre-wrap;max-height:180px;overflow-y:auto}
 .hidden{display:none!important}
-/* API Key section */
+/* API Key & MCP Config section (Admin / Owner only) */
 .apikey-box{background:var(--card);border-radius:var(--r-xl);padding:16px;display:flex;flex-direction:column;gap:12px}
 .apikey-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.apikey-field{flex:1;min-width:200px;background:var(--bg);border:0;border-radius:999px;padding:10px 16px;color:var(--text);font:13px/1 ui-monospace,monospace;outline:0;letter-spacing:.05em}
-#akStatus{font-size:13px;color:var(--muted);padding:4px 0}
-.ak-mcp{background:var(--surface);border-radius:16px;padding:12px 14px;font:12px/1.6 ui-monospace,monospace;color:var(--text);white-space:pre-wrap;overflow-x:auto}
+.apikey-field{flex:1;min-width:200px;background:var(--bg);border:0;border-radius:999px;padding:10px 16px;color:var(--text);font:13px/1 ui-monospace,monospace;outline:0;letter-spacing:.03em}
+#akStatus{font-size:13px;color:var(--muted);padding:2px 0}
+.ak-mcp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.ak-mcp-card{background:var(--surface);border-radius:18px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.ak-mcp{background:var(--bg);border-radius:12px;padding:10px 12px;font:12px/1.55 ui-monospace,monospace;color:var(--text);white-space:pre-wrap;overflow-x:auto;margin:0}
+.ak-list{display:flex;flex-direction:column;gap:6px}
+.ak-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);padding:8px 14px;border-radius:14px;font-size:13px;flex-wrap:wrap}
+.ak-item small{color:var(--muted);font-family:ui-monospace,monospace}
 </style>
 </head>
 <body data-page="games">
@@ -107,7 +112,7 @@ body{overflow:auto;padding:20px 16px 90px}
         <b>Live Game Preview</b>
         <span style="font-size:12px;color:var(--muted)">Arcade size (400×400+)</span>
       </div>
-      <iframe id="prevFrame" sandbox="allow-scripts"></iframe>
+      <iframe id="prevFrame" sandbox="allow-scripts allow-pointer-lock"></iframe>
     </div>
   </div>
 
@@ -121,23 +126,35 @@ body{overflow:auto;padding:20px 16px 90px}
     <div id="aiOut" class="hidden"></div>
   </div>
 
-  <!-- API Key section: only shown to admin/owner accounts -->
+  <!-- MCP & API Key section: only shown to admin/owner accounts -->
   <div class="apikey-box hidden" id="apikeySection">
-    <b style="display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">key</span>Web Tok API Key</b>
-    <p style="font-size:13px;color:var(--muted)">Generate a personal API key to use Web Tok from external tools and MCP configurations. Only admin and owner accounts can create API keys.</p>
-    <div id="akStatus">Loading…</div>
-    <div class="apikey-row" id="akKeyRow" style="display:none">
-      <input class="apikey-field" id="akKeyField" type="text" readonly placeholder="wt_…">
-      <button type="button" class="btn sm" id="btnAkCopy" title="Copy key"><span class="ms" style="font-size:16px">content_copy</span>Copy</button>
-      <button type="button" class="btn sm" id="btnAkRevoke" style="color:var(--error,#b3261e)"><span class="ms" style="font-size:16px">delete</span>Revoke</button>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap" id="akGenRow">
+    <b style="display:flex;align-items:center;gap:6px"><span class="ms" style="color:var(--primary)">key</span>Web Tok MCP &amp; API Key (Admin / Owner Only)</b>
+    <p style="font-size:13px;color:var(--muted)">Generate a personal API key to connect Web Tok's MCP server to Antigravity, Cursor, Claude Desktop, or any MCP client. Only Admin and Owner accounts can create API keys.</p>
+    <div id="akStatus">Checking permissions…</div>
+    <div class="apikey-row">
+      <input class="apikey-field" id="akNameInput" type="text" maxlength="50" placeholder="Key name (e.g. Antigravity, Cursor)" style="max-width:260px">
       <button type="button" class="btn primary sm" id="btnAkGenerate"><span class="ms" style="font-size:16px">add</span>Generate API Key</button>
     </div>
-    <div id="akMcpBlock" class="hidden">
-      <b style="font-size:13px">Antigravity MCP config snippet</b>
-      <div class="ak-mcp" id="akMcpSnippet"></div>
-      <button type="button" class="btn sm" id="btnAkCopyMcp"><span class="ms" style="font-size:16px">content_copy</span>Copy MCP Config</button>
+    <div class="apikey-row hidden" id="akKeyRow">
+      <input class="apikey-field" id="akKeyField" type="text" readonly placeholder="wt_mcp_…">
+      <button type="button" class="btn sm" id="btnAkCopy"><span class="ms" style="font-size:16px">content_copy</span>Copy Key</button>
+    </div>
+    <div class="ak-list" id="akList"></div>
+    <div id="akMcpBlock" class="ak-mcp-grid">
+      <div class="ak-mcp-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <b style="font-size:13px">mcp_config.json (Standard MCP)</b>
+          <button type="button" class="btn sm" id="btnAkCopyStd"><span class="ms" style="font-size:15px">content_copy</span>Copy</button>
+        </div>
+        <pre class="ak-mcp" id="akStdSnippet"></pre>
+      </div>
+      <div class="ak-mcp-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <b style="font-size:13px">Antigravity MCP Config</b>
+          <button type="button" class="btn sm" id="btnAkCopyAg"><span class="ms" style="font-size:15px">content_copy</span>Copy</button>
+        </div>
+        <pre class="ak-mcp" id="akAgSnippet"></pre>
+      </div>
     </div>
   </div>
 </main>

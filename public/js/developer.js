@@ -1,4 +1,4 @@
-/* Web Tok /developer Studio: Python, Scratch Blocks, HTML/JS + Update Section + AI Game Builder + API Keys */
+/* Web Tok /developer Studio: Python, Scratch Blocks, HTML/JS + Update Section + AI Game Builder + MCP API Keys */
 let curLang = "python", curGameId = null, myTok = null;
 
 const STARTERS = {
@@ -44,7 +44,7 @@ function buildPyDoc(py) {
     <div id="mycanvas" style="width:400px;height:360px;background:#1d192b;border-radius:16px"></div>
     <pre id="out" style="margin:6px 0 0;font-size:12px;color:#d0bcff;max-height:48px;overflow:auto"></pre>
     <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js"><\/script>
-    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulkt-stdlib.js"><\/script>
+    <script src="https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js"><\/script>
     <script>
       Sk.configure({output:t=>document.getElementById("out").textContent+=t,read:x=>{if(!Sk.builtinFiles?.files[x])throw "File not found: "+x;return Sk.builtinFiles.files[x]}});
       (Sk.TurtleGraphics||(Sk.TurtleGraphics={})).target="mycanvas";
@@ -222,104 +222,107 @@ $("btnAiBuild").onclick = () => askAi("build");
 $("btnPub").onclick = saveOrUpdateGame;
 $("btnUpdateGame").onclick = saveOrUpdateGame;
 
-/* ---- API Key management ---- */
-async function loadApiKey() {
-  const sec = $("apikeySection");
-  if (!myTok) return;
-  try {
-    const r = await fetch("/api/developer/apikey", { headers: { Authorization: "Bearer " + myTok } });
-    const j = await r.json();
-    if (r.status === 403) {
-      // Not admin/owner — keep section hidden
-      sec.classList.add("hidden");
-      return;
-    }
-    // Admin or owner: show the section
-    sec.classList.remove("hidden");
-    const keyRow = $("akKeyRow"), genRow = $("akGenRow"), status = $("akStatus"), mcpBlock = $("akMcpBlock");
-    if (j.data?.key) {
-      $("akKeyField").value = j.data.key;
-      status.textContent = `Active key — created ${new Date(j.data.created_at).toLocaleDateString()}`;
-      keyRow.style.display = "flex";
-      genRow.style.display = "none";
-      showMcpSnippet(j.data.key);
-    } else {
-      status.textContent = "No API key yet. Generate one below.";
-      keyRow.style.display = "none";
-      genRow.style.display = "flex";
-      mcpBlock.classList.add("hidden");
-    }
-  } catch (e) {
-    $("akStatus").textContent = "Could not load API key: " + e.message;
-  }
-}
-
-function showMcpSnippet(key) {
-  const mcpBlock = $("akMcpBlock");
-  const snippet = {
+/* ---- MCP & API Key management (Admin / Owner only) ---- */
+function updateMcpSnippets(keyVal) {
+  const k = keyVal || "YOUR_WT_MCP_API_KEY";
+  const mcpUrl = `${window.location.origin}/api/mcp`;
+  const stdCfg = {
     mcpServers: {
       webtok: {
-        command: "npx",
-        args: ["-y", "@webtok/mcp-server"],
-        env: {
-          WEBTOK_API_KEY: key,
-          WEBTOK_API_URL: window.location.origin
-        }
+        url: mcpUrl,
+        headers: { Authorization: `Bearer ${k}` }
       }
     }
   };
-  $("akMcpSnippet").textContent = JSON.stringify(snippet, null, 2);
-  mcpBlock.classList.remove("hidden");
+  const agCfg = {
+    mcpServers: {
+      "webtok-mcp": {
+        serverUrl: mcpUrl,
+        transport: "streamable-http",
+        headers: { Authorization: `Bearer ${k}` }
+      }
+    }
+  };
+  if ($("akStdSnippet")) $("akStdSnippet").textContent = JSON.stringify(stdCfg, null, 2);
+  if ($("akAgSnippet")) $("akAgSnippet").textContent = JSON.stringify(agCfg, null, 2);
+}
+
+async function copyMcpText(txt, btn) {
+  if (!txt || !btn) return;
+  try {
+    await navigator.clipboard.writeText(txt);
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="ms" style="font-size:15px">check</span>Copied!';
+    setTimeout(() => { btn.innerHTML = orig; }, 1600);
+  } catch {}
+}
+
+async function loadApiKeys(uid) {
+  const sec = $("apikeySection");
+  if (!sec || !myTok || !uid) return;
+  try {
+    const br = await fetch("/api/profiles/" + encodeURIComponent(uid) + "/badge");
+    const bj = await br.json().catch(() => ({}));
+    const role = bj?.data?.role || bj?.role;
+    if (role !== "admin" && role !== "owner") {
+      sec.classList.add("hidden");
+      return;
+    }
+    sec.classList.remove("hidden");
+    updateMcpSnippets($("akKeyField")?.value || "");
+
+    const r = await fetch("/api/mcp/keys", { headers: { Authorization: "Bearer " + myTok } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) throw new Error(j.error?.message || "Failed to load MCP keys");
+    const rows = Array.isArray(j.data) ? j.data : [];
+    $("akStatus").textContent = rows.length
+      ? `${rows.length} active MCP API key(s). Copy a newly generated key right away—for security, full keys are only shown once.`
+      : "No MCP API keys yet. Generate one below.";
+    const listEl = $("akList");
+    listEl.innerHTML = "";
+    rows.forEach(k => {
+      const row = document.createElement("div");
+      row.className = "ak-item";
+      const used = k.last_used_at ? ` · Last used ${new Date(k.last_used_at).toLocaleDateString()}` : "";
+      row.innerHTML = `<div><b>${escapeHtml(k.name)}</b> <small>${escapeHtml(k.prefix)}${escapeHtml(used)}</small></div>
+        <button type="button" class="btn sm" style="color:var(--bad,#b3261e)"><span class="ms" style="font-size:15px">delete</span>Revoke</button>`;
+      row.querySelector("button").onclick = async () => {
+        if (!(await wtConfirm({ title: "Revoke MCP Key?", message: `Revoke "${k.name}" (${k.prefix})?`, danger: true }))) return;
+        await fetch(`/api/mcp/keys/${encodeURIComponent(k.id)}`, { method: "DELETE", headers: { Authorization: "Bearer " + myTok } });
+        loadApiKeys(uid);
+      };
+      listEl.appendChild(row);
+    });
+  } catch (e) {
+    if ($("akStatus")) $("akStatus").textContent = "Could not load MCP keys: " + e.message;
+  }
 }
 
 if ($("btnAkGenerate")) $("btnAkGenerate").onclick = async () => {
-  if (!(await wtConfirm({ title: "Generate API Key", message: "This will create a new API key for your account. Continue?" }))) return;
   $("btnAkGenerate").disabled = true;
   try {
-    const r = await fetch("/api/developer/apikey", {
+    const name = ($("akNameInput")?.value || "").trim() || "My MCP Key";
+    const r = await fetch("/api/mcp/keys", {
       method: "POST",
-      headers: { Authorization: "Bearer " + myTok }
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + myTok },
+      body: JSON.stringify({ name })
     });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
     if (!r.ok || j.error) throw new Error(j.error?.message || "Failed to generate key");
-    await loadApiKey();
+    $("akKeyField").value = j.data.apiKey;
+    $("akKeyRow").classList.remove("hidden");
+    if ($("akNameInput")) $("akNameInput").value = "";
+    updateMcpSnippets(j.data.apiKey);
+    const { data } = await sb.auth.getSession();
+    await loadApiKeys(data?.session?.user?.id);
   } catch (e) {
     await wtAlert({ title: "Error", message: e.message });
   } finally { $("btnAkGenerate").disabled = false; }
 };
 
-if ($("btnAkRevoke")) $("btnAkRevoke").onclick = async () => {
-  if (!(await wtConfirm({ title: "Revoke API Key", message: "Are you sure? This will permanently delete your current API key.", danger: true }))) return;
-  try {
-    const r = await fetch("/api/developer/apikey", {
-      method: "DELETE",
-      headers: { Authorization: "Bearer " + myTok }
-    });
-    const j = await r.json();
-    if (!r.ok || j.error) throw new Error(j.error?.message || "Failed to revoke key");
-    await loadApiKey();
-  } catch (e) {
-    await wtAlert({ title: "Error", message: e.message });
-  }
-};
-
-if ($("btnAkCopy")) $("btnAkCopy").onclick = () => {
-  const v = $("akKeyField").value;
-  if (!v) return;
-  navigator.clipboard.writeText(v).then(() => {
-    $("btnAkCopy").textContent = "Copied!";
-    setTimeout(() => { $("btnAkCopy").innerHTML = '<span class="ms" style="font-size:16px">content_copy</span>Copy'; }, 1800);
-  });
-};
-
-if ($("btnAkCopyMcp")) $("btnAkCopyMcp").onclick = () => {
-  const v = $("akMcpSnippet").textContent;
-  if (!v) return;
-  navigator.clipboard.writeText(v).then(() => {
-    $("btnAkCopyMcp").textContent = "Copied!";
-    setTimeout(() => { $("btnAkCopyMcp").innerHTML = '<span class="ms" style="font-size:16px">content_copy</span>Copy MCP Config'; }, 1800);
-  });
-};
+if ($("btnAkCopy")) $("btnAkCopy").onclick = () => copyMcpText($("akKeyField")?.value, $("btnAkCopy"));
+if ($("btnAkCopyStd")) $("btnAkCopyStd").onclick = () => copyMcpText($("akStdSnippet")?.textContent, $("btnAkCopyStd"));
+if ($("btnAkCopyAg")) $("btnAkCopyAg").onclick = () => copyMcpText($("akAgSnippet")?.textContent, $("btnAkCopyAg"));
 
 (async () => {
   const { data } = await sb.auth.getSession();
@@ -329,5 +332,5 @@ if ($("btnAkCopyMcp")) $("btnAkCopyMcp").onclick = () => {
   syncEditingUi();
   runPreview();
   loadMyGames();
-  loadApiKey();
+  loadApiKeys(data.session.user.id);
 })();

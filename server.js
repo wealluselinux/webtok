@@ -24,7 +24,7 @@ const run = async (sql, args = []) => rowsOf(await db.execute({ sql, args }));
 /* ---------------- tables, and who may do what (replaces Supabase row-level security) ---------------- */
 const TABLES = {
   profiles:    { cols: ["id", "username", "display_name", "bio", "avatar_url", "theme", "created_at"], pk: ["id"], json: ["theme"] },
-  videos:      { cols: ["id", "user_id", "title", "video_url", "storage_path", "orientation", "created_at", "hashtags"], pk: ["id"], json: ["hashtags"] },
+  videos:      { cols: ["id", "user_id", "title", "description", "captions", "video_url", "storage_path", "orientation", "created_at", "hashtags"], pk: ["id"], json: ["hashtags"] },
   likes:       { cols: ["video_id", "user_id", "created_at"], pk: ["video_id", "user_id"] },
   comments:    { cols: ["id", "video_id", "user_id", "text", "parent_id", "created_at"], pk: ["id"] },
   follows:     { cols: ["follower_id", "following_id", "created_at"], pk: ["follower_id", "following_id"] },
@@ -45,6 +45,8 @@ const TEXT_ID = new Set(["videos", "comments"]);
 async function migrate() {
   const cols = (await db.execute("PRAGMA table_info(videos)")).rows.map(r => r[1]);
   if (!cols.includes("hashtags")) await db.execute("ALTER TABLE videos ADD COLUMN hashtags TEXT NOT NULL DEFAULT '[]'");
+  if (!cols.includes("description")) await db.execute("ALTER TABLE videos ADD COLUMN description TEXT");
+  if (!cols.includes("captions")) await db.execute("ALTER TABLE videos ADD COLUMN captions TEXT");
   const ccols = (await db.execute("PRAGMA table_info(comments)")).rows.map(r => r[1]);
   if (!ccols.includes("parent_id")) await db.execute("ALTER TABLE comments ADD COLUMN parent_id TEXT");
   await db.batch([
@@ -159,6 +161,8 @@ async function prepareRow(t, raw, uid, op) {
     row.video_url = `${R2_PUBLIC_URL}/videos/${row.storage_path}`;
     row.orientation = ["portrait", "landscape", "square"].includes(row.orientation) ? row.orientation : "portrait";
     row.hashtags = cleanTags(row.hashtags);
+    row.description = row.description != null ? String(row.description).trim().slice(0, 300) || null : null;
+    row.captions = row.captions != null ? String(row.captions).trim().slice(0, 500) || null : null;
   }
   if (t === "comments") {
     str(row.text, 1, 500, "comment");
@@ -397,12 +401,6 @@ app.post("/api/storage/remove", wrap(async req => {
   await removeFromR2(paths.filter(x => SAFE_PATH.test(String(x)) && x.startsWith(uid + "/")).slice(0, 50).map(x => `${bucket}/${x}`));
   return { data: true, error: null };
 }));
-
-app.get("/api/stickers", (_q, res) => {
-  fs.readdir(path.join(__dirname, "public", "stickers"), (err, files) => {
-    res.set("Cache-Control", "no-store").json(err ? [] : files.filter(f => /\.(png|gif|webp|jpe?g|svg|json)$/i.test(f)).sort());
-  });
-});
 
 const page = f => (_q, res) => res.sendFile(path.join(__dirname, "public", "pages", f));
 app.get(["/scroll", "/feed"], page("scroll.html"));
