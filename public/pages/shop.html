@@ -15,7 +15,7 @@ body{overflow:auto;padding:24px 16px 96px}
 .coin-pill{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:var(--primary);color:var(--on-primary);font-weight:700;font-size:15px;box-shadow:0 4px 16px #0002}
 .earn-bar{background:var(--card);border-radius:var(--r-xl);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .earn-bar b{color:var(--text)}
-.sec-h{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:4px}
+.sec-h{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-top:4px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .s-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
 .s-card{background:var(--card);border-radius:var(--r-xl);padding:18px;display:flex;flex-direction:column;gap:10px;box-shadow:0 4px 18px #0001}
 .s-prev{width:64px;height:64px;clip-path:var(--m3-cookie-7);background:var(--surface);display:grid;place-items:center;font-size:28px;position:relative;flex:none;overflow:hidden}
@@ -36,6 +36,7 @@ body{overflow:auto;padding:24px 16px 96px}
 .c-row input[type=text],.c-row input[type=number],.c-row select{flex:1;min-width:150px;background:var(--surface);border:0;border-radius:999px;padding:11px 16px;color:var(--text);font:inherit;outline:0}
 .xfer-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
 .xfer-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-radius:16px;background:var(--surface);font-size:12px}
+.s-empty{background:var(--card);border-radius:var(--r-xl);padding:18px;color:var(--muted);font-size:13px}
 .hidden{display:none!important}
 </style>
 </head>
@@ -109,6 +110,9 @@ body{overflow:auto;padding:24px 16px 96px}
 
   <div class="sec-h">Video Banners</div>
   <div class="s-grid" id="bannerGrid"></div>
+
+  <div class="sec-h" id="boughtHead"><span>Bought Skins</span><span id="boughtCount" style="font-size:12px"></span></div>
+  <div class="s-grid" id="boughtGrid"></div>
 </main>
 
 <script src="/config.js"></script>
@@ -195,6 +199,9 @@ function bannerPreviewHtml(item) {
   if (item.style === "turkey") {
     bg = "linear-gradient(90deg,#7c2d12,#b45309,#d97706,#991b1b)";
     col = "#fff"; border = "1px solid #fbbf24";
+  } else if (item.style === "capri") {
+    bg = "linear-gradient(90deg,#ff1744,#16121e,#00e676)";
+    col = "#fff"; border = "1px solid #ff1744";
   } else if (item.style === "cyber") {
     bg = "linear-gradient(90deg,#00e5ff,#ff4081)";
     col = "#fff";
@@ -260,70 +267,91 @@ function renderBundles() {
   });
 }
 
-function renderGrid(elId, items, slot) {
-  const box = $(elId); box.innerHTML = "";
-  const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
+function buildItemCard(item, slot, ownedIds, showSlotLabel = false) {
+  const id = item.item_id || item.id;
+  const owned = ownedIds.has(id);
   const eqId = shopState.equipped?.[slot];
+  const equipped = eqId === id;
+  const card = document.createElement("div");
+  card.className = "s-card";
+  const imgSrc = item.image_url || item.sprite;
+  const prevHtml = imgSrc
+    ? `<img src="${escapeHtml(imgSrc)}" alt="">`
+    : `<span class="ms fill" style="font-size:28px;color:${escapeHtml(item.color || "var(--primary)")}">${escapeHtml(item.icon || "auto_awesome")}</span>`;
 
-  items.forEach(item => {
-    const id = item.item_id || item.id;
-    const owned = ownedIds.has(id);
-    const equipped = eqId === id;
-    const card = document.createElement("div");
-    card.className = "s-card";
-    const imgSrc = item.image_url || item.sprite;
-    const prevHtml = imgSrc
-      ? `<img src="${escapeHtml(imgSrc)}" alt="">`
-      : `<span class="ms fill" style="font-size:28px;color:${escapeHtml(item.color || "var(--primary)")}">${escapeHtml(item.icon || "auto_awesome")}</span>`;
+  const appliedVid = slot === "banner" ? (shopState.videoBanners || []).find(b => b.item_id === id)?.video_id || "" : "";
+  const vidSelectHtml = slot === "banner" ? `${bannerPreviewHtml(item)}<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>` : "";
+  const slotName = slot === "avatar" ? "Profile Frame" : slot === "profile" ? "Profile Card" : "Video Banner";
+  const subLabel = owned
+    ? (item.is_custom ? "Custom · Owned" : item.retired ? "Limited (Retired) · Owned" : item.limited ? "Limited · Owned" : "Owned")
+    : `${item.price} Tok Coins`;
 
-    const appliedVid = slot === "banner" ? (shopState.videoBanners || []).find(b => b.item_id === id)?.video_id || "" : "";
-    const vidSelectHtml = slot === "banner" ? `${bannerPreviewHtml(item)}<select class="s-vid-sel">${videoOptionsHtml(appliedVid)}</select>` : "";
-
-    card.innerHTML = `
-      <div class="s-top">
-        <div class="s-prev" style="box-shadow:0 0 0 3px ${escapeHtml(item.color || "var(--primary)")}">${prevHtml}</div>
-        <div class="s-meta"><b>${escapeHtml(item.name)}</b><small>${owned ? (item.is_custom ? "Custom · Owned" : "Owned") : `${item.price} Tok Coins`}</small></div>
+  card.innerHTML = `
+    <div class="s-top">
+      <div class="s-prev" style="box-shadow:0 0 0 3px ${escapeHtml(item.color || "var(--primary)")}">${prevHtml}</div>
+      <div class="s-meta"><b>${escapeHtml(item.name)}</b><small>${showSlotLabel ? `${slotName} · ` : ""}${subLabel}</small></div>
+    </div>
+    <div class="s-desc">${escapeHtml(item.desc || (item.is_custom ? "Your custom-made decoration." : ""))}</div>
+    ${vidSelectHtml}
+    <div class="s-foot">
+      <span style="font-size:12px;color:var(--muted)">${slot === "banner" ? (appliedVid ? "Applied to video" : "Pick video") : (equipped ? "Currently equipped" : "")}</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        ${slot === "banner" && appliedVid ? `<button type="button" class="btn sm" data-act="remove">Remove</button>` : ""}
+        <button type="button" class="btn ${(slot !== "banner" && equipped) ? "" : "primary"} sm" data-act="main">${slot === "banner" ? (owned ? "Apply Banner" : `Buy (${item.price})`) : (equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`)}</button>
       </div>
-      <div class="s-desc">${escapeHtml(item.desc || (item.is_custom ? "Your custom-made decoration." : ""))}</div>
-      ${vidSelectHtml}
-      <div class="s-foot">
-        <span style="font-size:12px;color:var(--muted)">${slot === "banner" ? (appliedVid ? "Applied to video" : "Pick video") : (equipped ? "Currently equipped" : "")}</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          ${slot === "banner" && appliedVid ? `<button type="button" class="btn sm" data-act="remove">Remove</button>` : ""}
-          <button type="button" class="btn ${(slot !== "banner" && equipped) ? "" : "primary"} sm" data-act="main">${slot === "banner" ? (owned ? "Apply Banner" : `Buy (${item.price})`) : (equipped ? "Unequip" : owned ? "Equip" : `Buy (${item.price})`)}</button>
-        </div>
-      </div>`;
+    </div>`;
 
-    const rmBtn = card.querySelector('[data-act="remove"]');
-    if (rmBtn) {
-      rmBtn.onclick = async () => {
-        try {
-          await apiShop("/api/shop/equip-banner", { method: "POST", body: JSON.stringify({ videoId: appliedVid, itemId: null }) });
-          await loadShop();
-        } catch (e) {
-          if (window.wtAlert) await wtAlert({ title: "Shop", message: e.message });
-        }
-      };
-    }
-
-    card.querySelector('[data-act="main"]').onclick = async () => {
+  const rmBtn = card.querySelector('[data-act="remove"]');
+  if (rmBtn) {
+    rmBtn.onclick = async () => {
       try {
-        if (slot === "banner") {
-          const videoId = card.querySelector(".s-vid-sel")?.value || "";
-          if (!videoId) throw new Error("Upload a video first to apply a banner!");
-          if (owned) await apiShop("/api/shop/equip-banner", { method: "POST", body: JSON.stringify({ videoId, itemId: id }) });
-          else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id, videoId }) });
-        } else {
-          if (equipped) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: null }) });
-          else if (owned) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: id }) });
-          else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id }) });
-        }
+        await apiShop("/api/shop/equip-banner", { method: "POST", body: JSON.stringify({ videoId: appliedVid, itemId: null }) });
         await loadShop();
       } catch (e) {
         if (window.wtAlert) await wtAlert({ title: "Shop", message: e.message });
       }
     };
-    box.appendChild(card);
+  }
+
+  card.querySelector('[data-act="main"]').onclick = async () => {
+    try {
+      if (slot === "banner") {
+        const videoId = card.querySelector(".s-vid-sel")?.value || "";
+        if (!videoId) throw new Error("Upload a video first to apply a banner!");
+        if (owned) await apiShop("/api/shop/equip-banner", { method: "POST", body: JSON.stringify({ videoId, itemId: id }) });
+        else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id, videoId }) });
+      } else {
+        if (equipped) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: null }) });
+        else if (owned) await apiShop("/api/shop/equip", { method: "POST", body: JSON.stringify({ slot, itemId: id }) });
+        else await apiShop("/api/shop/buy", { method: "POST", body: JSON.stringify({ itemId: id }) });
+      }
+      await loadShop();
+    } catch (e) {
+      if (window.wtAlert) await wtAlert({ title: "Shop", message: e.message });
+    }
+  };
+  return card;
+}
+
+function renderGrid(elId, items, slot) {
+  const box = $(elId); box.innerHTML = "";
+  const ownedIds = new Set((shopState.owned || []).map(x => x.item_id));
+  items.forEach(item => box.appendChild(buildItemCard(item, slot, ownedIds, false)));
+}
+
+function renderBoughtSkins() {
+  const box = $("boughtGrid");
+  const owned = shopState.owned || [];
+  $("boughtCount").textContent = owned.length ? `${owned.length} owned` : "";
+  box.innerHTML = "";
+  if (!owned.length) {
+    box.innerHTML = `<div class="s-empty" style="grid-column:1/-1">No bought skins yet. Buy a bundle or decoration above—including limited-time sets—to keep and equip it here anytime!</div>`;
+    return;
+  }
+  const ownedIds = new Set(owned.map(x => x.item_id));
+  owned.forEach(item => {
+    const slot = item.slot || "avatar";
+    box.appendChild(buildItemCard(item, slot, ownedIds, true));
   });
 }
 
@@ -340,6 +368,7 @@ async function loadShop() {
   renderGrid("avatarGrid", [...customAv, ...shopState.catalog.filter(x => x.slot === "avatar")], "avatar");
   renderGrid("profileGrid", [...customPr, ...shopState.catalog.filter(x => x.slot === "profile")], "profile");
   renderGrid("bannerGrid", [...customBn, ...shopState.catalog.filter(x => x.slot === "banner")], "banner");
+  renderBoughtSkins();
 }
 
 $("xferBtn").onclick = async () => {

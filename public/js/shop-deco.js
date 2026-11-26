@@ -1,4 +1,4 @@
-/* Sidebar More-menu links (role-gated Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Profile/Turkey Frames renderer */
+/* Sidebar More-menu links (role-gated Admin panel + Tok Coins Shop), Admin Tok Coins grant UI, Profile Balance Chip & Capri/Turkey/Profile Frames renderer */
 (function () {
   if (window.wtShopDecoInit) return;
   window.wtShopDecoInit = true;
@@ -168,6 +168,8 @@
       ring.className = "wt-pfp-ring";
       ring.style.background = av.style === "turkey"
         ? "conic-gradient(#d97706,#dc2626,#f59e0b,#78350f,#ea580c,#d97706)"
+        : av.style === "capri"
+        ? "conic-gradient(#ff1744,#00e676,#0b0a10,#ff1744,#00e676,#ff1744)"
         : av.style === "prism"
         ? "conic-gradient(#d0bcff,#ff9ed2,#ffd58a,#a8dab5,#8ab4f8,#d0bcff)"
         : av.style === "cyber"
@@ -185,7 +187,7 @@
         const sp = document.createElement("img");
         sp.className = "wt-pfp-sprite";
         sp.src = av.sprite;
-        sp.alt = av.name || "Turkey Leaves";
+        sp.alt = av.name || "Decoration";
         wrap.appendChild(sp);
       } else {
         const bd = document.createElement("div");
@@ -219,6 +221,8 @@
           <path d="M376 30 C382 15,392 16,396 29 C388 32,382 32,376 30Z" fill="#f59e0b"/>
         </svg>`;
         card.appendChild(leavesBar);
+      } else if (pr.style === "capri") {
+        card.style.boxShadow = "0 0 0 3px #ff1744, 0 0 28px #00e67644";
       } else {
         card.style.boxShadow = `0 0 0 3px ${pr.color || "var(--primary)"}, 0 10px 30px #0003`;
       }
@@ -233,8 +237,12 @@
         if (names) {
           const tag = document.createElement("span");
           tag.className = "wt-card-deco-tag";
-          tag.style.background = pr.style === "turkey" ? "linear-gradient(135deg,#b45309,#dc2626)" : (pr.color || "var(--primary)");
-          tag.style.color = pr.style === "turkey" ? "#fff" : "#16121e";
+          tag.style.background = pr.style === "turkey"
+            ? "linear-gradient(135deg,#b45309,#dc2626)"
+            : pr.style === "capri"
+            ? "linear-gradient(135deg,#ff1744,#00e676)"
+            : (pr.color || "var(--primary)");
+          tag.style.color = (pr.style === "turkey" || pr.style === "capri") ? "#fff" : "#16121e";
           tag.innerHTML = pr.sprite
             ? `<img src="${pr.sprite}" alt="" style="height:18px;width:auto"> ${pr.name}`
             : `<span class="ms fill" style="font-size:14px">${pr.icon || "auto_awesome"}</span>${pr.name}`;

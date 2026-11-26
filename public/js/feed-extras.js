@@ -61,6 +61,7 @@
     }, 220);
   };
 
+  // Enhance feed slides: Profile picture above Like/Comment, Sound label under Share, Video Banners
   let soundsCache = null;
   async function getSounds() {
     if (soundsCache) return soundsCache;
@@ -142,6 +143,10 @@
           el.style.background = "linear-gradient(90deg,#7c2d12,#b45309,#d97706,#991b1b)";
           el.style.color = "#fff";
           el.style.border = "1px solid #fbbf24";
+        } else if (bn.style === "capri") {
+          el.style.background = "linear-gradient(90deg,#ff1744,#16121e,#00e676)";
+          el.style.color = "#fff";
+          el.style.border = "1px solid #ff1744";
         } else if (bn.style === "cyber") {
           el.style.background = "linear-gradient(90deg,#00e5ff,#ff4081)";
           el.style.color = "#fff";
