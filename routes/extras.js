@@ -2255,7 +2255,13 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
             await app.locals.sendMail({
               to: t.contact_email,
               subject: `Re: ${t.subject} — Web Tok Support`,
-              text: `Web Tok Support replied to your ticket "${t.subject}":\n\n${body}\n\nStatus: ${status}\n\n— The Web Tok Team`,
+              text: `Web Tok Support replied to your ticket "${t.subject}":
+
+${body}
+
+Status: ${status}
+
+— The Web Tok Team`,
               html
             }).then(() => { emailed = true; }).catch(e => console.warn("MCP ticket email error:", e.message));
           }
@@ -2278,6 +2284,126 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     }
   });
 
+  const TT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+  function extractCookieHeader(res) {
+    try {
+      const list = typeof res.headers.getSetCookie === "function"
+        ? res.headers.getSetCookie()
+        : (res.headers.get("set-cookie") ? [res.headers.get("set-cookie")] : []);
+      return list.map(c => String(c).split(";")[0].trim()).filter(Boolean).join("; ");
+    } catch { return ""; }
+  }
+  async function fetchTikTokViaDirect(targetUrl) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
+    try {
+      const r = await fetch(targetUrl, {
+        signal: ac.signal,
+        redirect: "follow",
+        headers: {
+          "User-Agent": TT_UA,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9"
+        }
+      });
+      if (!r.ok) return null;
+      const cookie = extractCookieHeader(r);
+      const html = await r.text();
+      const m = /<script[^>]+id=["']__UNIVERSAL_DATA_FOR_REHYDRATION__["'][^>]*>([\s\S]*?)<\/script>/i.exec(html);
+      if (!m) return null;
+      const parsedJson = JSON.parse(m[1]);
+      const item = parsedJson?.__DEFAULT_SCOPE__?.["webapp.video-detail"]?.itemInfo?.itemStruct;
+      if (!item || !item.video) return null;
+      const playUrl = String(
+        item.video.playAddr
+        || item.video.downloadAddr
+        || item.video.bitrateInfo?.[0]?.PlayAddr?.UrlList?.[0]
+        || ""
+      ).trim();
+      if (!/^https?:\/\//i.test(playUrl)) return null;
+      return {
+        playUrl,
+        rawCaption: String(item.desc || "").trim(),
+        authorName: String(item.author?.nickname || "").trim(),
+        authorId: String(item.author?.uniqueId || "").trim(),
+        headers: {
+          "User-Agent": TT_UA,
+          "Referer": "https://www.tiktok.com/",
+          ...(cookie ? { "Cookie": cookie } : {})
+        }
+      };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function fetchTikTokViaTikwm(targetUrl, usePost) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
+    try {
+      const opts = usePost
+        ? {
+            method: "POST",
+            signal: ac.signal,
+            headers: {
+              "User-Agent": TT_UA,
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Referer": "https://www.tikwm.com/",
+              "Origin": "https://www.tikwm.com"
+            },
+            body: `url=${encodeURIComponent(targetUrl)}&hd=1`
+          }
+        : {
+            signal: ac.signal,
+            headers: { "User-Agent": TT_UA, "Referer": "https://www.tikwm.com/" }
+          };
+      const endpoint = usePost ? "https://www.tikwm.com/api/" : `https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`;
+      const r = await fetch(endpoint, opts);
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || j.code !== 0 || !j.data) return null;
+      let playUrl = String(j.data.hdplay || j.data.play || j.data.wmplay || "").trim();
+      if (playUrl.startsWith("/")) playUrl = `https://www.tikwm.com${playUrl}`;
+      if (!/^https?:\/\//i.test(playUrl)) return null;
+      return {
+        playUrl,
+        rawCaption: String(j.data.title || "").trim(),
+        authorName: String(j.data.author?.nickname || "").trim(),
+        authorId: String(j.data.author?.unique_id || "").trim(),
+        headers: { "User-Agent": TT_UA, "Referer": "https://www.tikwm.com/" }
+      };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function fetchTikTokViaTiklydown(targetUrl) {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
+    try {
+      const r = await fetch(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(targetUrl)}`, {
+        signal: ac.signal,
+        headers: { "User-Agent": TT_UA }
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || !j.video) return null;
+      const playUrl = String(j.video.noWatermark || j.video.watermark || "").trim();
+      if (!/^https?:\/\//i.test(playUrl)) return null;
+      return {
+        playUrl,
+        rawCaption: String(j.title || "").trim(),
+        authorName: String(j.author?.name || "").trim(),
+        authorId: String(j.author?.unique_id || "").trim(),
+        headers: { "User-Agent": TT_UA }
+      };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   const tiktokImportCache = new Map();
   app.post("/api/videos/import-tiktok", limit(20, 600000), wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
@@ -2287,40 +2413,33 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     if (!["http:", "https:"].includes(parsed.protocol) || !/(^|\.)tiktok\.com$/i.test(parsed.hostname)) {
       throw new HttpError(400, "Please enter a valid tiktok.com link.");
     }
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 15000);
-    let data;
-    try {
-      const r = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(parsed.href)}`, {
-        signal: ac.signal,
-        headers: { "User-Agent": "WebTok/1.0" }
-      });
-      const j = await r.json().catch(() => null);
-      if (!r.ok || !j || j.code !== 0 || !j.data || (!j.data.play && !j.data.hdplay)) {
-        throw new HttpError(400, j?.msg || "Could not fetch that TikTok video. Make sure it is public.");
-      }
-      data = j.data;
-    } catch (e) {
-      if (e instanceof HttpError) throw e;
-      throw new HttpError(502, "Failed to reach TikTok importer. Try again in a moment.");
-    } finally {
-      clearTimeout(timer);
+    const cleanUrl = `${parsed.origin}${parsed.pathname}`;
+    const result = (await fetchTikTokViaDirect(cleanUrl))
+      || (await fetchTikTokViaTikwm(cleanUrl, true))
+      || (await fetchTikTokViaTikwm(cleanUrl, false))
+      || (await fetchTikTokViaTiklydown(cleanUrl));
+
+    if (!result || !result.playUrl) {
+      throw new HttpError(400, "Could not fetch that TikTok video. It may be private, region-locked, or temporarily blocked.");
     }
-    const playUrl = String(data.play || data.hdplay || "");
-    if (!playUrl.startsWith("https://")) throw new HttpError(400, "Invalid video stream URL.");
-    const rawCaption = String(data.title || "").trim();
+    const rawCaption = result.rawCaption || "";
     const hashtags = [...new Set((rawCaption.match(/#[a-zA-Z0-9_]{1,30}/g) || []).map(t => t.toLowerCase()))].slice(0, 5);
     const cleanTitle = rawCaption.replace(/#[a-zA-Z0-9_]+/g, "").replace(/\s+/g, " ").trim().slice(0, 100)
-      || (data.author?.nickname ? `${data.author.nickname} TikTok` : "TikTok Video");
+      || (result.authorName ? `${result.authorName} TikTok` : "TikTok Video");
     const description = rawCaption.slice(0, 300);
     const now = Date.now();
     for (const [k, v] of tiktokImportCache.entries()) {
       if (v.expiresAt <= now) tiktokImportCache.delete(k);
     }
     const importId = crypto.randomUUID();
-    tiktokImportCache.set(importId, { playUrl, uid, expiresAt: now + 5 * 60 * 1000 });
+    tiktokImportCache.set(importId, {
+      playUrl: result.playUrl,
+      headers: result.headers || { "User-Agent": TT_UA },
+      uid,
+      expiresAt: now + 5 * 60 * 1000
+    });
     return {
-      data: { importId, title: cleanTitle, description, hashtags, author: data.author?.unique_id || "" },
+      data: { importId, title: cleanTitle, description, hashtags, author: result.authorId || "" },
       error: null
     };
   }));
@@ -2332,16 +2451,20 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       if (!entry || entry.uid !== uid || entry.expiresAt <= Date.now()) {
         return res.status(404).json({ error: { message: "Import expired. Paste the TikTok link again." } });
       }
-      tiktokImportCache.delete(req.params.id);
       const ac = new AbortController();
       const timer = setTimeout(() => ac.abort(), 60000);
       try {
-        const vr = await fetch(entry.playUrl, { signal: ac.signal, headers: { "User-Agent": "WebTok/1.0" } });
-        if (!vr.ok) return res.status(502).json({ error: { message: "Could not download TikTok video." } });
+        const vr = await fetch(entry.playUrl, {
+          signal: ac.signal,
+          redirect: "follow",
+          headers: entry.headers || { "User-Agent": TT_UA }
+        });
+        if (!vr.ok) return res.status(502).json({ error: { message: `Could not download TikTok video (${vr.status}).` } });
         const len = Number(vr.headers.get("content-length") || 0);
         if (len > 100 * 1024 * 1024) return res.status(413).json({ error: { message: "TikTok video exceeds 100 MB limit." } });
         const buf = Buffer.from(await vr.arrayBuffer());
         if (buf.length > 100 * 1024 * 1024) return res.status(413).json({ error: { message: "TikTok video exceeds 100 MB limit." } });
+        tiktokImportCache.delete(req.params.id);
         res.setHeader("Content-Type", vr.headers.get("content-type") || "video/mp4");
         res.setHeader("Cache-Control", "no-store");
         res.send(buf);
