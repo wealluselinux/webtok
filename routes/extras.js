@@ -381,6 +381,14 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
         const chk = await app.locals.checkMediaSafety({ text });
         if (!chk.safe) return deny(res, 403, `Upload blocked by safety filter: ${chk.reason}`);
       }
+      if (req.method === "POST" && req.path === "/db" && body.table === "comments" && body.op === "insert" && body.data?.text && app.locals.checkTextSafety) {
+        const chk = await app.locals.checkTextSafety(body.data.text, "Comment");
+        if (!chk.safe) return deny(res, 403, `Comment blocked by safety filter: ${chk.reason}`);
+      }
+      if (req.method === "POST" && req.path === "/db" && body.table === "messages" && body.op === "insert" && body.data?.body && app.locals.checkTextSafety) {
+        const chk = await app.locals.checkTextSafety(body.data.body, "Message");
+        if (!chk.safe) return deny(res, 403, `Message blocked by safety filter: ${chk.reason}`);
+      }
       if (req.method === "POST" && req.path === "/db" && body.table === "messages" && body.op === "insert" && body.data?.recipient_id && body.data?.body) {
         const senderUid = tok.sub;
         const recUid = String(body.data.recipient_id);
@@ -1453,6 +1461,10 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     await requireMember(gid, uid);
     const body = String(req.body?.body || "").trim();
     if (!body || body.length > 1000) throw new HttpError(400, "Message must be 1 to 1000 characters.");
+    if (app.locals.checkTextSafety) {
+      const chk = await app.locals.checkTextSafety(body, "Message");
+      if (!chk.safe) throw new HttpError(403, `Message blocked by safety filter: ${chk.reason}`);
+    }
     const ts = nowIso();
     const rs = await db.execute({ sql: "INSERT INTO group_messages (group_id, sender_id, body, created_at) VALUES (?,?,?,?)", args: [gid, uid, body, ts] });
     const msgId = Number(rs.lastInsertRowid);

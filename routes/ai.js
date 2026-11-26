@@ -292,6 +292,35 @@ module.exports = function mountAI({ app, db, run, wrap, uidFrom, HttpError, nowI
   }
   app.locals.checkMediaSafety = checkMediaSafety;
 
+  async function checkTextSafety(text, kind = "message") {
+    const key = checkerKey() || aiKey();
+    if (!key) return { safe: true };
+    let clean = String(text || "").trim();
+    if (!clean) return { safe: true };
+    if (/^\[sticker:[^\]]+\]$/i.test(clean) || /^\[sticker_url:[^\]]+\]$/i.test(clean)) {
+      return { safe: true };
+    }
+    clean = clean.replace(/^\[video_share:[^|\]]+\|[^\]]*\]\s*/i, "").trim();
+    if (!clean) return { safe: true };
+    const sys = "You are a silent content safety classifier for a social app's comments and messages. Reply ONLY with 'SAFE' or 'UNSAFE: <short reason>'. Mark UNSAFE if the text contains hate speech, slurs, harassment/bullying, threats of violence, self-harm encouragement, doxxing, explicit sexual content/solicitation, CSAM/sexualized minors, or extreme gore. Normal casual conversation, slang, mild frustration, and friendly banter are SAFE.";
+    try {
+      const reply = await callNim(
+        key,
+        CHAT_MODELS,
+        [{ role: "system", content: sys }, { role: "user", content: `${kind}: ${clean.slice(0, 1000)}` }],
+        80
+      );
+      if (/^\s*UNSAFE\b/i.test(reply)) {
+        return { safe: false, reason: reply.replace(/^\s*UNSAFE\s*:?\s*/i, "").trim() || "Violates community safety guidelines." };
+      }
+      return { safe: true };
+    } catch (e) {
+      console.warn("Text safety check error:", e.message);
+      return { safe: true };
+    }
+  }
+  app.locals.checkTextSafety = checkTextSafety;
+
   app.post("/api/ai/check-media", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     const title = String(req.body?.title || "").slice(0, 200);
