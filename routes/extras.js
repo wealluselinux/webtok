@@ -395,6 +395,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     } catch (e) { next(e); }
   });
 
+
   app.use("/api/auth/login", async (req, res, next) => {
     try {
       if (req.method !== "POST") return next();
@@ -1181,82 +1182,84 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       ws.on("message", raw => {
         msgChain = msgChain.then(async () => {
           const prof = await profPromise;
-          touchPresence(uid);
-          let msg; try { msg = JSON.parse(String(raw)); } catch { return; }
-          const type = msg.type;
-          if (type === "join-call") {
-            const gid = String(msg.groupId || "");
-            try { await requireCallRoomAccess(gid, uid); } catch (e) { sendWs(ws, { type: "error", message: e.message || "Access denied" }); return; }
-            if (currentGroup && currentGroup !== gid) {
-              removeUserFromRoom(currentGroup, uid);
-            }
-            currentGroup = gid;
-            const r = getRoom(gid);
-            if (r.peers.has(uid)) r.peers.delete(uid);
-            const existing = [...r.peers.keys()].filter(k => k !== uid);
-            r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
-            sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
-            broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
-            if (existing.length === 0) {
-              const caller = { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url };
-              if (gid.startsWith("dm:")) {
-                const parts = gid.slice(3).split(":");
-                const other = parts[0] === uid ? parts[1] : parts[0];
-                const socks = userSockets.get(other);
+        touchPresence(uid);
+        let msg; try { msg = JSON.parse(String(raw)); } catch { return; }
+        const type = msg.type;
+        if (type === "join-call") {
+          const gid = String(msg.groupId || "");
+          try { await requireCallRoomAccess(gid, uid); } catch (e) { sendWs(ws, { type: "error", message: e.message || "Access denied" }); return; }
+          if (currentGroup && currentGroup !== gid) {
+            removeUserFromRoom(currentGroup, uid);
+          }
+          currentGroup = gid;
+          const r = getRoom(gid);
+          // Replace any stale socket for same user
+          if (r.peers.has(uid)) r.peers.delete(uid);
+          const existing = [...r.peers.keys()].filter(k => k !== uid);
+          r.peers.set(uid, { ws, uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url, muted: false });
+          sendWs(ws, { type: "joined", groupId: gid, existingPeers: existing, ...roomSnapshot(gid), strokes: r.strokes });
+          broadcastRoom(gid, { type: "call-state", ...roomSnapshot(gid) });
+          // Ring the other DM friend or all online group members when starting a call
+          if (existing.length === 0) {
+            const caller = { id: uid, username: prof.username, display_name: prof.display_name, avatar_url: prof.avatar_url };
+            if (gid.startsWith("dm:")) {
+              const parts = gid.slice(3).split(":");
+              const other = parts[0] === uid ? parts[1] : parts[0];
+              const socks = userSockets.get(other);
+              if (socks) {
+                for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: caller });
+              }
+            } else {
+              const grp = (await run("SELECT name FROM group_chats WHERE id = ?", [gid]))[0];
+              const members = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [gid, uid]);
+              for (const m of members) {
+                const socks = userSockets.get(m.user_id);
                 if (socks) {
-                  for (const sws of socks) sendWs(sws, { type: "dm-call-ring", groupId: gid, from: caller });
-                }
-              } else {
-                const grp = (await run("SELECT name FROM group_chats WHERE id = ?", [gid]))[0];
-                const members = await run("SELECT user_id FROM group_members WHERE group_id = ? AND status = 'accepted' AND user_id != ?", [gid, uid]);
-                for (const m of members) {
-                  const socks = userSockets.get(m.user_id);
-                  if (socks) {
-                    for (const sws of socks) sendWs(sws, { type: "group-call-ring", groupId: gid, groupName: grp?.name || "Group", from: caller });
-                  }
+                  for (const sws of socks) sendWs(sws, { type: "group-call-ring", groupId: gid, groupName: grp?.name || "Group", from: caller });
                 }
               }
             }
-            return;
           }
-          if (!currentGroup) return;
-          const r = rooms.get(currentGroup); if (!r || !r.peers.has(uid)) return;
+          return;
+        }
+        if (!currentGroup) return;
+        const r = rooms.get(currentGroup); if (!r || !r.peers.has(uid)) return;
 
-          if (type === "leave-call") {
-            removeUserFromRoom(currentGroup, uid);
-            currentGroup = null;
-          } else if (type === "mute") {
-            const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
-            broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
-          } else if (type === "video-state") {
-            const p = r.peers.get(uid);
-            if (p) {
-              if (msg.camOn !== undefined) p.camOn = !!msg.camOn;
-              if (msg.screenOn !== undefined) p.screenOn = !!msg.screenOn;
-            }
-            broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
-          } else if (type === "rtc-offer" || type === "rtc-answer" || type === "rtc-ice") {
-            const target = r.peers.get(String(msg.to || ""));
-            if (target) sendWs(target.ws, { ...msg, from: uid });
-          } else if (type === "set-activity") {
-            r.activity = ["none", "watch", "whiteboard"].includes(msg.activity) ? msg.activity : "none";
-            broadcastRoom(currentGroup, { type: "activity", activity: r.activity, by: prof.username });
-          } else if (type === "watch-sync") {
-            r.activity = "watch";
-            r.watch = { video: msg.video || r.watch.video, playing: !!msg.playing, time: Number(msg.time) || 0, updatedAt: Date.now() };
-            broadcastRoom(currentGroup, { type: "watch-sync", ...r.watch, by: prof.username }, uid);
-          } else if (type === "watch-react") {
-            broadcastRoom(currentGroup, { type: "watch-react", icon: String(msg.icon || ""), stickerUrl: msg.stickerUrl || null, by: prof.display_name || prof.username });
-          } else if (type === "wb-stroke") {
-            r.activity = "whiteboard";
-            const st = { x0: Number(msg.x0), y0: Number(msg.y0), x1: Number(msg.x1), y1: Number(msg.y1), color: String(msg.color || "#6750a4").slice(0, 20), size: Math.min(Math.max(Number(msg.size) || 4, 1), 32) };
-            r.strokes.push(st);
-            if (r.strokes.length > 800) r.strokes.shift();
-            broadcastRoom(currentGroup, { type: "wb-stroke", ...st }, uid);
-          } else if (type === "wb-clear") {
-            r.strokes = [];
-            broadcastRoom(currentGroup, { type: "wb-clear" });
+        if (type === "leave-call") {
+          removeUserFromRoom(currentGroup, uid);
+          currentGroup = null;
+        } else if (type === "mute") {
+          const p = r.peers.get(uid); if (p) p.muted = !!msg.muted;
+          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+        } else if (type === "video-state") {
+          const p = r.peers.get(uid);
+          if (p) {
+            if (msg.camOn !== undefined) p.camOn = !!msg.camOn;
+            if (msg.screenOn !== undefined) p.screenOn = !!msg.screenOn;
           }
+          broadcastRoom(currentGroup, { type: "call-state", ...roomSnapshot(currentGroup) });
+        } else if (type === "rtc-offer" || type === "rtc-answer" || type === "rtc-ice") {
+          const target = r.peers.get(String(msg.to || ""));
+          if (target) sendWs(target.ws, { ...msg, from: uid });
+        } else if (type === "set-activity") {
+          r.activity = ["none", "watch", "whiteboard"].includes(msg.activity) ? msg.activity : "none";
+          broadcastRoom(currentGroup, { type: "activity", activity: r.activity, by: prof.username });
+        } else if (type === "watch-sync") {
+          r.activity = "watch";
+          r.watch = { video: msg.video || r.watch.video, playing: !!msg.playing, time: Number(msg.time) || 0, updatedAt: Date.now() };
+          broadcastRoom(currentGroup, { type: "watch-sync", ...r.watch, by: prof.username }, uid);
+        } else if (type === "watch-react") {
+          broadcastRoom(currentGroup, { type: "watch-react", icon: String(msg.icon || ""), stickerUrl: msg.stickerUrl || null, by: prof.display_name || prof.username });
+        } else if (type === "wb-stroke") {
+          r.activity = "whiteboard";
+          const st = { x0: Number(msg.x0), y0: Number(msg.y0), x1: Number(msg.x1), y1: Number(msg.y1), color: String(msg.color || "#6750a4").slice(0, 20), size: Math.min(Math.max(Number(msg.size) || 4, 1), 32) };
+          r.strokes.push(st);
+          if (r.strokes.length > 800) r.strokes.shift();
+          broadcastRoom(currentGroup, { type: "wb-stroke", ...st }, uid);
+        } else if (type === "wb-clear") {
+          r.strokes = [];
+          broadcastRoom(currentGroup, { type: "wb-clear" });
+        }
         }).catch(() => {});
       });
 
@@ -2039,6 +2042,7 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
     return { ok: false };
   }
 
+
   app.get("/api/mcp/keys", wrap(async req => {
     const me = needAdmin(req);
     const rows = await run("SELECT id, name, prefix, created_at, last_used_at FROM mcp_api_keys WHERE user_id = ? ORDER BY created_at DESC LIMIT 20", [me.uid]);
@@ -2271,6 +2275,81 @@ module.exports = function mount({ app, server, db, run, wrap, uidFrom, HttpError
       return fail(-32601, `Unknown MCP method: ${method}`);
     } catch (e) {
       return fail(-32603, e?.message || "Internal MCP error");
+    }
+  });
+
+  const tiktokImportCache = new Map();
+  app.post("/api/videos/import-tiktok", limit(20, 600000), wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    const rawUrl = String(req.body?.url || "").trim();
+    let parsed;
+    try { parsed = new URL(rawUrl); } catch { throw new HttpError(400, "Enter a valid TikTok video URL."); }
+    if (!["http:", "https:"].includes(parsed.protocol) || !/(^|\.)tiktok\.com$/i.test(parsed.hostname)) {
+      throw new HttpError(400, "Please enter a valid tiktok.com link.");
+    }
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 15000);
+    let data;
+    try {
+      const r = await fetch(`https://www.tikwm.com/api/?url=${encodeURIComponent(parsed.href)}`, {
+        signal: ac.signal,
+        headers: { "User-Agent": "WebTok/1.0" }
+      });
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || j.code !== 0 || !j.data || (!j.data.play && !j.data.hdplay)) {
+        throw new HttpError(400, j?.msg || "Could not fetch that TikTok video. Make sure it is public.");
+      }
+      data = j.data;
+    } catch (e) {
+      if (e instanceof HttpError) throw e;
+      throw new HttpError(502, "Failed to reach TikTok importer. Try again in a moment.");
+    } finally {
+      clearTimeout(timer);
+    }
+    const playUrl = String(data.play || data.hdplay || "");
+    if (!playUrl.startsWith("https://")) throw new HttpError(400, "Invalid video stream URL.");
+    const rawCaption = String(data.title || "").trim();
+    const hashtags = [...new Set((rawCaption.match(/#[a-zA-Z0-9_]{1,30}/g) || []).map(t => t.toLowerCase()))].slice(0, 5);
+    const cleanTitle = rawCaption.replace(/#[a-zA-Z0-9_]+/g, "").replace(/\s+/g, " ").trim().slice(0, 100)
+      || (data.author?.nickname ? `${data.author.nickname} TikTok` : "TikTok Video");
+    const description = rawCaption.slice(0, 300);
+    const now = Date.now();
+    for (const [k, v] of tiktokImportCache.entries()) {
+      if (v.expiresAt <= now) tiktokImportCache.delete(k);
+    }
+    const importId = crypto.randomUUID();
+    tiktokImportCache.set(importId, { playUrl, uid, expiresAt: now + 5 * 60 * 1000 });
+    return {
+      data: { importId, title: cleanTitle, description, hashtags, author: data.author?.unique_id || "" },
+      error: null
+    };
+  }));
+
+  app.get("/api/videos/import-tiktok/:id/file", async (req, res) => {
+    try {
+      const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+      const entry = tiktokImportCache.get(String(req.params.id || ""));
+      if (!entry || entry.uid !== uid || entry.expiresAt <= Date.now()) {
+        return res.status(404).json({ error: { message: "Import expired. Paste the TikTok link again." } });
+      }
+      tiktokImportCache.delete(req.params.id);
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), 60000);
+      try {
+        const vr = await fetch(entry.playUrl, { signal: ac.signal, headers: { "User-Agent": "WebTok/1.0" } });
+        if (!vr.ok) return res.status(502).json({ error: { message: "Could not download TikTok video." } });
+        const len = Number(vr.headers.get("content-length") || 0);
+        if (len > 100 * 1024 * 1024) return res.status(413).json({ error: { message: "TikTok video exceeds 100 MB limit." } });
+        const buf = Buffer.from(await vr.arrayBuffer());
+        if (buf.length > 100 * 1024 * 1024) return res.status(413).json({ error: { message: "TikTok video exceeds 100 MB limit." } });
+        res.setHeader("Content-Type", vr.headers.get("content-type") || "video/mp4");
+        res.setHeader("Cache-Control", "no-store");
+        res.send(buf);
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch (e) {
+      res.status(e instanceof HttpError ? e.status : 500).json({ error: { message: e?.message || "Import failed." } });
     }
   });
 
