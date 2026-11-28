@@ -1,4 +1,4 @@
-/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with custom DB-saved iframe apps */
+/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with custom DB-saved iframe apps & sign-in prompt */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   function loadCfg() {
@@ -167,8 +167,8 @@
     .w11-cal-d.today{background:#60cdff;color:#000;font-weight:700}
 
     /* Modals */
-    #pcSetDlg,#pcAddAppDlg{border:0;border-radius:12px;padding:22px;width:min(92vw,460px);background:#202020;color:#f3f3f3;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.1);font-family:inherit;z-index:9999}
-    #pcSetDlg::backdrop,#pcAddAppDlg::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
+    #pcSetDlg,#pcAddAppDlg,#pcAuthDlg{border:0;border-radius:12px;padding:22px;width:min(92vw,460px);background:#202020;color:#f3f3f3;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.1);font-family:inherit;z-index:9999}
+    #pcSetDlg::backdrop,#pcAddAppDlg::backdrop,#pcAuthDlg::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
     .pcs-sec{margin-top:14px;display:flex;flex-direction:column;gap:8px}
     .pcs-lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#60cdff}
     .pcs-seg{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:4px;border-radius:8px}
@@ -271,6 +271,7 @@
         <div class="noc-pill" id="pcClock">--:--</div>
         <div class="noc-grp">
           <span class="noc-pill"><span class="ms" style="font-size:15px">wifi</span>Online</span>
+          <button type="button" class="noc-pill" id="pcAuthPill" title="Web Tok Account">Sign in</button>
           <button type="button" class="noc-pill" data-app="add_app" title="Add App"><span class="ms" style="font-size:16px">add</span>Add App</button>
           <button type="button" class="noc-pill" data-app="wp_settings" title="Wallpaper & OS Settings"><span class="ms" style="font-size:16px">wallpaper</span></button>
           <button type="button" class="noc-pill" id="pcOpenSec" title="Secret Settings"><span class="ms" style="font-size:16px">settings</span></button>
@@ -331,7 +332,10 @@
           </div>
         </div>
         <div class="w11-start-foot">
-          <span style="display:flex;align-items:center;gap:8px"><span class="ms fill" style="font-size:22px;color:#60cdff">account_circle</span><span id="w11UserLbl">Web Tok User</span></span>
+          <button type="button" id="w11UserBtn" style="display:flex;align-items:center;gap:8px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:4px 8px;border-radius:6px">
+            <span class="ms fill" style="font-size:22px;color:#60cdff">account_circle</span>
+            <span id="w11UserLbl">Sign in</span>
+          </button>
           <button type="button" class="pc-wbtn" id="w11PowerBtn" title="Exit Computer Mode" style="width:32px;height:32px;border-radius:6px"><span class="ms" style="font-size:18px">power_settings_new</span></button>
         </div>
       </div>
@@ -443,7 +447,79 @@
     if (app) openInWindow(app);
   });
 
+  function openAuthModal(onSuccess) {
+    let dlg = document.getElementById("pcAuthDlg");
+    if (!dlg) {
+      dlg = document.createElement("dialog");
+      dlg.id = "pcAuthDlg";
+      dlg.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="font-size:16px;display:flex;align-items:center;gap:8px"><img src="/images/logo.png" alt="" width="20" height="20" style="border-radius:4px">Sign in to Web Tok</b>
+          <button type="button" class="pc-wbtn" id="pcAuthClose" style="width:32px;height:32px;border-radius:6px"><span class="ms">close</span></button>
+        </div>
+        <p style="margin:0 0 12px;font-size:12.5px;opacity:.8;line-height:1.45">Sign in to your Web Tok account to save custom apps and sync your profile wallpaper on Computer Mode.</p>
+        <div class="pcs-sec">
+          <div class="pcs-lbl">Email</div>
+          <input type="email" class="pcs-in" id="pcAuthEmail" autocomplete="email" placeholder="you@example.com">
+          <div class="pcs-lbl">Password</div>
+          <input type="password" class="pcs-in" id="pcAuthPass" autocomplete="current-password" placeholder="••••••••">
+          <div id="pcAuthHint" style="font-size:12px;min-height:18px;color:#cbd5e1"></div>
+          <button type="button" class="pc-btn p" id="pcAuthSubmit" style="justify-content:center">Sign in &amp; Stay Here</button>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:12px">
+            <a href="/login#signup" style="color:#60cdff;text-decoration:none">Create an account</a>
+            <button type="button" class="pc-btn" id="pcAuthSkip" style="padding:5px 11px;font-size:11.5px">Continue as guest</button>
+          </div>
+        </div>`;
+      document.body.appendChild(dlg);
+      dlg.querySelector("#pcAuthClose").onclick = () => dlg.close();
+      dlg.querySelector("#pcAuthSkip").onclick = () => dlg.close();
+      dlg.querySelector("#pcAuthPass").addEventListener("keydown", e => {
+        if (e.key === "Enter") dlg.querySelector("#pcAuthSubmit").click();
+      });
+    }
+    dlg._onSuccess = onSuccess || null;
+    const hint = dlg.querySelector("#pcAuthHint");
+    hint.textContent = "";
+    const submitBtn = dlg.querySelector("#pcAuthSubmit");
+    submitBtn.onclick = async () => {
+      const email = dlg.querySelector("#pcAuthEmail").value.trim();
+      const password = dlg.querySelector("#pcAuthPass").value;
+      if (!email || !password) {
+        hint.style.color = "#fb7185";
+        hint.textContent = "Enter your email and password.";
+        return;
+      }
+      if (!window.sb?.auth?.signInWithPassword) {
+        hint.style.color = "#fb7185";
+        hint.textContent = "Auth client is not ready yet. Try again in a moment.";
+        return;
+      }
+      submitBtn.disabled = true;
+      hint.style.color = "#60cdff";
+      hint.textContent = "Signing in…";
+      try {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        if (!data?.session) throw new Error("Could not start session.");
+        dlg.querySelector("#pcAuthPass").value = "";
+        await syncUserSession();
+        dlg.close();
+        if (typeof dlg._onSuccess === "function") dlg._onSuccess();
+      } catch (err) {
+        hint.style.color = "#fb7185";
+        hint.textContent = err?.message || "Sign in failed.";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    };
+    if (!dlg.open) dlg.showModal();
+  }
+
   function openAddAppModal() {
+    if (!authToken) {
+      openAuthModal(() => openAddAppModal());
+      return;
+    }
     let dlg = document.getElementById("pcAddAppDlg");
     if (!dlg) {
       dlg = document.createElement("dialog");
@@ -476,8 +552,8 @@
         const hint = dlg.querySelector("#pcaHint");
         const btn = dlg.querySelector("#pcaAddBtn");
         if (!authToken) {
-          hint.style.color = "#fb7185";
-          hint.textContent = "Sign in to Web Tok first to save apps to your account.";
+          dlg.close();
+          openAuthModal(() => openAddAppModal());
           return;
         }
         if (!name || !url) {
@@ -539,7 +615,7 @@
         };
       });
     }
-    dlg.querySelector("#pcaHint").textContent = authToken ? "" : "Sign in to Web Tok to save custom apps.";
+    dlg.querySelector("#pcaHint").textContent = "";
     paintSavedList();
     dlg.showModal();
   }
@@ -621,6 +697,13 @@
     el.onclick = () => window.openSecretSettings?.();
   });
 
+  root.querySelector("#pcAuthPill")?.addEventListener("click", () => {
+    if (!authToken) openAuthModal();
+  });
+  root.querySelector("#w11UserBtn")?.addEventListener("click", () => {
+    if (!authToken) openAuthModal();
+  });
+
   root.querySelector("#pcAppReload")?.addEventListener("click", () => { if (appFrame && curAppHref) appFrame.src = curAppHref; });
   root.querySelector("#pcAppMax")?.addEventListener("click", () => appWin?.classList.toggle("max-win"));
   root.querySelector("#pcAppMin")?.addEventListener("click", () => { appWin?.classList.add("hidden-win"); renderAppLists(); });
@@ -688,6 +771,44 @@
   tickClock();
   setInterval(tickClock, 15000);
 
+  async function syncUserSession() {
+    try {
+      if (!window.sb?.auth?.getSession) return false;
+      const { data } = await sb.auth.getSession();
+      authToken = data?.session?.access_token || null;
+      if (!authToken) {
+        const ul = root.querySelector("#w11UserLbl");
+        if (ul) ul.textContent = "Sign in";
+        const ap = root.querySelector("#pcAuthPill");
+        if (ap) ap.textContent = "Sign in";
+        return false;
+      }
+      const ar = await fetch("/api/computer/apps", { headers: { Authorization: "Bearer " + authToken } });
+      const aj = await ar.json().catch(() => ({}));
+      if (ar.ok && Array.isArray(aj?.data)) {
+        customApps = aj.data;
+        renderAppLists();
+      }
+      if (data?.session?.user?.id) {
+        const { data: prof } = await sb.from("profiles").select("username,display_name,theme").eq("id", data.session.user.id).maybeSingle();
+        const name = prof?.display_name || (prof?.username ? `@${prof.username}` : "Signed in");
+        const ul = root.querySelector("#w11UserLbl");
+        if (ul) ul.textContent = name;
+        const ap = root.querySelector("#pcAuthPill");
+        if (ap) ap.textContent = name;
+        let rt = prof?.theme;
+        if (typeof rt === "string") { try { rt = JSON.parse(rt); } catch { rt = null; } }
+        if (rt?.wallpaper) {
+          profileWallpaper = rt.wallpaper;
+          applyWallpaper();
+        }
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   (async () => {
     try {
       const r = await fetch("/api/stats/users");
@@ -703,30 +824,10 @@
         if (stTxt) stTxt.textContent = `${on} online`;
       }
     } catch {}
-    try {
-      if (window.sb?.auth?.getSession) {
-        const { data } = await sb.auth.getSession();
-        authToken = data?.session?.access_token || null;
-        if (authToken) {
-          const ar = await fetch("/api/computer/apps", { headers: { Authorization: "Bearer " + authToken } });
-          const aj = await ar.json().catch(() => ({}));
-          if (ar.ok && Array.isArray(aj?.data)) {
-            customApps = aj.data;
-            renderAppLists();
-          }
-        }
-        if (data?.session?.user?.id) {
-          const { data: prof } = await sb.from("profiles").select("username,display_name,theme").eq("id", data.session.user.id).maybeSingle();
-          const ul = root.querySelector("#w11UserLbl");
-          if (ul && (prof?.display_name || prof?.username)) ul.textContent = prof.display_name || `@${prof.username}`;
-          let rt = prof?.theme;
-          if (typeof rt === "string") { try { rt = JSON.parse(rt); } catch { rt = null; } }
-          if (rt?.wallpaper) {
-            profileWallpaper = rt.wallpaper;
-            applyWallpaper();
-          }
-        }
-      }
-    } catch {}
+
+    const isSignedIn = await syncUserSession();
+    if (!isSignedIn) {
+      openAuthModal();
+    }
   })();
 })();
