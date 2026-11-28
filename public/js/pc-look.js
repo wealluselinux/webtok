@@ -1,13 +1,16 @@
-/* PC Look Mode (Windows 11 & Nocturnal Shell Hyprland + Quickshell) for Web Tok Homepage */
+/* PC Look Mode (Windows 11 & Nocturnal Shell Hyprland + Quickshell) on /computer */
 (function initPcLook() {
-  if ((document.body.dataset.page || "") !== "landing") return;
+  const page = document.body.dataset.page || "";
   let cfg;
   try { cfg = { enabled: false, style: "nocturnal", light: false, glass: true, ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}") }; }
   catch { cfg = { enabled: false, style: "nocturnal", light: false, glass: true }; }
-  if (!cfg.enabled) return;
 
-  const landing = document.getElementById("landing");
-  if (landing) landing.classList.add("hidden");
+  // On normal homepage (/), redirect to /computer when PC Look Mode is turned on
+  if (page === "landing") {
+    if (cfg.enabled) location.replace("/computer");
+    return;
+  }
+  if (page !== "computer") return;
 
   const APPS = [
     { id: "feed", name: "Web Tok Feed", sub: "For You & Following", icon: "smart_display", href: "/scroll#fyp", color: "#60a5fa" },
@@ -29,35 +32,46 @@
 
   let quoteIdx = 0;
   let activeWs = 1;
-  let signedIn = false;
 
   const st = document.createElement("style");
   st.textContent = `
-    body[data-page="landing"]{overflow:hidden!important;height:100dvh!important;margin:0;padding:0}
+    body[data-page="computer"]{overflow:hidden!important;height:100dvh!important;margin:0;padding:0}
     #wt-pc{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;font-family:"Segoe UI Variable","Segoe UI","Google Sans",system-ui,sans-serif;user-select:none;overflow:hidden}
-    #wt-pc.nocturnal{font-family:"JetBrains Mono","Fira Code","Google Sans",monospace;background:radial-gradient(circle at 22% 18%,#2a214a 0%,#12131a 55%,#090a10 100%);color:#e6e1ff}
-    #wt-pc.nocturnal.daylight{background:radial-gradient(circle at 22% 18%,#e3dbff 0%,#f3f1fa 55%,#e8e4f6 100%);color:#181924}
-    #wt-pc.win11{background:radial-gradient(circle at 50% 42%,#1d4ed8 0%,#0f172a 42%,#060913 100%);color:#f8fafc}
-    #wt-pc.win11.daylight{background:radial-gradient(circle at 50% 42%,#93c5fd 0%,#dbeafe 52%,#eff6ff 100%);color:#0f172a}
+    #wt-pc.nocturnal{
+      font-family:"JetBrains Mono","Fira Code","Google Sans",monospace;
+      background:url("/images/wall0.png") center/cover no-repeat, radial-gradient(circle at 22% 18%,#2a214a 0%,#12131a 55%,#090a10 100%);
+      color:#e6e1ff;
+    }
+    #wt-pc.nocturnal.daylight{
+      background:url("/images/wall0.png") center/cover no-repeat, radial-gradient(circle at 22% 18%,#e3dbff 0%,#f3f1fa 55%,#e8e4f6 100%);
+      color:#181924;
+    }
+    #wt-pc.win11{
+      background:url("/images/win11.jpg") center/cover no-repeat, url("/images/win11.png") center/cover no-repeat, radial-gradient(circle at 50% 42%,#1d4ed8 0%,#0f172a 42%,#060913 100%);
+      color:#f8fafc;
+    }
+    #wt-pc.win11.daylight{
+      background:url("/images/win11.jpg") center/cover no-repeat, url("/images/win11.png") center/cover no-repeat, radial-gradient(circle at 50% 42%,#93c5fd 0%,#dbeafe 52%,#eff6ff 100%);
+      color:#0f172a;
+    }
 
     .pc-stage{position:relative;flex:1;min-height:0;padding:18px;display:flex;gap:16px;overflow:hidden}
     .pc-icons{display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;gap:10px;width:96px;flex:none;z-index:2}
     .pc-ico{width:84px;padding:8px 4px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;color:inherit;text-decoration:none;cursor:pointer;border:1px solid transparent;background:transparent;font:inherit;transition:background .15s,border-color .15s}
-    .pc-ico:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18)}
-    .pc-ico-box{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(255,255,255,.12);backdrop-filter:blur(8px);box-shadow:0 4px 12px #0003}
-    .pc-ico span.lbl{font-size:11px;line-height:1.2;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.6)}
-    .daylight .pc-ico span.lbl{text-shadow:0 1px 3px rgba(255,255,255,.8)}
+    .pc-ico:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.24)}
+    .pc-ico-box{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(16,18,28,.55);backdrop-filter:blur(10px);box-shadow:0 4px 12px #0004}
+    .pc-ico span.lbl{font-size:11px;line-height:1.2;font-weight:600;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.85)}
 
     /* Main Window */
     .pc-win{flex:1;min-width:0;display:flex;flex-direction:column;border-radius:14px;overflow:hidden;backdrop-filter:blur(22px);box-shadow:0 20px 56px rgba(0,0,0,.45);transition:opacity .18s,transform .18s}
     .pc-win.hidden-win{opacity:0;pointer-events:none;transform:scale(.96)}
-    #wt-pc.win11 .pc-win{background:rgba(28,32,44,.76);border:1px solid rgba(255,255,255,.16);border-radius:12px}
-    #wt-pc.win11.daylight .pc-win{background:rgba(255,255,255,.78);border:1px solid rgba(15,23,42,.12)}
+    #wt-pc.win11 .pc-win{background:rgba(24,28,40,.78);border:1px solid rgba(255,255,255,.18);border-radius:12px}
+    #wt-pc.win11.daylight .pc-win{background:rgba(255,255,255,.82);border:1px solid rgba(15,23,42,.12)}
     #wt-pc.nocturnal .pc-win{background:rgba(18,19,26,.78);border:2px solid #c9b8ff;border-radius:14px}
-    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.44);backdrop-filter:blur(28px)}
-    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.78);border:2px solid #7c5dfa}
+    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.48);backdrop-filter:blur(28px)}
+    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.82);border:2px solid #7c5dfa}
 
-    .pc-titlebar{height:40px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.1);flex:none}
+    .pc-titlebar{height:40px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.12);flex:none}
     .daylight .pc-titlebar{border-bottom-color:rgba(0,0,0,.08)}
     .pc-wtitle{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
     .pc-wbtns{display:flex;gap:6px;align-items:center}
@@ -68,9 +82,9 @@
     .pc-win-body{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:18px}
     .pc-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
     .pc-hero h1{font-size:clamp(24px,3.4vw,36px);margin:0 0 6px;line-height:1.1}
-    .pc-hero p{margin:0;opacity:.8;font-size:13.5px;max-width:52ch}
+    .pc-hero p{margin:0;opacity:.82;font-size:13.5px;max-width:52ch}
     .pc-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    .pc-btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.1);color:inherit;text-decoration:none;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:transform .15s,background .15s}
+    .pc-btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.1);color:inherit;text-decoration:none;font:inherit;font-size:13px;font-weight:700;cursor:pointer;transition:transform .15s,background .15s}
     .pc-btn:hover{transform:translateY(-1px);background:rgba(255,255,255,.18)}
     .pc-btn.p{background:#c9b8ff;color:#12131a;border-color:transparent}
     #wt-pc.win11 .pc-btn.p{background:#3b82f6;color:#fff}
@@ -80,13 +94,13 @@
     .pc-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
 
     .pc-app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px}
-    .pc-app-card{display:flex;align-items:center;gap:12px;padding:13px;border-radius:12px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:inherit;text-decoration:none;cursor:pointer;text-align:left;font:inherit;transition:transform .15s,background .15s}
-    .pc-app-card:hover{transform:translateY(-2px);background:rgba(255,255,255,.14)}
-    .daylight .pc-app-card{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.08)}
+    .pc-app-card{display:flex;align-items:center;gap:12px;padding:13px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:inherit;text-decoration:none;cursor:pointer;text-align:left;font:inherit;transition:transform .15s,background .15s}
+    .pc-app-card:hover{transform:translateY(-2px);background:rgba(255,255,255,.16)}
+    .daylight .pc-app-card{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.09)}
 
     /* Nocturnal Top Bar & Widgets */
     .noc-bar{height:44px;margin:10px 14px 0;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(18,19,26,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.14);flex:none;z-index:30}
-    #wt-pc.nocturnal.daylight .noc-bar{background:rgba(243,241,250,.82);border-color:rgba(0,0,0,.1)}
+    #wt-pc.nocturnal.daylight .noc-bar{background:rgba(243,241,250,.84);border-color:rgba(0,0,0,.1)}
     .noc-grp{display:flex;align-items:center;gap:8px}
     .noc-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:10px;background:rgba(255,255,255,.08);font-size:12px;font-weight:700;cursor:pointer;border:0;color:inherit;font-family:inherit;text-decoration:none}
     .noc-pill:hover{background:rgba(201,184,255,.22)}
@@ -96,14 +110,14 @@
 
     .noc-widgets{width:268px;flex:none;display:flex;flex-direction:column;gap:12px}
     .noc-wcard{background:rgba(18,19,26,.72);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
-    #wt-pc.nocturnal.daylight .noc-wcard{background:rgba(243,241,250,.8);border-color:rgba(0,0,0,.1)}
+    #wt-pc.nocturnal.daylight .noc-wcard{background:rgba(243,241,250,.84);border-color:rgba(0,0,0,.1)}
     .noc-qgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .noc-qbtn{padding:10px 8px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:inherit;font:inherit;font-size:11px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
     .noc-qbtn.on{border-color:#c9b8ff;background:rgba(201,184,255,.22)}
 
     .noc-dock-wrap{display:flex;justify-content:center;padding:0 14px 12px;flex:none;z-index:30}
     .noc-dock{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:18px;background:rgba(18,19,26,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15)}
-    #wt-pc.nocturnal.daylight .noc-dock{background:rgba(243,241,250,.84);border-color:rgba(0,0,0,.12)}
+    #wt-pc.nocturnal.daylight .noc-dock{background:rgba(243,241,250,.86);border-color:rgba(0,0,0,.12)}
     .noc-dock a,.noc-dock button{width:42px;height:42px;border-radius:12px;border:0;background:rgba(255,255,255,.08);color:inherit;display:grid;place-items:center;text-decoration:none;cursor:pointer;transition:transform .15s,background .15s}
     .noc-dock a:hover,.noc-dock button:hover{transform:translateY(-3px) scale(1.06);background:rgba(201,184,255,.28)}
 
@@ -158,7 +172,7 @@
         <div class="pc-hero">
           <div>
             <h1>Short videos. Big vibes.</h1>
-            <p>Web Tok is running in ${isNoc ? "Nocturnal Shell (Hyprland + Quickshell)" : "Windows 11"} PC Look Mode. Launch any corner of Web Tok below.</p>
+            <p>Web Tok is running in ${isNoc ? "Nocturnal Shell (Hyprland + Quickshell)" : "Windows 11"} on /computer. Launch any corner of Web Tok below.</p>
           </div>
           <div class="pc-actions">
             <a class="pc-btn p" href="/scroll#fyp"><span class="ms">play_arrow</span>Start scrolling</a>
@@ -177,7 +191,7 @@
     root.innerHTML = `
       <header class="noc-bar">
         <div class="noc-grp">
-          <button type="button" class="noc-pill" id="pcLogoEgg" title="Web Tok (tap 10x for Secret Settings)">
+          <button type="button" class="noc-pill" id="pcLogoEgg" title="Web Tok">
             <img src="/images/logo.png" alt="" width="18" height="18" style="border-radius:4px">
             <span>Nebula</span>
           </button>
@@ -266,7 +280,6 @@
 
   document.body.appendChild(root);
 
-  // Wire Secret Settings buttons & 10-click logo
   root.querySelectorAll('[data-app="secret"], #pcOpenSec, #nocSecBtn, #nocDockSec').forEach(el => {
     el.onclick = () => window.openSecretSettings?.();
   });
@@ -278,7 +291,6 @@
   root.querySelector("#nocDockWin")?.addEventListener("click", () => toggleWin());
   root.querySelector("#w11WinToggle")?.addEventListener("click", () => toggleWin());
 
-  // Windows 11 Start Menu
   const w11Start = root.querySelector("#w11Start");
   root.querySelector("#w11StartBtn")?.addEventListener("click", e => { e.stopPropagation(); w11Start?.classList.toggle("open"); });
   document.addEventListener("click", e => { if (w11Start && !w11Start.contains(e.target) && e.target.id !== "w11StartBtn") w11Start.classList.remove("open"); });
@@ -286,7 +298,6 @@
     cfg.style = "nocturnal"; localStorage.setItem("wt_pc_look", JSON.stringify(cfg)); location.reload();
   });
 
-  // Nocturnal Shell interactive controls
   root.querySelector("#nocWs")?.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     activeWs = Number(b.dataset.ws || 1);
@@ -315,7 +326,6 @@
   renderQuote();
   root.querySelector("#nocNextQ")?.addEventListener("click", () => { quoteIdx = (quoteIdx + 1) % QUOTES.length; renderQuote(); });
 
-  // Live clock
   function tickClock() {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
@@ -329,7 +339,6 @@
   tickClock();
   setInterval(tickClock, 15000);
 
-  // Sync live stats + auth state
   (async () => {
     try {
       const r = await fetch("/api/stats/users");
@@ -345,7 +354,6 @@
       if (window.sb?.auth?.getSession) {
         const { data } = await sb.auth.getSession();
         if (data?.session) {
-          signedIn = true;
           [root.querySelector("#pcSigninBtn"), root.querySelector("#pcBarAuth")].forEach(el => {
             if (el) { el.textContent = "Go to Web Tok"; el.href = "/scroll"; }
           });

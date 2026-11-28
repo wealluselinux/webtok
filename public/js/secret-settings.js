@@ -27,9 +27,12 @@
     try { return { enabled: false, style: "nocturnal", light: false, glass: true, ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}") }; }
     catch { return { enabled: false, style: "nocturnal", light: false, glass: true }; }
   }
-  function savePcLook(p, reload) {
+  function savePcLook(p, navigate) {
     localStorage.setItem("wt_pc_look", JSON.stringify(p));
-    if (reload) location.reload();
+    if (navigate) {
+      if (p.enabled) location.href = "/computer";
+      else location.href = "/";
+    }
   }
 
   window.openSecretSettings = function () {
@@ -75,11 +78,11 @@
         </div>
         <div class="ss-body"><div class="ss-wrap">
           <div class="ss-card">
-            <div class="ss-sec-h">PC Look Mode (Desktop Homepage)</div>
+            <div class="ss-sec-h">PC Look Mode (/computer)</div>
             <div class="ss-row">
               <div>
                 <b style="font-size:15px">PC Look Mode</b>
-                <div style="font-size:12px;color:var(--muted)">Reloads the homepage into a full desktop UI (Windows 11 or Nocturnal Shell)</div>
+                <div style="font-size:12px;color:var(--muted)">Opens /computer with a full desktop UI &amp; wallpaper (Windows 11 or Nocturnal Shell)</div>
               </div>
               <button type="button" class="ss-switch" id="ssPcTog" aria-label="Toggle PC Look Mode"></button>
             </div>
@@ -181,7 +184,7 @@
         const b = e.target.closest("button"); if (!b) return;
         const pc = getPcLook();
         pc.style = b.dataset.pc;
-        savePcLook(pc, !!pc.enabled);
+        savePcLook(pc, !!pc.enabled || (document.body.dataset.page || "") === "computer");
         paint();
       };
       dlg.querySelector("#ssCapriTog").onclick = () => { const c = getCfg(); c.enabled = !c.enabled; saveCfg(c); paint(); };
