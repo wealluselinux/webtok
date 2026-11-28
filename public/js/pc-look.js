@@ -1,4 +1,4 @@
-/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with OS-native Settings & Admin Panel auto-app */
+/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with Fake Browser (Firefox / Edge / Chrome), OS-native Settings & Admin Panel */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   function loadCfg() {
@@ -10,10 +10,12 @@
         glass: true,
         wpMode: "default",
         customWp: "",
+        fakeBrowser: false,
+        winBrowser: "edge",
         ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}")
       };
     } catch {
-      return { enabled: false, style: "nocturnal", light: false, glass: true, wpMode: "default", customWp: "" };
+      return { enabled: false, style: "nocturnal", light: false, glass: true, wpMode: "default", customWp: "", fakeBrowser: false, winBrowser: "edge" };
     }
   }
   function saveCfg(next) {
@@ -120,6 +122,50 @@
     .pc-wbtn:hover{background:rgba(255,255,255,.1)}
     .pc-wbtn.close:hover{background:#c42b1c;color:#fff}
 
+    /* Fake Browser Chrome (Firefox / Edge / Chrome) */
+    .pc-br-head{display:none;flex-direction:column;flex:none;color:#f3f4f6}
+    .pc-win.is-browser .pc-titlebar{display:none}
+    .pc-win.is-browser .pc-br-head{display:flex}
+
+    .pc-br-tabs{height:38px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 0 0 8px;gap:8px}
+    .pc-br-tabrow{display:flex;align-items:flex-end;gap:4px;min-width:0;flex:1;height:100%;padding-top:6px}
+    .pc-br-tab{height:32px;max-width:240px;min-width:120px;padding:0 10px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;cursor:pointer;position:relative}
+    .pc-br-tab span.t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .pc-br-plus{width:28px;height:28px;margin-bottom:2px;border-radius:50%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;opacity:.8}
+    .pc-br-plus:hover{background:rgba(255,255,255,.12);opacity:1}
+
+    .pc-br-nav{height:40px;padding:0 10px;display:flex;align-items:center;gap:6px}
+    .pc-br-nbtn{width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;opacity:.85;text-decoration:none}
+    .pc-br-nbtn:hover{background:rgba(255,255,255,.11);opacity:1}
+    .pc-br-omnibox{flex:1;min-width:0;height:28px;border-radius:999px;display:flex;align-items:center;gap:8px;padding:0 12px}
+    .pc-br-omnibox input{flex:1;min-width:0;border:0;background:transparent;color:inherit;font:inherit;font-size:12.5px;outline:0}
+
+    .pc-br-bms{height:30px;padding:0 10px;display:flex;align-items:center;gap:4px;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,.08)}
+    .pc-br-bm{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;border:0;background:transparent;color:inherit;font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap;flex:none;opacity:.88}
+    .pc-br-bm:hover,.pc-br-bm.active{background:rgba(255,255,255,.12);opacity:1}
+    .pc-br-bm img{width:14px;height:14px;object-fit:contain;border-radius:3px}
+
+    /* Firefox (Nocturnal Shell) */
+    .pc-win.br-firefox .pc-br-head{background:#1c1b22}
+    .pc-win.br-firefox .pc-br-tab{background:#42414d;border-radius:6px 6px 0 0;border-top:2px solid #7dd3fc}
+    .pc-win.br-firefox .pc-br-nav{background:#2b2a33}
+    .pc-win.br-firefox .pc-br-omnibox{background:#1c1b22;border-radius:6px;border:1px solid rgba(255,255,255,.1)}
+    .pc-win.br-firefox .pc-br-bms{background:#2b2a33}
+
+    /* Microsoft Edge (Windows 11 Dark) */
+    .pc-win.br-edge .pc-br-head{background:#1f1f1f}
+    .pc-win.br-edge .pc-br-tab{background:#333333;border-radius:8px 8px 0 0;border-top:2px solid #60cdff}
+    .pc-win.br-edge .pc-br-nav{background:#333333}
+    .pc-win.br-edge .pc-br-omnibox{background:#242424;border:1px solid rgba(255,255,255,.12)}
+    .pc-win.br-edge .pc-br-bms{background:#2c2c2c}
+
+    /* Google Chrome (Windows 11 Dark) */
+    .pc-win.br-chrome .pc-br-head{background:#202124}
+    .pc-win.br-chrome .pc-br-tab{background:#35363a;border-radius:10px 10px 0 0}
+    .pc-win.br-chrome .pc-br-nav{background:#35363a}
+    .pc-win.br-chrome .pc-br-omnibox{background:#202124;border:1px solid rgba(255,255,255,.08)}
+    .pc-win.br-chrome .pc-br-bms{background:#35363a}
+
     .pc-iframe-wrap{flex:1;min-height:0;background:#0e0d14;display:flex}
     .pc-iframe{width:100%;height:100%;border:0;flex:1}
 
@@ -143,7 +189,7 @@
     .pca-row{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:12.5px}
     .pca-row-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 
-    /* Windows 11 Dark Mode Settings Layout (modeled after Win11 Settings) */
+    /* Windows 11 Dark Mode Settings Layout */
     .w11s-wrap{flex:1;min-height:0;display:flex;overflow:hidden}
     .w11s-side{width:236px;flex:none;padding:14px 12px;display:flex;flex-direction:column;gap:10px;border-right:1px solid rgba(255,255,255,.06);background:rgba(24,24,24,.45)}
     .w11s-user{display:flex;align-items:center;gap:10px;padding:6px 8px}
@@ -163,7 +209,7 @@
     .w11s-wpth{height:56px;border-radius:6px;border:2px solid rgba(255,255,255,.12);background-size:cover;background-position:center;cursor:pointer;display:flex;align-items:flex-end;padding:4px 6px;font-size:10.5px;font-weight:600;color:#fff;text-shadow:0 1px 3px #000}
     .w11s-wpth.on{border-color:#60cdff}
 
-    /* Nocturnal Shell Settings Layout (translucent glass + icon rail + cyan/lavender outlines) */
+    /* Nocturnal Shell Settings Layout */
     .nocs-wrap{flex:1;min-height:0;display:flex;overflow:hidden}
     .nocs-rail{width:64px;flex:none;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:10px;border-right:1px solid rgba(255,255,255,.1);background:rgba(14,16,24,.38)}
     .nocs-rb{width:42px;height:42px;border-radius:12px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;transition:background .15s,color .15s}
@@ -176,7 +222,7 @@
     .nocs-col{display:flex;flex-direction:column;gap:12px}
     .nocs-box{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);border-radius:14px;padding:16px}
     .nocs-tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .nocs-tile{padding:16px 10px;border-radius:14px;border:1.5px solid rgba(103,232,249,.55);background:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:12px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
+    .nocs-tile{padding:14px 10px;border-radius:14px;border:1.5px solid rgba(103,232,249,.55);background:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:12px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
     .nocs-tile:hover{background:rgba(103,232,249,.14)}
     .nocs-tile.on{background:rgba(103,232,249,.18);border-color:#67e8f9}
 
@@ -303,6 +349,36 @@
           <button type="button" class="pc-wbtn close" id="pcAppClose" title="Close"><span class="ms" style="font-size:15px">close</span></button>
         </div>
       </div>
+
+      <div class="pc-br-head">
+        <div class="pc-br-tabs">
+          <div class="pc-br-tabrow">
+            <div class="pc-br-tab">
+              <img id="pcBrTabLogo" src="/images/logo.png" alt="" width="15" height="15" style="border-radius:3px">
+              <span class="t" id="pcBrTabTitle">Web Tok</span>
+              <span class="ms" id="pcBrTabClose" style="font-size:14px;opacity:.7">close</span>
+            </div>
+            <button type="button" class="pc-br-plus" id="pcBrNewTab" title="Web Tok Home"><span class="ms" style="font-size:16px">add</span></button>
+          </div>
+          <div class="pc-wbtns">
+            <button type="button" class="pc-wbtn" id="pcBrMin" title="Minimize"><span class="ms" style="font-size:15px">remove</span></button>
+            <button type="button" class="pc-wbtn" id="pcBrMax" title="Maximize"><span class="ms" style="font-size:15px">crop_square</span></button>
+            <button type="button" class="pc-wbtn close" id="pcBrClose" title="Close"><span class="ms" style="font-size:15px">close</span></button>
+          </div>
+        </div>
+        <div class="pc-br-nav">
+          <button type="button" class="pc-br-nbtn" id="pcBrBack" title="Back"><span class="ms" style="font-size:17px">arrow_back</span></button>
+          <button type="button" class="pc-br-nbtn" id="pcBrFwd" title="Forward"><span class="ms" style="font-size:17px">arrow_forward</span></button>
+          <button type="button" class="pc-br-nbtn" id="pcBrReload" title="Reload"><span class="ms" style="font-size:17px">refresh</span></button>
+          <div class="pc-br-omnibox">
+            <span class="ms" id="pcBrLock" style="font-size:15px;opacity:.75">lock</span>
+            <input type="text" id="pcBrUrl" spellcheck="false" aria-label="Address bar">
+          </div>
+          <a class="pc-br-nbtn" id="pcBrPop" href="/scroll#fyp" target="_blank" title="Open in real tab"><span class="ms" style="font-size:17px">open_in_new</span></a>
+        </div>
+        <div class="pc-br-bms" id="pcBrBookmarks"></div>
+      </div>
+
       <div class="pc-iframe-wrap">
         <iframe class="pc-iframe" id="pcAppFrame" allow="autoplay; microphone; camera; fullscreen; clipboard-write"></iframe>
       </div>
@@ -321,6 +397,24 @@
         <input type="text" class="pcs-in" id="pcsCustIn" placeholder="Paste image URL (https://…)">
         <button type="button" class="pc-btn p" id="pcsCustSave">Apply</button>
       </div>
+    </div>`;
+
+  const fakeBrowserCardHtml = `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="pcs-lbl">Fake Browser</div>
+      <div style="font-size:12px;opacity:.78">Run apps inside a realistic browser frame (${isNoc ? "Firefox on Nocturnal Shell" : "Microsoft Edge or Google Chrome on Windows 11"}) with all your apps pinned as bookmarks.</div>
+      <div class="pcs-seg" id="pcsFbSeg">
+        <button type="button" data-fb="off">Off (Window)</button>
+        <button type="button" data-fb="on">On (${isNoc ? "Firefox" : "Browser"})</button>
+      </div>
+      ${isNoc ? "" : `
+        <div id="pcsWinBrWrap" style="display:flex;flex-direction:column;gap:6px">
+          <div class="pcs-lbl">Windows 11 Browser Style</div>
+          <div class="pcs-seg" id="pcsWbSeg">
+            <button type="button" data-wb="edge">Microsoft Edge</button>
+            <button type="button" data-wb="chrome">Google Chrome</button>
+          </div>
+        </div>`}
     </div>`;
 
   const appsFormHtml = `
@@ -352,7 +446,7 @@
           <button type="button" class="nocs-rb on" data-stab="home" title="Home"><span class="ms fill">home</span></button>
           <button type="button" class="nocs-rb" data-stab="wp" title="Wallpaper &amp; Theme"><span class="ms fill">palette</span></button>
           <button type="button" class="nocs-rb" data-stab="apps" title="Apps"><span class="ms fill">apps</span></button>
-          <button type="button" class="nocs-rb" data-stab="system" title="System"><span class="ms fill">tune</span></button>
+          <button type="button" class="nocs-rb" data-stab="system" title="System &amp; Browser"><span class="ms fill">tune</span></button>
         </nav>
         <div class="nocs-main" id="pcsPaneHome">
           <div class="nocs-hero">
@@ -377,7 +471,7 @@
             <div class="nocs-tgrid">
               <button type="button" class="nocs-tile ${cfg.light ? "" : "on"}" id="nocSetDayTog"><span class="ms">dark_mode</span><span>${cfg.light ? "Daylight" : "Nocturnal"}</span></button>
               <button type="button" class="nocs-tile ${cfg.glass !== false ? "on" : ""}" id="nocSetGlassTog"><span class="ms">water_drop</span><span>Liquid Glass</span></button>
-              <button type="button" class="nocs-tile" data-jump="wp"><span class="ms">wallpaper</span><span>Wallpaper</span></button>
+              <button type="button" class="nocs-tile ${cfg.fakeBrowser ? "on" : ""}" id="nocSetFbTog"><span class="ms">public</span><span>Firefox Mode</span></button>
               <button type="button" class="nocs-tile" data-jump="apps"><span class="ms">apps</span><span>Apps</span></button>
               <button type="button" class="nocs-tile" id="nocSetWinBtn"><span class="ms">window</span><span>Windows 11</span></button>
               <button type="button" class="nocs-tile" id="pcsExitBtn" style="border-color:rgba(244,114,182,.6);color:#f472b6"><span class="ms">power_settings_new</span><span>Exit PC</span></button>
@@ -393,7 +487,8 @@
           <div class="nocs-box">${appsFormHtml}</div>
         </div>
         <div class="nocs-main" id="pcsPaneSys" style="display:none">
-          <h2 style="margin:0;font-size:19px">Desktop Style &amp; System</h2>
+          <h2 style="margin:0;font-size:19px">System &amp; Browser</h2>
+          <div class="nocs-box">${fakeBrowserCardHtml}</div>
           <div class="nocs-box" style="display:flex;flex-direction:column;gap:14px">
             <div class="pcs-lbl">Desktop Style</div>
             <div class="pcs-seg" id="pcsStyleSeg">
@@ -424,7 +519,7 @@
             <button type="button" class="w11s-nb on" data-stab="home"><span class="ms fill" style="font-size:18px;color:#60cdff">home</span>Home</button>
             <button type="button" class="w11s-nb" data-stab="wp"><span class="ms fill" style="font-size:18px;color:#c084fc">brush</span>Personalization</button>
             <button type="button" class="w11s-nb" data-stab="apps"><span class="ms fill" style="font-size:18px;color:#34d399">apps</span>Apps</button>
-            <button type="button" class="w11s-nb" data-stab="system"><span class="ms fill" style="font-size:18px;color:#60cdff">laptop_windows</span>System</button>
+            <button type="button" class="w11s-nb" data-stab="system"><span class="ms fill" style="font-size:18px;color:#60cdff">laptop_windows</span>System &amp; Browser</button>
           </nav>
         </aside>
         <div class="w11s-main" id="pcsPaneHome">
@@ -444,7 +539,7 @@
               <b style="font-size:13.5px">Recommended settings</b>
               <button type="button" class="w11s-row" data-jump="wp"><span>Wallpaper &amp; Background</span><span class="ms" style="font-size:16px">chevron_right</span></button>
               <button type="button" class="w11s-row" data-jump="apps"><span>Installed Apps &amp; Add App</span><span class="ms" style="font-size:16px">chevron_right</span></button>
-              <button type="button" class="w11s-row" data-jump="system"><span>Desktop Style &amp; Exit</span><span class="ms" style="font-size:16px">chevron_right</span></button>
+              <button type="button" class="w11s-row" data-jump="system"><span>Fake Browser (Edge / Chrome)</span><span class="ms" style="font-size:16px">chevron_right</span></button>
             </div>
             <div class="w11s-card">
               <b style="font-size:13.5px">Personalize your device</b>
@@ -469,7 +564,8 @@
           <div class="w11s-card">${appsFormHtml}</div>
         </div>
         <div class="w11s-main" id="pcsPaneSys" style="display:none">
-          <h2 style="margin:0;font-size:22px;font-weight:600">System</h2>
+          <h2 style="margin:0;font-size:22px;font-weight:600">System &amp; Browser</h2>
+          <div class="w11s-card">${fakeBrowserCardHtml}</div>
           <div class="w11s-card">
             <div class="pcs-lbl">Desktop Style</div>
             <div class="pcs-seg" id="pcsStyleSeg">
@@ -584,7 +680,7 @@
             <b style="font-size:12.5px">Notifications</b>
             <span style="font-size:11px;opacity:.65" id="w11FlyStats">Online</span>
           </div>
-          <div style="font-size:12px;opacity:.8">Web Tok is running in Windows 11 Dark Mode. Open Settings to manage wallpaper and custom apps.</div>
+          <div style="font-size:12px;opacity:.8">Web Tok is running in Windows 11 Dark Mode. Open Settings to manage wallpaper, browser mode, and custom apps.</div>
         </div>
         <div class="w11-card">
           <div style="font-size:12.5px;font-weight:600" id="w11CalHead">${new Date().toLocaleDateString([], { month: "long", year: "numeric" })}</div>
@@ -618,6 +714,25 @@
   const w11Start = root.querySelector("#w11Start");
   const w11Fly = root.querySelector("#w11Fly");
 
+  function applyBrowserChrome() {
+    if (!appWin) return;
+    appWin.classList.remove("is-browser", "br-firefox", "br-edge", "br-chrome");
+    if (cfg.fakeBrowser) {
+      const brClass = isNoc ? "br-firefox" : (cfg.winBrowser === "chrome" ? "br-chrome" : "br-edge");
+      appWin.classList.add("is-browser", brClass);
+    }
+    const bms = root.querySelector("#pcBrBookmarks");
+    if (bms) {
+      const bmApps = allApps().filter(a => a.href);
+      bms.innerHTML = bmApps.map(a => {
+        const ico = a.logo
+          ? `<img src="${a.logo}" alt="" onerror="this.src='/images/logo.png'">`
+          : `<span class="ms fill" style="font-size:14px;color:${a.color}">${a.icon || "language"}</span>`;
+        return `<button type="button" class="pc-br-bm ${curAppHref === a.href ? "active" : ""}" data-app="${a.id}" title="${a.name.replace(/"/g, "&quot;")}">${ico}<span>${a.name.replace(/</g, "&lt;")}</span></button>`;
+      }).join("");
+    }
+  }
+
   function openInWindow(app) {
     if (!app) return;
     if (app.action) { app.action(); return; }
@@ -626,12 +741,21 @@
     settingsWin?.classList.add("hidden-win");
     curAppHref = app.href;
     root.querySelector("#pcAppTitle").textContent = app.name;
+    root.querySelector("#pcBrTabTitle").textContent = app.name;
     const wl = root.querySelector("#pcAppWinLogo");
+    const bl = root.querySelector("#pcBrTabLogo");
     if (wl) wl.src = app.logo || "/images/logo.png";
+    if (bl) bl.src = app.logo || "/images/logo.png";
+    const fullUrl = app.href.startsWith("/") ? location.origin + app.href : app.href;
+    const urlIn = root.querySelector("#pcBrUrl");
+    if (urlIn) urlIn.value = fullUrl;
     const pop = root.querySelector("#pcAppPop");
     if (pop) pop.href = app.href;
+    const bpop = root.querySelector("#pcBrPop");
+    if (bpop) bpop.href = app.href;
     if (appFrame && appFrame.getAttribute("src") !== app.href) appFrame.src = app.href;
     appWin?.classList.remove("hidden-win");
+    applyBrowserChrome();
     renderAppLists();
   }
 
@@ -680,10 +804,11 @@
         root.querySelector("#w11Search")?.focus();
       });
     }
+    applyBrowserChrome();
   }
   renderAppLists();
 
-  // Delegated click for all [data-app] buttons
+  // Delegated click for all [data-app] buttons (including bookmarks!)
   root.addEventListener("click", e => {
     const btn = e.target.closest("[data-app]");
     if (!btn) return;
@@ -693,7 +818,7 @@
 
   function paintSettingsWindow() {
     root.querySelectorAll("[data-stab]").forEach(b => b.classList.toggle("on", b.dataset.stab === activeSettingsTab));
-    const titles = { home: "Home", wp: "Wallpaper & Theme", apps: "Apps", system: "System" };
+    const titles = { home: "Home", wp: "Wallpaper & Theme", apps: "Apps", system: "System & Browser" };
     const nt = root.querySelector("#nocSetTitle");
     if (nt) nt.textContent = titles[activeSettingsTab] || "Settings";
 
@@ -708,7 +833,14 @@
 
     root.querySelectorAll("#pcsWpSeg button").forEach(b => b.classList.toggle("on", b.dataset.wp === (cfg.wpMode || "default")));
     root.querySelectorAll("#pcsStyleSeg button").forEach(b => b.classList.toggle("on", b.dataset.st === (cfg.style || "nocturnal")));
+    root.querySelectorAll("#pcsFbSeg button").forEach(b => b.classList.toggle("on", b.dataset.fb === (cfg.fakeBrowser ? "on" : "off")));
+    root.querySelectorAll("#pcsWbSeg button").forEach(b => b.classList.toggle("on", b.dataset.wb === (cfg.winBrowser || "edge")));
     root.querySelectorAll("#w11WpThumbs [data-qwp]").forEach(b => b.classList.toggle("on", b.dataset.qwp === (cfg.wpMode || "default")));
+
+    const wbWrap = root.querySelector("#pcsWinBrWrap");
+    if (wbWrap) wbWrap.style.display = cfg.fakeBrowser ? "flex" : "none";
+    const nocFb = root.querySelector("#nocSetFbTog");
+    if (nocFb) nocFb.classList.toggle("on", !!cfg.fakeBrowser);
 
     const custRow = root.querySelector("#pcsCustRow");
     if (custRow) custRow.style.display = cfg.wpMode === "custom" ? "flex" : "none";
@@ -863,6 +995,26 @@
     applyWallpaper();
     paintSettingsWindow();
   });
+  root.querySelector("#pcsFbSeg")?.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    cfg.fakeBrowser = b.dataset.fb === "on";
+    saveCfg(cfg);
+    applyBrowserChrome();
+    paintSettingsWindow();
+  });
+  root.querySelector("#pcsWbSeg")?.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    cfg.winBrowser = b.dataset.wb;
+    saveCfg(cfg);
+    applyBrowserChrome();
+    paintSettingsWindow();
+  });
+  root.querySelector("#nocSetFbTog")?.addEventListener("click", () => {
+    cfg.fakeBrowser = !cfg.fakeBrowser;
+    saveCfg(cfg);
+    applyBrowserChrome();
+    paintSettingsWindow();
+  });
   root.querySelector("#pcsCustSave")?.addEventListener("click", () => {
     cfg.wpMode = "custom";
     cfg.customWp = root.querySelector("#pcsCustIn").value.trim();
@@ -942,15 +1094,39 @@
     if (!authToken) location.href = "/login?next=" + encodeURIComponent("/computer");
   });
 
-  root.querySelector("#pcAppReload")?.addEventListener("click", () => { if (appFrame && curAppHref) appFrame.src = curAppHref; });
-  root.querySelector("#pcAppMax")?.addEventListener("click", () => appWin?.classList.toggle("max-win"));
-  root.querySelector("#pcAppMin")?.addEventListener("click", () => { appWin?.classList.add("hidden-win"); renderAppLists(); });
-  root.querySelector("#pcAppClose")?.addEventListener("click", () => {
+  // App Window & Fake Browser controls
+  const reloadApp = () => { if (appFrame && curAppHref) appFrame.src = curAppHref; };
+  const maxApp = () => appWin?.classList.toggle("max-win");
+  const minApp = () => { appWin?.classList.add("hidden-win"); renderAppLists(); };
+  const closeApp = () => {
     if (appFrame) appFrame.src = "about:blank";
     curAppHref = "";
     appWin?.classList.add("hidden-win");
     appWin?.classList.remove("max-win");
     renderAppLists();
+  };
+  root.querySelector("#pcAppReload")?.addEventListener("click", reloadApp);
+  root.querySelector("#pcBrReload")?.addEventListener("click", reloadApp);
+  root.querySelector("#pcAppMax")?.addEventListener("click", maxApp);
+  root.querySelector("#pcBrMax")?.addEventListener("click", maxApp);
+  root.querySelector("#pcAppMin")?.addEventListener("click", minApp);
+  root.querySelector("#pcBrMin")?.addEventListener("click", minApp);
+  root.querySelector("#pcAppClose")?.addEventListener("click", closeApp);
+  root.querySelector("#pcBrClose")?.addEventListener("click", closeApp);
+  root.querySelector("#pcBrTabClose")?.addEventListener("click", closeApp);
+  root.querySelector("#pcBrNewTab")?.addEventListener("click", () => openInWindow(BUILTIN_APPS[0]));
+  root.querySelector("#pcBrBack")?.addEventListener("click", () => { try { appFrame?.contentWindow?.history.back(); } catch {} });
+  root.querySelector("#pcBrFwd")?.addEventListener("click", () => { try { appFrame?.contentWindow?.history.forward(); } catch {} });
+  root.querySelector("#pcBrUrl")?.addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    let val = e.target.value.trim();
+    if (!val) return;
+    if (!/^https?:\/\//i.test(val) && !val.startsWith("/")) val = "https://" + val;
+    curAppHref = val;
+    if (appFrame) appFrame.src = val;
+    const pop = root.querySelector("#pcAppPop"), bpop = root.querySelector("#pcBrPop");
+    if (pop) pop.href = val;
+    if (bpop) bpop.href = val;
   });
 
   root.querySelector("#w11TrayClock")?.addEventListener("click", e => {
