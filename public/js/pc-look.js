@@ -1,11 +1,10 @@
-/* PC Look Mode (Windows 11 & Nocturnal Shell Hyprland + Quickshell) on /computer */
+/* PC Look Mode (Windows 11 & Nocturnal Shell Hyprland + Quickshell) on /computer with in-desktop iframe windows */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   let cfg;
   try { cfg = { enabled: false, style: "nocturnal", light: false, glass: true, ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}") }; }
   catch { cfg = { enabled: false, style: "nocturnal", light: false, glass: true }; }
 
-  // On normal homepage (/), redirect to /computer when PC Look Mode is turned on
   if (page === "landing") {
     if (cfg.enabled) location.replace("/computer");
     return;
@@ -32,6 +31,7 @@
 
   let quoteIdx = 0;
   let activeWs = 1;
+  let curAppHref = "";
 
   const st = document.createElement("style");
   st.textContent = `
@@ -62,24 +62,29 @@
     .pc-ico-box{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(16,18,28,.55);backdrop-filter:blur(10px);box-shadow:0 4px 12px #0004}
     .pc-ico span.lbl{font-size:11px;line-height:1.2;font-weight:600;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.85)}
 
-    /* Main Window */
+    /* Windows */
     .pc-win{flex:1;min-width:0;display:flex;flex-direction:column;border-radius:14px;overflow:hidden;backdrop-filter:blur(22px);box-shadow:0 20px 56px rgba(0,0,0,.45);transition:opacity .18s,transform .18s}
-    .pc-win.hidden-win{opacity:0;pointer-events:none;transform:scale(.96)}
-    #wt-pc.win11 .pc-win{background:rgba(24,28,40,.78);border:1px solid rgba(255,255,255,.18);border-radius:12px}
-    #wt-pc.win11.daylight .pc-win{background:rgba(255,255,255,.82);border:1px solid rgba(15,23,42,.12)}
-    #wt-pc.nocturnal .pc-win{background:rgba(18,19,26,.78);border:2px solid #c9b8ff;border-radius:14px}
-    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.48);backdrop-filter:blur(28px)}
-    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.82);border:2px solid #7c5dfa}
+    .pc-win.hidden-win{display:none!important}
+    .pc-win.max-win{position:fixed;inset:8px 8px 56px 8px;z-index:28;border-radius:12px}
+    #wt-pc.nocturnal .pc-win.max-win{inset:62px 12px 68px 12px}
+    #wt-pc.win11 .pc-win{background:rgba(24,28,40,.8);border:1px solid rgba(255,255,255,.18);border-radius:12px}
+    #wt-pc.win11.daylight .pc-win{background:rgba(255,255,255,.85);border:1px solid rgba(15,23,42,.12)}
+    #wt-pc.nocturnal .pc-win{background:rgba(18,19,26,.8);border:2px solid #c9b8ff;border-radius:14px}
+    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.52);backdrop-filter:blur(28px)}
+    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.86);border:2px solid #7c5dfa}
 
     .pc-titlebar{height:40px;padding:0 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.12);flex:none}
     .daylight .pc-titlebar{border-bottom-color:rgba(0,0,0,.08)}
-    .pc-wtitle{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
-    .pc-wbtns{display:flex;gap:6px;align-items:center}
-    .pc-wbtn{width:28px;height:28px;border-radius:7px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;font-size:16px}
+    .pc-wtitle{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .pc-wbtns{display:flex;gap:5px;align-items:center;flex:none}
+    .pc-wbtn{width:28px;height:28px;border-radius:7px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;font-size:16px;text-decoration:none}
     .pc-wbtn:hover{background:rgba(255,255,255,.14)}
     .pc-wbtn.close:hover{background:#e11d48;color:#fff}
 
     .pc-win-body{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:18px}
+    .pc-iframe-wrap{flex:1;min-height:0;background:#0e0d14;display:flex}
+    .pc-iframe{width:100%;height:100%;border:0;flex:1}
+
     .pc-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
     .pc-hero h1{font-size:clamp(24px,3.4vw,36px);margin:0 0 6px;line-height:1.1}
     .pc-hero p{margin:0;opacity:.82;font-size:13.5px;max-width:52ch}
@@ -118,7 +123,7 @@
     .noc-dock-wrap{display:flex;justify-content:center;padding:0 14px 12px;flex:none;z-index:30}
     .noc-dock{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:18px;background:rgba(18,19,26,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15)}
     #wt-pc.nocturnal.daylight .noc-dock{background:rgba(243,241,250,.86);border-color:rgba(0,0,0,.12)}
-    .noc-dock a,.noc-dock button{width:42px;height:42px;border-radius:12px;border:0;background:rgba(255,255,255,.08);color:inherit;display:grid;place-items:center;text-decoration:none;cursor:pointer;transition:transform .15s,background .15s}
+    .noc-dock a,.noc-dock button{width:42px;height:42px;border-radius:12px;border:0;background:rgba(255,255,255,.08);color:inherit;display:grid;place-items:center;text-decoration:none;cursor:pointer;transition:transform .15s,background .15s;position:relative}
     .noc-dock a:hover,.noc-dock button:hover{transform:translateY(-3px) scale(1.06);background:rgba(201,184,255,.28)}
 
     /* Windows 11 Taskbar & Start Menu */
@@ -146,14 +151,12 @@
   const isNoc = (cfg.style || "nocturnal") === "nocturnal";
   root.className = (isNoc ? "nocturnal" : "win11") + (cfg.light ? " daylight" : "") + (cfg.glass !== false ? " glass" : "");
 
-  const iconsHtml = APPS.map(a => a.href
-    ? `<a class="pc-ico" href="${a.href}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></a>`
-    : `<button type="button" class="pc-ico" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></button>`
+  const iconsHtml = APPS.map(a =>
+    `<button type="button" class="pc-ico" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></button>`
   ).join("");
 
-  const appCardsHtml = APPS.map(a => a.href
-    ? `<a class="pc-app-card" href="${a.href}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><div><b style="display:block;font-size:13.5px">${a.name}</b><small style="opacity:.75;font-size:11.5px">${a.sub}</small></div></a>`
-    : `<button type="button" class="pc-app-card" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><div><b style="display:block;font-size:13.5px">${a.name}</b><small style="opacity:.75;font-size:11.5px">${a.sub}</small></div></button>`
+  const appCardsHtml = APPS.map(a =>
+    `<button type="button" class="pc-app-card" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><div><b style="display:block;font-size:13.5px">${a.name}</b><small style="opacity:.75;font-size:11.5px">${a.sub}</small></div></button>`
   ).join("");
 
   const mainWinHtml = `
@@ -172,11 +175,11 @@
         <div class="pc-hero">
           <div>
             <h1>Short videos. Big vibes.</h1>
-            <p>Web Tok is running in ${isNoc ? "Nocturnal Shell (Hyprland + Quickshell)" : "Windows 11"} on /computer. Launch any corner of Web Tok below.</p>
+            <p>Web Tok is running in ${isNoc ? "Nocturnal Shell (Hyprland + Quickshell)" : "Windows 11"} on /computer. Click any app to open it right here inside a desktop window.</p>
           </div>
           <div class="pc-actions">
-            <a class="pc-btn p" href="/scroll#fyp"><span class="ms">play_arrow</span>Start scrolling</a>
-            <a class="pc-btn" id="pcSigninBtn" href="/login">Sign in</a>
+            <button type="button" class="pc-btn p" data-app="feed"><span class="ms">play_arrow</span>Open FYP in Window</button>
+            <button type="button" class="pc-btn" id="pcSigninBtn"><span class="ms" style="font-size:17px">login</span>Sign in</button>
           </div>
         </div>
         <div class="pc-stats">
@@ -184,6 +187,24 @@
           <div class="pc-stat"><span class="pc-dot"></span><strong id="pcStOnline">—</strong> online now</div>
         </div>
         <div class="pc-app-grid">${appCardsHtml}</div>
+      </div>
+    </div>
+    <div class="pc-win hidden-win" id="pcAppWin">
+      <div class="pc-titlebar">
+        <div class="pc-wtitle">
+          <span class="ms fill" id="pcAppIcon" style="font-size:18px;color:#c9b8ff">smart_display</span>
+          <span id="pcAppTitle">Web Tok</span>
+        </div>
+        <div class="pc-wbtns">
+          <button type="button" class="pc-wbtn" id="pcAppReload" title="Reload"><span class="ms" style="font-size:16px">refresh</span></button>
+          <a class="pc-wbtn" id="pcAppPop" href="/scroll#fyp" title="Open full page"><span class="ms" style="font-size:16px">open_in_new</span></a>
+          <button type="button" class="pc-wbtn" id="pcAppMax" title="Maximize"><span class="ms" style="font-size:16px">fullscreen</span></button>
+          <button type="button" class="pc-wbtn" id="pcAppMin" title="Minimize"><span class="ms" style="font-size:16px">minimize</span></button>
+          <button type="button" class="pc-wbtn close" id="pcAppClose" title="Close"><span class="ms" style="font-size:16px">close</span></button>
+        </div>
+      </div>
+      <div class="pc-iframe-wrap">
+        <iframe class="pc-iframe" id="pcAppFrame" allow="autoplay; microphone; camera; fullscreen; clipboard-write"></iframe>
       </div>
     </div>`;
 
@@ -202,7 +223,7 @@
         <div class="noc-pill" id="pcClock">--:--</div>
         <div class="noc-grp">
           <span class="noc-pill"><span class="ms" style="font-size:15px">wifi</span>Online</span>
-          <a class="noc-pill" id="pcBarAuth" href="/login">Sign in</a>
+          <button type="button" class="noc-pill" id="pcBarAuth">Sign in</button>
           <button type="button" class="noc-pill" id="pcOpenSec" title="Secret Settings"><span class="ms" style="font-size:16px">settings</span></button>
         </div>
       </header>
@@ -235,8 +256,8 @@
       </div>
       <div class="noc-dock-wrap">
         <nav class="noc-dock">
-          ${APPS.slice(0, 7).map(a => `<a href="${a.href}" title="${a.name}" style="color:${a.color}"><span class="ms fill">${a.icon}</span></a>`).join("")}
-          <button type="button" id="nocDockWin" title="Toggle Web Tok Window"><span class="ms">web_asset</span></button>
+          ${APPS.slice(0, 7).map(a => `<button type="button" data-app="${a.id}" title="${a.name}" style="color:${a.color}"><span class="ms fill">${a.icon}</span></button>`).join("")}
+          <button type="button" id="nocDockWin" title="Desktop Hub"><span class="ms">home</span></button>
           <button type="button" id="nocDockSec" title="Secret Settings" style="color:#fb7185"><span class="ms fill">tune</span></button>
         </nav>
       </div>`;
@@ -252,10 +273,7 @@
           <button type="button" class="pc-btn" id="w11SwitchNoc" style="padding:5px 10px;font-size:11px">Switch to Nocturnal Shell</button>
         </div>
         <div class="w11-sgrid">
-          ${APPS.map(a => a.href
-            ? `<a class="pc-ico" style="width:100%" href="${a.href}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></a>`
-            : `<button type="button" class="pc-ico" style="width:100%" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></button>`
-          ).join("")}
+          ${APPS.map(a => `<button type="button" class="pc-ico" style="width:100%" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></button>`).join("")}
         </div>
       </div>
       <footer class="w11-bar">
@@ -267,7 +285,7 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6"><rect x="2" y="2" width="9" height="9" rx="1.5"/><rect x="13" y="2" width="9" height="9" rx="1.5"/><rect x="2" y="13" width="9" height="9" rx="1.5"/><rect x="13" y="13" width="9" height="9" rx="1.5"/></svg>
           </button>
           <button type="button" class="w11-tbtn active" id="w11WinToggle" title="Web Tok Hub"><img src="/images/logo.png" alt="" width="22" height="22" style="border-radius:5px"></button>
-          ${APPS.slice(0, 5).map(a => `<a class="w11-tbtn" href="${a.href}" title="${a.name}" style="color:${a.color}"><span class="ms fill" style="font-size:20px">${a.icon}</span></a>`).join("")}
+          ${APPS.slice(0, 5).map(a => `<button type="button" class="w11-tbtn" data-app="${a.id}" title="${a.name}" style="color:${a.color}"><span class="ms fill" style="font-size:20px">${a.icon}</span></button>`).join("")}
           <button type="button" class="w11-tbtn" id="pcOpenSec" title="Secret Settings" style="color:#fb7185"><span class="ms fill" style="font-size:20px">tune</span></button>
         </div>
         <div class="w11-tray">
@@ -280,18 +298,65 @@
 
   document.body.appendChild(root);
 
-  root.querySelectorAll('[data-app="secret"], #pcOpenSec, #nocSecBtn, #nocDockSec').forEach(el => {
+  const mainWin = root.querySelector("#pcMainWin");
+  const appWin = root.querySelector("#pcAppWin");
+  const appFrame = root.querySelector("#pcAppFrame");
+  const w11Start = root.querySelector("#w11Start");
+
+  function openInWindow(app) {
+    if (!app) return;
+    if (app.action) { app.action(); return; }
+    w11Start?.classList.remove("open");
+    curAppHref = app.href;
+    root.querySelector("#pcAppTitle").textContent = app.name;
+    const ic = root.querySelector("#pcAppIcon");
+    if (ic) { ic.textContent = app.icon; ic.style.color = app.color; }
+    const pop = root.querySelector("#pcAppPop");
+    if (pop) pop.href = app.href;
+    if (appFrame && appFrame.getAttribute("src") !== app.href) appFrame.src = app.href;
+    mainWin?.classList.add("hidden-win");
+    appWin?.classList.remove("hidden-win");
+  }
+
+  function showHub() {
+    appWin?.classList.add("hidden-win");
+    appWin?.classList.remove("max-win");
+    mainWin?.classList.remove("hidden-win");
+  }
+
+  root.querySelectorAll("[data-app]").forEach(el => {
+    el.addEventListener("click", () => {
+      const app = APPS.find(a => a.id === el.dataset.app);
+      openInWindow(app);
+    });
+  });
+
+  root.querySelectorAll("#pcOpenSec, #nocSecBtn, #nocDockSec").forEach(el => {
     el.onclick = () => window.openSecretSettings?.();
   });
 
-  const mainWin = root.querySelector("#pcMainWin");
-  const toggleWin = show => { if (mainWin) mainWin.classList.toggle("hidden-win", show === undefined ? !mainWin.classList.contains("hidden-win") : !show); };
-  root.querySelector("#pcWinMin")?.addEventListener("click", () => toggleWin(false));
-  root.querySelector("#pcWinClose")?.addEventListener("click", () => toggleWin(false));
-  root.querySelector("#nocDockWin")?.addEventListener("click", () => toggleWin());
-  root.querySelector("#w11WinToggle")?.addEventListener("click", () => toggleWin());
+  root.querySelector("#pcWinMin")?.addEventListener("click", () => mainWin?.classList.add("hidden-win"));
+  root.querySelector("#pcWinClose")?.addEventListener("click", () => mainWin?.classList.add("hidden-win"));
+  root.querySelector("#nocDockWin")?.addEventListener("click", showHub);
+  root.querySelector("#w11WinToggle")?.addEventListener("click", () => {
+    if (appWin && !appWin.classList.contains("hidden-win")) showHub();
+    else if (mainWin?.classList.contains("hidden-win") && curAppHref) {
+      appWin?.classList.remove("hidden-win");
+    } else mainWin?.classList.toggle("hidden-win");
+  });
 
-  const w11Start = root.querySelector("#w11Start");
+  root.querySelector("#pcAppReload")?.addEventListener("click", () => { if (appFrame && curAppHref) appFrame.src = curAppHref; });
+  root.querySelector("#pcAppMax")?.addEventListener("click", () => appWin?.classList.toggle("max-win"));
+  root.querySelector("#pcAppMin")?.addEventListener("click", () => { appWin?.classList.add("hidden-win"); });
+  root.querySelector("#pcAppClose")?.addEventListener("click", () => {
+    if (appFrame) appFrame.src = "about:blank";
+    curAppHref = "";
+    showHub();
+  });
+
+  root.querySelector("#pcSigninBtn")?.addEventListener("click", () => openInWindow({ name: "Sign in", icon: "login", color: "#60a5fa", href: "/login" }));
+  root.querySelector("#pcBarAuth")?.addEventListener("click", () => openInWindow({ name: "Sign in", icon: "login", color: "#60a5fa", href: "/login" }));
+
   root.querySelector("#w11StartBtn")?.addEventListener("click", e => { e.stopPropagation(); w11Start?.classList.toggle("open"); });
   document.addEventListener("click", e => { if (w11Start && !w11Start.contains(e.target) && e.target.id !== "w11StartBtn") w11Start.classList.remove("open"); });
   root.querySelector("#w11SwitchNoc")?.addEventListener("click", () => {
@@ -354,9 +419,10 @@
       if (window.sb?.auth?.getSession) {
         const { data } = await sb.auth.getSession();
         if (data?.session) {
-          [root.querySelector("#pcSigninBtn"), root.querySelector("#pcBarAuth")].forEach(el => {
-            if (el) { el.textContent = "Go to Web Tok"; el.href = "/scroll"; }
-          });
+          const sbBtn = root.querySelector("#pcSigninBtn");
+          if (sbBtn) { sbBtn.innerHTML = `<span class="ms">play_arrow</span>Go to Web Tok`; sbBtn.onclick = () => openInWindow(APPS[0]); }
+          const ba = root.querySelector("#pcBarAuth");
+          if (ba) { ba.textContent = "Feed"; ba.onclick = () => openInWindow(APPS[0]); }
         }
       }
     } catch {}

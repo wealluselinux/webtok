@@ -76,6 +76,12 @@ const BUNDLES = [
 ];
 
 module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, nowIso }) {
+  // Allow Web Tok pages to load inside /computer iframes and external embeds
+  app.use((_req, res, next) => {
+    res.removeHeader("X-Frame-Options");
+    next();
+  });
+
   let ready = false;
   async function ensureTables() {
     if (ready) return;
