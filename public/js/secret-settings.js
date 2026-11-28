@@ -23,13 +23,21 @@
     } catch {}
     if (window.wtApplySpinShapes) window.wtApplySpinShapes(!!on);
   }
+  function getPcLook() {
+    try { return { enabled: false, style: "nocturnal", light: false, glass: true, ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}") }; }
+    catch { return { enabled: false, style: "nocturnal", light: false, glass: true }; }
+  }
+  function savePcLook(p, reload) {
+    localStorage.setItem("wt_pc_look", JSON.stringify(p));
+    if (reload) location.reload();
+  }
 
   window.openSecretSettings = function () {
     let dlg = document.getElementById("wt-secret-dlg");
     if (!dlg) {
       const st = document.createElement("style");
       st.textContent = `
-        #wt-secret-dlg{border:0;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg,#f6f1fc);color:var(--text,#1d192b);font-family:inherit}
+        #wt-secret-dlg{border:0;width:100vw;max-width:none;height:100dvh;max-height:none;margin:0;border-radius:0;padding:0;background:var(--bg,#f6f1fc);color:var(--text,#1d192b);font-family:inherit;z-index:10000}
         #wt-secret-dlg[open]{display:flex;flex-direction:column}
         .ss-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--surface);background:var(--bg);flex:none}
         .ss-title{display:flex;align-items:center;gap:12px}
@@ -66,6 +74,24 @@
           <button type="button" class="btn icon" id="ssClose" aria-label="Close"><span class="ms">close</span></button>
         </div>
         <div class="ss-body"><div class="ss-wrap">
+          <div class="ss-card">
+            <div class="ss-sec-h">PC Look Mode (Desktop Homepage)</div>
+            <div class="ss-row">
+              <div>
+                <b style="font-size:15px">PC Look Mode</b>
+                <div style="font-size:12px;color:var(--muted)">Reloads the homepage into a full desktop UI (Windows 11 or Nocturnal Shell)</div>
+              </div>
+              <button type="button" class="ss-switch" id="ssPcTog" aria-label="Toggle PC Look Mode"></button>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">Desktop Style</div>
+              <div class="ss-seg" id="ssPcSeg">
+                <button type="button" data-pc="win11">Windows 11</button>
+                <button type="button" data-pc="nocturnal">Nocturnal Shell (Hyprland)</button>
+              </div>
+            </div>
+          </div>
+
           <div class="ss-card">
             <div class="ss-sec-h">Capri Desktop Pet</div>
             <div class="ss-row">
@@ -133,6 +159,9 @@
 
       const paint = () => {
         const c = getCfg();
+        const pc = getPcLook();
+        dlg.querySelector("#ssPcTog").classList.toggle("on", !!pc.enabled);
+        dlg.querySelectorAll("#ssPcSeg button").forEach(b => b.classList.toggle("on", b.dataset.pc === (pc.style || "nocturnal")));
         dlg.querySelector("#ssCapriTog").classList.toggle("on", !!c.enabled);
         dlg.querySelector("#ssCurTog").classList.toggle("on", !!c.cursor);
         dlg.querySelector("#ssGravTog").classList.toggle("on", !!c.gravityBtn);
@@ -143,6 +172,18 @@
         dlg.querySelectorAll("#ssSizeSeg button").forEach(b => b.classList.toggle("on", b.dataset.sz === c.size));
       };
       dlg.querySelector("#ssClose").onclick = () => dlg.close();
+      dlg.querySelector("#ssPcTog").onclick = () => {
+        const pc = getPcLook();
+        pc.enabled = !pc.enabled;
+        savePcLook(pc, true);
+      };
+      dlg.querySelector("#ssPcSeg").onclick = e => {
+        const b = e.target.closest("button"); if (!b) return;
+        const pc = getPcLook();
+        pc.style = b.dataset.pc;
+        savePcLook(pc, !!pc.enabled);
+        paint();
+      };
       dlg.querySelector("#ssCapriTog").onclick = () => { const c = getCfg(); c.enabled = !c.enabled; saveCfg(c); paint(); };
       dlg.querySelector("#ssCurTog").onclick = () => { const c = getCfg(); c.cursor = !c.cursor; saveCfg(c); paint(); };
       dlg.querySelector("#ssGravTog").onclick = () => { const c = getCfg(); c.gravityBtn = !c.gravityBtn; saveCfg(c); paint(); };
