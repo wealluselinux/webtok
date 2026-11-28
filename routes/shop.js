@@ -76,11 +76,19 @@ const BUNDLES = [
 ];
 
 module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, nowIso }) {
-  // Allow Web Tok pages to load inside /computer iframes and external embeds
+  // Strip X-Frame-Options at the very top of Express stack so all pages & static files work in iframes
   app.use((_req, res, next) => {
+    const origSet = res.setHeader.bind(res);
+    res.setHeader = (name, val) => {
+      if (String(name).toLowerCase() === "x-frame-options") return res;
+      return origSet(name, val);
+    };
     res.removeHeader("X-Frame-Options");
     next();
   });
+  if (app._router?.stack?.length > 1) {
+    app._router.stack.unshift(app._router.stack.pop());
+  }
 
   let ready = false;
   async function ensureTables() {
