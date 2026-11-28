@@ -1,4 +1,4 @@
-/* Tok Coins, Profile Frames, Card Decorations, Video Banners, Limited-Time Bundles & Coin Transfers Shop API (Turso) */
+/* Tok Coins, Profile Frames, Card Decorations, Video Banners, Limited-Time Bundles, Coin Transfers & /computer Custom Apps API (Turso) */
 const crypto = require("crypto");
 
 const LIKE_REWARD = 10;
@@ -75,6 +75,32 @@ const BUNDLES = [
   }
 ];
 
+function checkIframeHeaders(headers) {
+  const xfo = String(headers.get("x-frame-options") || "").trim().toLowerCase();
+  if (xfo === "deny" || xfo === "sameorigin" || xfo.startsWith("allow-from")) return false;
+  const csp = String(headers.get("content-security-policy") || "");
+  if (csp) {
+    const dir = csp.split(";").map(s => s.trim()).find(s => /^frame-ancestors\b/i.test(s));
+    if (dir) {
+      const vals = dir.replace(/^frame-ancestors\b/i, "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const allowsAny = vals.some(v => v === "*" || v === "https:" || v === "http:");
+      if (!allowsAny) return false;
+    }
+  }
+  return true;
+}
+
+function extractIconFromHtml(html, baseUrl) {
+  const m = html.match(/<link[^>]+rel=["'](?:shortcut\s+icon|icon|apple-touch-icon)["'][^>]*>/i);
+  if (m) {
+    const hrefMatch = m[0].match(/href=["']([^"']+)["']/i);
+    if (hrefMatch?.[1]) {
+      try { return new URL(hrefMatch[1], baseUrl).href; } catch {}
+    }
+  }
+  return null;
+}
+
 module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, nowIso }) {
   // Strip X-Frame-Options at the very top of Express stack so all pages & static files work in iframes
   app.use((_req, res, next) => {
@@ -135,14 +161,106 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
         note TEXT,
         created_at TEXT NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS user_computer_apps (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        logo_url TEXT,
+        created_at TEXT NOT NULL
+      )`,
       "CREATE INDEX IF NOT EXISTS idx_shop_user ON user_shop_items(user_id, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS idx_grants_user ON user_coin_grants(user_id)",
       "CREATE INDEX IF NOT EXISTS idx_vb_user ON user_video_banners(user_id)",
       "CREATE INDEX IF NOT EXISTS idx_xfer_from ON user_coin_transfers(from_user_id, created_at DESC)",
-      "CREATE INDEX IF NOT EXISTS idx_xfer_to ON user_coin_transfers(to_user_id, created_at DESC)"
+      "CREATE INDEX IF NOT EXISTS idx_xfer_to ON user_coin_transfers(to_user_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS idx_comp_apps_user ON user_computer_apps(user_id, created_at ASC)"
     ], "write");
     ready = true;
   }
+
+  /* ---------- /computer Custom Apps API ---------- */
+  app.get("/api/computer/apps", wrap(async req => {
+    const uid = uidFrom(req);
+    if (!uid) return { data: [], error: null };
+    await ensureTables();
+    const rows = await run("SELECT id, name, url, logo_url, created_at FROM user_computer_apps WHERE user_id = ? ORDER BY created_at ASC", [uid]);
+    return { data: rows, error: null };
+  }));
+
+  app.post("/api/computer/apps", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required to save apps.");
+    await ensureTables();
+    const name = String(req.body?.name || "").trim().slice(0, 40);
+    const rawUrl = String(req.body?.url || "").trim();
+    const rawLogo = String(req.body?.logoUrl || "").trim();
+    if (!name) throw new HttpError(400, "Enter an app name.");
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : "https://" + rawUrl);
+    } catch {
+      throw new HttpError(400, "Enter a valid website URL (e.g. https://example.com).");
+    }
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new HttpError(400, "Only http/https URLs are supported.");
+
+    let logoUrl = "";
+    if (rawLogo) {
+      if (!/^https?:\/\//i.test(rawLogo)) throw new HttpError(400, "Logo URL must start with http:// or https://");
+      logoUrl = rawLogo.slice(0, 500);
+    }
+
+    const reqHost = String(req.headers.host || "").split(":")[0].toLowerCase();
+    const isSameHost = parsedUrl.hostname.toLowerCase() === reqHost;
+
+    let detectedIcon = null;
+    if (!isSameHost) {
+      let resp;
+      try {
+        resp = await fetch(parsedUrl.href, {
+          method: "GET",
+          redirect: "follow",
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; WebTok/1.0)" },
+          signal: AbortSignal.timeout(7500)
+        });
+      } catch {
+        throw new HttpError(400, "Could not reach that site to check iframe support. Check the URL and try again.");
+      }
+
+      if (!checkIframeHeaders(resp.headers)) {
+        throw new HttpError(400, "This site can't run in an iframe. Choose a different one.");
+      }
+
+      if (!logoUrl) {
+        try {
+          const ct = String(resp.headers.get("content-type") || "");
+          if (ct.includes("text/html")) {
+            const html = (await resp.text()).slice(0, 45000);
+            detectedIcon = extractIconFromHtml(html, resp.url || parsedUrl.href);
+          }
+        } catch {}
+      }
+    }
+
+    if (!logoUrl) {
+      logoUrl = detectedIcon || `https://www.google.com/s2/favicons?domain=${encodeURIComponent(parsedUrl.hostname)}&sz=128`;
+    }
+
+    const id = crypto.randomUUID();
+    const ts = nowIso();
+    await db.execute({
+      sql: "INSERT INTO user_computer_apps (id, user_id, name, url, logo_url, created_at) VALUES (?,?,?,?,?,?)",
+      args: [id, uid, name, parsedUrl.href, logoUrl, ts]
+    });
+    return { data: { id, name, url: parsedUrl.href, logo_url: logoUrl, created_at: ts }, error: null };
+  }));
+
+  app.delete("/api/computer/apps/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await ensureTables();
+    await db.execute({ sql: "DELETE FROM user_computer_apps WHERE id = ? AND user_id = ?", args: [String(req.params.id || ""), uid] });
+    return { data: true, error: null };
+  }));
 
   async function getWallet(uid) {
     await ensureTables();
