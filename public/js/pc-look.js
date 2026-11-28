@@ -28,7 +28,13 @@
     return null;
   }
   function goToLogin() {
+    try {
+      const last = Number(sessionStorage.getItem("wt_pc_login_ts") || "0");
+      if (Date.now() - last < 5000) return false;
+      sessionStorage.setItem("wt_pc_login_ts", String(Date.now()));
+    } catch {}
     location.replace("/login?next=" + encodeURIComponent("/computer"));
+    return true;
   }
 
   let cfg = loadCfg();
@@ -460,7 +466,7 @@
 
   function openAddAppModal() {
     if (!authToken) {
-      goToLogin();
+      location.href = "/login?next=" + encodeURIComponent("/computer");
       return;
     }
     let dlg = document.getElementById("pcAddAppDlg");
@@ -495,7 +501,7 @@
         const hint = dlg.querySelector("#pcaHint");
         const btn = dlg.querySelector("#pcaAddBtn");
         if (!authToken) {
-          goToLogin();
+          location.href = "/login?next=" + encodeURIComponent("/computer");
           return;
         }
         if (!name || !url) {
@@ -640,10 +646,10 @@
   });
 
   root.querySelector("#pcAuthPill")?.addEventListener("click", () => {
-    if (!authToken) goToLogin();
+    if (!authToken) location.href = "/login?next=" + encodeURIComponent("/computer");
   });
   root.querySelector("#w11UserBtn")?.addEventListener("click", () => {
-    if (!authToken) goToLogin();
+    if (!authToken) location.href = "/login?next=" + encodeURIComponent("/computer");
   });
 
   root.querySelector("#pcAppReload")?.addEventListener("click", () => { if (appFrame && curAppHref) appFrame.src = curAppHref; });
@@ -720,6 +726,7 @@
       const { data } = await client.auth.getSession();
       authToken = data?.session?.access_token || null;
       if (!authToken) return false;
+      try { sessionStorage.removeItem("wt_pc_login_ts"); } catch {}
 
       const ar = await fetch("/api/computer/apps", { headers: { Authorization: "Bearer " + authToken } });
       const aj = await ar.json().catch(() => ({}));
@@ -750,8 +757,7 @@
   (async () => {
     const isSignedIn = await syncUserSession();
     if (!isSignedIn) {
-      goToLogin();
-      return;
+      if (goToLogin()) return;
     }
     try {
       const r = await fetch("/api/stats/users");
