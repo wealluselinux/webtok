@@ -1,4 +1,4 @@
-/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with custom DB-saved iframe apps & /login redirect */
+/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with Settings window (Wallpaper, OS & Add/Edit/Delete Apps) */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   function loadCfg() {
@@ -46,8 +46,7 @@
 
   const BUILTIN_APPS = [
     { id: "webtok", name: "Web Tok", sub: "For You & Feed", logo: "/images/logo.png", href: "/scroll#fyp", color: "#60cdff" },
-    { id: "add_app", name: "Add App", sub: "Save a website to desktop", icon: "add_box", action: () => openAddAppModal(), color: "#34d399" },
-    { id: "wp_settings", name: "Settings", sub: "Wallpaper & OS", icon: "settings", action: () => openDesktopSettings(), color: "#60cdff" },
+    { id: "wp_settings", name: "Settings", sub: "Wallpaper, OS & Apps", icon: "settings", action: () => openDesktopSettings("wp"), color: "#60cdff" },
     { id: "secret", name: "Secret Settings", sub: "Capri & Exit PC", icon: "tune", action: () => window.openSecretSettings?.(), color: "#f472b6" }
   ];
 
@@ -64,6 +63,8 @@
   let profileWallpaper = "";
   let customApps = [];
   let authToken = null;
+  let activeSettingsTab = "wp";
+  let editingAppId = null;
 
   try {
     const t = JSON.parse(localStorage.getItem("wt_theme") || "{}");
@@ -104,10 +105,10 @@
     .pc-win.hidden-win{display:none!important}
     .pc-win.max-win{position:fixed;inset:0 0 48px 0;z-index:28;border-radius:0!important}
     #wt-pc.nocturnal .pc-win.max-win{inset:62px 12px 68px 12px;border-radius:14px!important}
-    #wt-pc.win11 .pc-win{background:rgba(32,32,32,.88);border:1px solid rgba(255,255,255,.09);border-radius:8px}
-    #wt-pc.nocturnal .pc-win{background:rgba(18,19,26,.8);border:2px solid #c9b8ff;border-radius:14px}
-    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.52);backdrop-filter:blur(28px)}
-    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.86);border:2px solid #7c5dfa}
+    #wt-pc.win11 .pc-win{background:rgba(32,32,32,.9);border:1px solid rgba(255,255,255,.09);border-radius:8px}
+    #wt-pc.nocturnal .pc-win{background:rgba(18,19,26,.85);border:2px solid #c9b8ff;border-radius:14px}
+    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.58);backdrop-filter:blur(28px)}
+    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.9);border:2px solid #7c5dfa}
 
     .pc-titlebar{height:34px;padding:0 0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.07);flex:none;background:rgba(24,24,24,.65)}
     #wt-pc.nocturnal .pc-titlebar{height:40px;padding:0 14px;background:transparent}
@@ -128,6 +129,27 @@
     #wt-pc.nocturnal .pc-btn.p{background:#c9b8ff;color:#12131a;border-radius:10px}
 
     .pc-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
+
+    /* Settings Window */
+    .pcs-win-body{flex:1;min-height:0;display:flex;overflow:hidden}
+    .pcs-nav{width:190px;flex:none;padding:12px 10px;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:4px;background:rgba(20,20,24,.35)}
+    .pcs-nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;border:0;background:transparent;color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left;position:relative}
+    .pcs-nav-btn:hover{background:rgba(255,255,255,.07)}
+    .pcs-nav-btn.on{background:rgba(255,255,255,.1)}
+    .pcs-nav-btn.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:99px;background:#60cdff}
+    #wt-pc.nocturnal .pcs-nav-btn.on::before{background:#c9b8ff}
+    .pcs-pane{flex:1;min-width:0;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:18px}
+    .pcs-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+    .pcs-lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#60cdff}
+    #wt-pc.nocturnal .pcs-lbl{color:#c9b8ff}
+    .pcs-seg{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:4px;border-radius:8px}
+    .pcs-seg button{flex:1;border:0;background:transparent;color:inherit;opacity:.75;font:inherit;font-size:12px;font-weight:600;padding:8px;border-radius:6px;cursor:pointer}
+    .pcs-seg button.on{background:#60cdff;color:#000;opacity:1}
+    #wt-pc.nocturnal .pcs-seg button.on{background:#c9b8ff;color:#12131a}
+    .pcs-in{width:100%;padding:9px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.22);color:inherit;font:inherit;font-size:12.5px;outline:0}
+    .pca-list{display:flex;flex-direction:column;gap:8px}
+    .pca-row{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.07);font-size:12.5px}
+    .pca-row-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 
     /* Nocturnal Top Bar & Widgets */
     .noc-bar{height:44px;margin:10px 14px 0;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(18,19,26,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.14);flex:none;z-index:30}
@@ -183,22 +205,13 @@
     .w11-cal-d{height:30px;display:grid;place-items:center;border-radius:50%}
     .w11-cal-d.today{background:#60cdff;color:#000;font-weight:700}
 
-    /* Modals */
-    #pcSetDlg,#pcAddAppDlg{border:0;border-radius:12px;padding:22px;width:min(92vw,460px);background:#202020;color:#f3f3f3;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.1);font-family:inherit;z-index:9999}
-    #pcSetDlg::backdrop,#pcAddAppDlg::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
-    .pcs-sec{margin-top:14px;display:flex;flex-direction:column;gap:8px}
-    .pcs-lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#60cdff}
-    .pcs-seg{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:4px;border-radius:8px}
-    .pcs-seg button{flex:1;border:0;background:transparent;color:#cbd5e1;font:inherit;font-size:12px;font-weight:600;padding:8px;border-radius:6px;cursor:pointer}
-    .pcs-seg button.on{background:#60cdff;color:#000}
-    .pcs-in{width:100%;padding:9px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:#fff;font:inherit;font-size:12.5px;outline:0}
-    .pca-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;margin-top:6px}
-    .pca-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:8px;background:rgba(255,255,255,.06);font-size:12px}
-
     @media(max-width:900px){
       .noc-widgets,.pc-icons{display:none}
       .w11-sgrid{grid-template-columns:repeat(3,1fr)}
       .w11-rec{grid-template-columns:1fr}
+      .pcs-win-body{flex-direction:column}
+      .pcs-nav{width:100%;flex-direction:row;border-right:0;border-bottom:1px solid rgba(255,255,255,.08);overflow-x:auto}
+      .pcs-nav-btn.on::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:3px}
     }
   `;
   document.head.appendChild(st);
@@ -261,6 +274,68 @@
       </div>
     </div>`;
 
+  const settingsWinHtml = `
+    <div class="pc-win hidden-win" id="pcSettingsWin">
+      <div class="pc-titlebar">
+        <div class="pc-wtitle">
+          <span class="ms fill" style="font-size:16px;color:#60cdff">settings</span>
+          <span>Settings</span>
+        </div>
+        <div class="pc-wbtns">
+          <button type="button" class="pc-wbtn" id="pcSetMin" title="Minimize"><span class="ms" style="font-size:15px">remove</span></button>
+          <button type="button" class="pc-wbtn" id="pcSetMax" title="Maximize"><span class="ms" style="font-size:15px">crop_square</span></button>
+          <button type="button" class="pc-wbtn close" id="pcSetClose" title="Close"><span class="ms" style="font-size:15px">close</span></button>
+        </div>
+      </div>
+      <div class="pcs-win-body">
+        <nav class="pcs-nav">
+          <button type="button" class="pcs-nav-btn on" data-stab="wp"><span class="ms fill" style="font-size:18px;color:#60cdff">wallpaper</span>Wallpaper &amp; OS</button>
+          <button type="button" class="pcs-nav-btn" data-stab="apps"><span class="ms fill" style="font-size:18px;color:#34d399">apps</span>Apps</button>
+        </nav>
+        <div class="pcs-pane" id="pcsPaneWp">
+          <h2 style="margin:0;font-size:20px;font-weight:700">Wallpaper &amp; OS</h2>
+          <div class="pcs-card">
+            <div class="pcs-lbl">Wallpaper Source</div>
+            <div class="pcs-seg" id="pcsWpSeg">
+              <button type="button" data-wp="default">OS Default</button>
+              <button type="button" data-wp="profile">Use Profile Wallpaper</button>
+              <button type="button" data-wp="custom">Custom URL</button>
+            </div>
+            <div id="pcsProfNote" style="font-size:12px;opacity:.75"></div>
+            <div id="pcsCustRow" style="display:none;gap:8px;align-items:center">
+              <input type="text" class="pcs-in" id="pcsCustIn" placeholder="Paste image URL (https://…)">
+              <button type="button" class="pc-btn p" id="pcsCustSave">Apply</button>
+            </div>
+          </div>
+          <div class="pcs-card">
+            <div class="pcs-lbl">Desktop Style</div>
+            <div class="pcs-seg" id="pcsStyleSeg">
+              <button type="button" data-st="win11">Windows 11</button>
+              <button type="button" data-st="nocturnal">Nocturnal Shell</button>
+            </div>
+          </div>
+          <div>
+            <button type="button" class="pc-btn" id="pcsExitBtn" style="color:#f472b6"><span class="ms" style="font-size:17px">power_settings_new</span>Exit Computer Mode</button>
+          </div>
+        </div>
+        <div class="pcs-pane" id="pcsPaneApps" style="display:none">
+          <h2 style="margin:0;font-size:20px;font-weight:700">App Settings</h2>
+          <div class="pcs-card">
+            <div class="pcs-lbl">Add New App</div>
+            <input type="text" class="pcs-in" id="pcaName" maxlength="40" placeholder="App name (e.g. Wikipedia)">
+            <input type="text" class="pcs-in" id="pcaUrl" placeholder="Website URL (https://example.com)">
+            <input type="text" class="pcs-in" id="pcaLogo" placeholder="Logo URL (optional — auto-fetched if blank)">
+            <div id="pcaHint" style="font-size:12px;min-height:18px;color:#cbd5e1"></div>
+            <button type="button" class="pc-btn p" id="pcaAddBtn" style="align-self:flex-start"><span class="ms" style="font-size:17px">add</span>Add App</button>
+          </div>
+          <div class="pcs-card">
+            <div class="pcs-lbl">Saved Apps</div>
+            <div class="pca-list" id="pcaList"></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
   function buildCalGrid() {
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth(), today = now.getDate();
@@ -289,14 +364,14 @@
         <div class="noc-grp">
           <span class="noc-pill"><span class="ms" style="font-size:15px">wifi</span>Online</span>
           <button type="button" class="noc-pill" id="pcAuthPill" title="Web Tok Account">Sign in</button>
-          <button type="button" class="noc-pill" data-app="add_app" title="Add App"><span class="ms" style="font-size:16px">add</span>Add App</button>
-          <button type="button" class="noc-pill" data-app="wp_settings" title="Wallpaper & OS Settings"><span class="ms" style="font-size:16px">wallpaper</span></button>
-          <button type="button" class="noc-pill" id="pcOpenSec" title="Secret Settings"><span class="ms" style="font-size:16px">settings</span></button>
+          <button type="button" class="noc-pill" data-app="wp_settings" title="Settings"><span class="ms" style="font-size:16px">settings</span>Settings</button>
+          <button type="button" class="noc-pill" id="pcOpenSec" title="Secret Settings"><span class="ms" style="font-size:16px">tune</span></button>
         </div>
       </header>
       <div class="pc-stage">
         <div class="pc-icons" id="pcDesktopIcons"></div>
         ${appWinHtml}
+        ${settingsWinHtml}
         <aside class="noc-widgets" style="margin-left:auto">
           <div class="noc-wcard">
             <div style="font-size:28px;font-weight:700;color:#c9b8ff" id="nocBigTime">--:--</div>
@@ -315,7 +390,7 @@
             <div class="noc-qgrid">
               <button type="button" class="noc-qbtn ${cfg.light ? "on" : ""}" id="nocDayBtn"><span class="ms" style="font-size:18px">${cfg.light ? "light_mode" : "dark_mode"}</span>${cfg.light ? "Daylight" : "Nocturnal"}</button>
               <button type="button" class="noc-qbtn ${cfg.glass !== false ? "on" : ""}" id="nocGlassBtn"><span class="ms" style="font-size:18px">blur_on</span>Liquid Glass</button>
-              <button type="button" class="noc-qbtn" data-app="wp_settings"><span class="ms" style="font-size:18px">wallpaper</span>Wallpaper</button>
+              <button type="button" class="noc-qbtn" data-app="wp_settings"><span class="ms" style="font-size:18px">settings</span>Settings</button>
               <button type="button" class="noc-qbtn" id="nocSwitchWin"><span class="ms" style="font-size:18px">window</span>Windows 11</button>
             </div>
           </div>
@@ -329,6 +404,7 @@
       <div class="pc-stage">
         <div class="pc-icons" id="pcDesktopIcons"></div>
         ${appWinHtml}
+        ${settingsWinHtml}
       </div>
 
       <div class="w11-start" id="w11Start">
@@ -342,9 +418,9 @@
               <img src="/images/logo.png" alt="" width="28" height="28" style="border-radius:6px">
               <div><b style="display:block;font-size:12px">Web Tok</b><small style="opacity:.65;font-size:11px">For You Feed</small></div>
             </button>
-            <button type="button" class="w11-rec-it" data-app="add_app">
-              <span class="ms fill" style="font-size:26px;color:#34d399">add_box</span>
-              <div><b style="display:block;font-size:12px">Add App</b><small style="opacity:.65;font-size:11px">Pin any iframe site</small></div>
+            <button type="button" class="w11-rec-it" id="w11OpenAppsTab">
+              <span class="ms fill" style="font-size:26px;color:#34d399">apps</span>
+              <div><b style="display:block;font-size:12px">App Settings</b><small style="opacity:.65;font-size:11px">Add, edit &amp; delete apps</small></div>
             </button>
           </div>
         </div>
@@ -363,7 +439,7 @@
             <b style="font-size:12.5px">Notifications</b>
             <span style="font-size:11px;opacity:.65" id="w11FlyStats">Online</span>
           </div>
-          <div style="font-size:12px;opacity:.8">Web Tok is running in Windows 11 Dark Mode. Click Web Tok or Add App to open sites in a window.</div>
+          <div style="font-size:12px;opacity:.8">Web Tok is running in Windows 11 Dark Mode. Open Settings to manage wallpaper and custom apps.</div>
         </div>
         <div class="w11-card">
           <div style="font-size:12.5px;font-weight:600" id="w11CalHead">${new Date().toLocaleDateString([], { month: "long", year: "numeric" })}</div>
@@ -392,6 +468,7 @@
   document.body.appendChild(root);
 
   const appWin = root.querySelector("#pcAppWin");
+  const settingsWin = root.querySelector("#pcSettingsWin");
   const appFrame = root.querySelector("#pcAppFrame");
   const w11Start = root.querySelector("#w11Start");
   const w11Fly = root.querySelector("#w11Fly");
@@ -401,6 +478,7 @@
     if (app.action) { app.action(); return; }
     w11Start?.classList.remove("open");
     w11Fly?.classList.remove("open");
+    settingsWin?.classList.add("hidden-win");
     curAppHref = app.href;
     root.querySelector("#pcAppTitle").textContent = app.name;
     const wl = root.querySelector("#pcAppWinLogo");
@@ -434,13 +512,17 @@
     }
     const w11Center = root.querySelector("#w11TaskCenter");
     if (w11Center) {
-      const pinned = apps.filter(a => a.id === "webtok" || a.isCustom || a.id === "add_app" || a.id === "wp_settings" || a.id === "secret");
+      const setOpen = settingsWin && !settingsWin.classList.contains("hidden-win");
+      const appOpen = appWin && !appWin.classList.contains("hidden-win");
       w11Center.innerHTML = `
         <button type="button" class="w11-tbtn" id="w11StartBtn" title="Start">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="#60cdff"><rect x="2" y="2" width="9" height="9" rx="1"/><rect x="13" y="2" width="9" height="9" rx="1"/><rect x="2" y="13" width="9" height="9" rx="1"/><rect x="13" y="13" width="9" height="9" rx="1"/></svg>
         </button>
         <button type="button" class="w11-tbtn" id="w11SearchBtn" title="Search"><span class="ms" style="font-size:20px">search</span></button>
-        ${pinned.map(a => `<button type="button" class="w11-tbtn ${curAppHref && curAppHref === a.href && !appWin?.classList.contains("hidden-win") ? "active" : ""}" data-app="${a.id}" title="${a.name.replace(/"/g, "&quot;")}">${iconMedia(a, 22)}</button>`).join("")}`;
+        ${apps.map(a => {
+          const isAct = a.id === "wp_settings" ? setOpen : (appOpen && curAppHref && curAppHref === a.href);
+          return `<button type="button" class="w11-tbtn ${isAct ? "active" : ""}" data-app="${a.id}" title="${a.name.replace(/"/g, "&quot;")}">${iconMedia(a, 22)}</button>`;
+        }).join("")}`;
       w11Center.querySelector("#w11StartBtn")?.addEventListener("click", e => {
         e.stopPropagation();
         w11Fly?.classList.remove("open");
@@ -464,182 +546,205 @@
     if (app) openInWindow(app);
   });
 
-  function openAddAppModal() {
-    if (!authToken) {
-      location.href = "/login?next=" + encodeURIComponent("/computer");
+  function paintSettingsWindow() {
+    root.querySelectorAll(".pcs-nav-btn").forEach(b => b.classList.toggle("on", b.dataset.stab === activeSettingsTab));
+    root.querySelector("#pcsPaneWp").style.display = activeSettingsTab === "wp" ? "flex" : "none";
+    root.querySelector("#pcsPaneApps").style.display = activeSettingsTab === "apps" ? "flex" : "none";
+    root.querySelectorAll("#pcsWpSeg button").forEach(b => b.classList.toggle("on", b.dataset.wp === (cfg.wpMode || "default")));
+    root.querySelectorAll("#pcsStyleSeg button").forEach(b => b.classList.toggle("on", b.dataset.st === (cfg.style || "nocturnal")));
+    root.querySelector("#pcsCustRow").style.display = cfg.wpMode === "custom" ? "flex" : "none";
+    root.querySelector("#pcsCustIn").value = cfg.customWp || "";
+    root.querySelector("#pcsProfNote").textContent = profileWallpaper
+      ? "Profile wallpaper detected and ready."
+      : "No profile wallpaper set yet (set one in My Profile → Theme & settings).";
+    paintSavedAppsList();
+  }
+
+  function paintSavedAppsList() {
+    const list = root.querySelector("#pcaList");
+    if (!list) return;
+    if (!customApps.length) {
+      list.innerHTML = `<div style="font-size:12px;opacity:.65">No custom apps saved yet. Add one above!</div>`;
       return;
     }
-    let dlg = document.getElementById("pcAddAppDlg");
-    if (!dlg) {
-      dlg = document.createElement("dialog");
-      dlg.id = "pcAddAppDlg";
-      dlg.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <b style="font-size:16px;display:flex;align-items:center;gap:8px"><span class="ms fill" style="color:#34d399">add_box</span>Add Custom App</b>
-          <button type="button" class="pc-wbtn" id="pcaClose" style="width:32px;height:32px;border-radius:6px"><span class="ms">close</span></button>
-        </div>
-        <div class="pcs-sec">
-          <div class="pcs-lbl">App Name</div>
-          <input type="text" class="pcs-in" id="pcaName" maxlength="40" placeholder="e.g. Wikipedia">
-          <div class="pcs-lbl">Website URL (checked for iframe support)</div>
-          <input type="text" class="pcs-in" id="pcaUrl" placeholder="https://example.com">
-          <div class="pcs-lbl">Logo URL (optional — auto-fetched if blank)</div>
-          <input type="text" class="pcs-in" id="pcaLogo" placeholder="https://example.com/logo.png">
-          <div id="pcaHint" style="font-size:12px;min-height:18px;color:#cbd5e1"></div>
-          <button type="button" class="pc-btn p" id="pcaAddBtn" style="justify-content:center">Check &amp; Add App</button>
-        </div>
-        <div class="pcs-sec">
-          <div class="pcs-lbl">Saved Apps</div>
-          <div class="pca-list" id="pcaList"></div>
+    list.innerHTML = customApps.map(a => {
+      const isEditing = editingAppId === a.id;
+      return `
+        <div class="pca-row" data-row="${a.id}">
+          <div class="pca-row-top">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0">
+              <img src="${a.logo_url || "/images/logo.png"}" alt="" width="24" height="24" style="border-radius:5px;object-fit:contain;flex:none" onerror="this.src='/images/logo.png'">
+              <div style="min-width:0">
+                <b style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name.replace(/</g, "&lt;")}</b>
+                <small style="display:block;opacity:.65;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.url.replace(/</g, "&lt;")}</small>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex:none">
+              <button type="button" class="pc-btn" data-edit="${a.id}" style="padding:5px 10px;font-size:11.5px">${isEditing ? "Close" : "Edit"}</button>
+              <button type="button" class="pc-btn" data-del="${a.id}" style="padding:5px 10px;font-size:11.5px;color:#fb7185">Delete</button>
+            </div>
+          </div>
+          ${isEditing ? `
+            <div style="display:flex;flex-direction:column;gap:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+              <input type="text" class="pcs-in" data-ename="${a.id}" maxlength="40" value="${a.name.replace(/"/g, "&quot;")}" placeholder="App name">
+              <input type="text" class="pcs-in" data-eurl="${a.id}" value="${a.url.replace(/"/g, "&quot;")}" placeholder="Website URL">
+              <input type="text" class="pcs-in" data-elogo="${a.id}" value="${(a.logo_url || "").replace(/"/g, "&quot;")}" placeholder="Logo URL (optional)">
+              <div style="display:flex;gap:8px">
+                <button type="button" class="pc-btn p" data-save="${a.id}" style="padding:6px 14px;font-size:12px">Save</button>
+                <button type="button" class="pc-btn" data-cancel="${a.id}" style="padding:6px 14px;font-size:12px">Cancel</button>
+              </div>
+            </div>` : ""}
         </div>`;
-      document.body.appendChild(dlg);
-      dlg.querySelector("#pcaClose").onclick = () => dlg.close();
-      dlg.querySelector("#pcaAddBtn").onclick = async () => {
-        const name = dlg.querySelector("#pcaName").value.trim();
-        const url = dlg.querySelector("#pcaUrl").value.trim();
-        const logoUrl = dlg.querySelector("#pcaLogo").value.trim();
-        const hint = dlg.querySelector("#pcaHint");
-        const btn = dlg.querySelector("#pcaAddBtn");
-        if (!authToken) {
-          location.href = "/login?next=" + encodeURIComponent("/computer");
-          return;
-        }
-        if (!name || !url) {
-          hint.style.color = "#fb7185";
-          hint.textContent = "Enter both an app name and a URL.";
-          return;
-        }
-        btn.disabled = true;
-        hint.style.color = "#60cdff";
-        hint.textContent = "Checking if this site can run in an iframe…";
+    }).join("");
+
+    list.querySelectorAll("[data-edit]").forEach(b => {
+      b.onclick = () => {
+        editingAppId = editingAppId === b.dataset.edit ? null : b.dataset.edit;
+        paintSavedAppsList();
+      };
+    });
+    list.querySelectorAll("[data-cancel]").forEach(b => {
+      b.onclick = () => { editingAppId = null; paintSavedAppsList(); };
+    });
+    list.querySelectorAll("[data-save]").forEach(b => {
+      b.onclick = async () => {
+        const id = b.dataset.save;
+        const hint = root.querySelector("#pcaHint");
+        const name = list.querySelector(`[data-ename="${id}"]`)?.value.trim();
+        const url = list.querySelector(`[data-eurl="${id}"]`)?.value.trim();
+        const logoUrl = list.querySelector(`[data-elogo="${id}"]`)?.value.trim();
+        if (!authToken) { goToLogin(); return; }
+        b.disabled = true;
         try {
-          const r = await fetch("/api/computer/apps", {
-            method: "POST",
+          const r = await fetch("/api/computer/apps/" + encodeURIComponent(id), {
+            method: "PUT",
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + authToken },
             body: JSON.stringify({ name, url, logoUrl })
           });
           const j = await r.json().catch(() => ({}));
-          if (!r.ok || j.error) throw new Error(j.error?.message || "Could not add app.");
-          customApps.push(j.data);
-          dlg.querySelector("#pcaName").value = "";
-          dlg.querySelector("#pcaUrl").value = "";
-          dlg.querySelector("#pcaLogo").value = "";
+          if (!r.ok || j.error) throw new Error(j.error?.message || "Could not update app.");
+          customApps = customApps.map(x => x.id === id ? j.data : x);
+          editingAppId = null;
           hint.style.color = "#34d399";
-          hint.textContent = `Added "${j.data.name}"!`;
+          hint.textContent = `Updated "${j.data.name}"!`;
           renderAppLists();
-          paintSavedList();
+          paintSavedAppsList();
         } catch (err) {
           hint.style.color = "#fb7185";
           hint.textContent = err.message;
         } finally {
-          btn.disabled = false;
+          b.disabled = false;
         }
       };
+    });
+    list.querySelectorAll("[data-del]").forEach(b => {
+      b.onclick = async () => {
+        const id = b.dataset.del;
+        if (!authToken) { goToLogin(); return; }
+        await fetch("/api/computer/apps/" + encodeURIComponent(id), {
+          method: "DELETE",
+          headers: { Authorization: "Bearer " + authToken }
+        }).catch(() => {});
+        customApps = customApps.filter(x => x.id !== id);
+        if (editingAppId === id) editingAppId = null;
+        renderAppLists();
+        paintSavedAppsList();
+      };
+    });
+  }
+
+  function openDesktopSettings(tab = "wp") {
+    w11Start?.classList.remove("open");
+    w11Fly?.classList.remove("open");
+    appWin?.classList.add("hidden-win");
+    activeSettingsTab = tab;
+    settingsWin?.classList.remove("hidden-win");
+    paintSettingsWindow();
+    renderAppLists();
+  }
+
+  // Wire Settings window controls
+  root.querySelectorAll(".pcs-nav-btn").forEach(b => {
+    b.onclick = () => {
+      activeSettingsTab = b.dataset.stab;
+      paintSettingsWindow();
+    };
+  });
+  root.querySelector("#pcSetMin")?.addEventListener("click", () => { settingsWin?.classList.add("hidden-win"); renderAppLists(); });
+  root.querySelector("#pcSetMax")?.addEventListener("click", () => settingsWin?.classList.toggle("max-win"));
+  root.querySelector("#pcSetClose")?.addEventListener("click", () => {
+    settingsWin?.classList.add("hidden-win");
+    settingsWin?.classList.remove("max-win");
+    renderAppLists();
+  });
+  root.querySelector("#pcsWpSeg")?.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    cfg.wpMode = b.dataset.wp;
+    saveCfg(cfg);
+    applyWallpaper();
+    paintSettingsWindow();
+  });
+  root.querySelector("#pcsCustSave")?.addEventListener("click", () => {
+    cfg.wpMode = "custom";
+    cfg.customWp = root.querySelector("#pcsCustIn").value.trim();
+    saveCfg(cfg);
+    applyWallpaper();
+    paintSettingsWindow();
+  });
+  root.querySelector("#pcsStyleSeg")?.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    cfg.style = b.dataset.st;
+    saveCfg(cfg);
+    location.reload();
+  });
+  root.querySelector("#pcsExitBtn")?.addEventListener("click", () => {
+    cfg.enabled = false;
+    saveCfg(cfg);
+    location.href = "/";
+  });
+  root.querySelector("#w11OpenAppsTab")?.addEventListener("click", () => openDesktopSettings("apps"));
+
+  root.querySelector("#pcaAddBtn")?.addEventListener("click", async () => {
+    const name = root.querySelector("#pcaName").value.trim();
+    const url = root.querySelector("#pcaUrl").value.trim();
+    const logoUrl = root.querySelector("#pcaLogo").value.trim();
+    const hint = root.querySelector("#pcaHint");
+    const btn = root.querySelector("#pcaAddBtn");
+    if (!authToken) {
+      location.href = "/login?next=" + encodeURIComponent("/computer");
+      return;
     }
-    function paintSavedList() {
-      const list = dlg.querySelector("#pcaList");
-      if (!customApps.length) {
-        list.innerHTML = `<div style="font-size:12px;opacity:.65">No custom apps saved yet.</div>`;
-        return;
-      }
-      list.innerHTML = customApps.map(a => `
-        <div class="pca-row">
-          <div style="display:flex;align-items:center;gap:8px;min-width:0">
-            <img src="${a.logo_url || "/images/logo.png"}" alt="" width="20" height="20" style="border-radius:4px;object-fit:contain">
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name.replace(/</g, "&lt;")}</span>
-          </div>
-          <button type="button" class="pc-btn" data-del="${a.id}" style="padding:4px 9px;font-size:11px;color:#fb7185">Remove</button>
-        </div>`).join("");
-      list.querySelectorAll("[data-del]").forEach(b => {
-        b.onclick = async () => {
-          const id = b.dataset.del;
-          await fetch("/api/computer/apps/" + encodeURIComponent(id), {
-            method: "DELETE",
-            headers: { Authorization: "Bearer " + authToken }
-          }).catch(() => {});
-          customApps = customApps.filter(x => x.id !== id);
-          renderAppLists();
-          paintSavedList();
-        };
+    if (!name || !url) {
+      hint.style.color = "#fb7185";
+      hint.textContent = "Enter both an app name and a URL.";
+      return;
+    }
+    btn.disabled = true;
+    hint.style.color = "#60cdff";
+    hint.textContent = "Adding app…";
+    try {
+      const r = await fetch("/api/computer/apps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + authToken },
+        body: JSON.stringify({ name, url, logoUrl })
       });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j.error) throw new Error(j.error?.message || "Could not add app.");
+      customApps.push(j.data);
+      root.querySelector("#pcaName").value = "";
+      root.querySelector("#pcaUrl").value = "";
+      root.querySelector("#pcaLogo").value = "";
+      hint.style.color = "#34d399";
+      hint.textContent = `Added "${j.data.name}"!`;
+      renderAppLists();
+      paintSavedAppsList();
+    } catch (err) {
+      hint.style.color = "#fb7185";
+      hint.textContent = err.message;
+    } finally {
+      btn.disabled = false;
     }
-    dlg.querySelector("#pcaHint").textContent = "";
-    paintSavedList();
-    dlg.showModal();
-  }
-
-  function openDesktopSettings() {
-    let dlg = document.getElementById("pcSetDlg");
-    if (!dlg) {
-      dlg = document.createElement("dialog");
-      dlg.id = "pcSetDlg";
-      dlg.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <b style="font-size:16px;display:flex;align-items:center;gap:8px"><span class="ms fill" style="color:#60cdff">wallpaper</span>Desktop &amp; Wallpaper Settings</b>
-          <button type="button" class="pc-wbtn" id="pcsClose" style="width:32px;height:32px;border-radius:6px"><span class="ms">close</span></button>
-        </div>
-        <div class="pcs-sec">
-          <div class="pcs-lbl">Wallpaper Source</div>
-          <div class="pcs-seg" id="pcsWpSeg">
-            <button type="button" data-wp="default">OS Default</button>
-            <button type="button" data-wp="profile">Use Profile Wallpaper</button>
-            <button type="button" data-wp="custom">Custom URL</button>
-          </div>
-          <div id="pcsProfNote" style="font-size:11.5px;opacity:.75"></div>
-          <div id="pcsCustRow" style="display:none;gap:8px;align-items:center">
-            <input type="text" class="pcs-in" id="pcsCustIn" placeholder="Paste image URL (https://…)">
-            <button type="button" class="pc-btn p" id="pcsCustSave">Apply</button>
-          </div>
-        </div>
-        <div class="pcs-sec">
-          <div class="pcs-lbl">Desktop Style</div>
-          <div class="pcs-seg" id="pcsStyleSeg">
-            <button type="button" data-st="win11">Windows 11</button>
-            <button type="button" data-st="nocturnal">Nocturnal Shell</button>
-          </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:18px;flex-wrap:wrap">
-          <button type="button" class="pc-btn" id="pcsSecBtn">Secret Settings</button>
-          <button type="button" class="pc-btn" id="pcsExitBtn" style="color:#f472b6">Exit Computer Mode</button>
-        </div>`;
-      document.body.appendChild(dlg);
-
-      dlg.querySelector("#pcsClose").onclick = () => dlg.close();
-      dlg.querySelector("#pcsWpSeg").onclick = e => {
-        const b = e.target.closest("button"); if (!b) return;
-        cfg.wpMode = b.dataset.wp;
-        saveCfg(cfg);
-        applyWallpaper();
-        paintDlg();
-      };
-      dlg.querySelector("#pcsCustSave").onclick = () => {
-        cfg.wpMode = "custom";
-        cfg.customWp = dlg.querySelector("#pcsCustIn").value.trim();
-        saveCfg(cfg);
-        applyWallpaper();
-        paintDlg();
-      };
-      dlg.querySelector("#pcsStyleSeg").onclick = e => {
-        const b = e.target.closest("button"); if (!b) return;
-        cfg.style = b.dataset.st;
-        saveCfg(cfg);
-        location.reload();
-      };
-      dlg.querySelector("#pcsSecBtn").onclick = () => { dlg.close(); window.openSecretSettings?.(); };
-      dlg.querySelector("#pcsExitBtn").onclick = () => { cfg.enabled = false; saveCfg(cfg); location.href = "/"; };
-    }
-    function paintDlg() {
-      dlg.querySelectorAll("#pcsWpSeg button").forEach(b => b.classList.toggle("on", b.dataset.wp === (cfg.wpMode || "default")));
-      dlg.querySelectorAll("#pcsStyleSeg button").forEach(b => b.classList.toggle("on", b.dataset.st === (cfg.style || "nocturnal")));
-      dlg.querySelector("#pcsCustRow").style.display = cfg.wpMode === "custom" ? "flex" : "none";
-      dlg.querySelector("#pcsCustIn").value = cfg.customWp || "";
-      dlg.querySelector("#pcsProfNote").textContent = profileWallpaper
-        ? "Profile wallpaper detected and ready."
-        : "No profile wallpaper set yet (set one in My Profile → Theme & settings).";
-    }
-    paintDlg();
-    dlg.showModal();
-  }
+  });
 
   root.querySelectorAll("#pcOpenSec").forEach(el => {
     el.onclick = () => window.openSecretSettings?.();
@@ -733,6 +838,7 @@
       if (ar.ok && Array.isArray(aj?.data)) {
         customApps = aj.data;
         renderAppLists();
+        paintSavedAppsList();
       }
       if (data?.session?.user?.id) {
         const { data: prof } = await client.from("profiles").select("username,display_name,theme").eq("id", data.session.user.id).maybeSingle();

@@ -228,6 +228,39 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     return { data: { id, name, url: parsedUrl.href, logo_url: logoUrl, created_at: ts }, error: null };
   }));
 
+  app.put("/api/computer/apps/:id", wrap(async req => {
+    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
+    await ensureTables();
+    const id = String(req.params.id || "").trim();
+    const existing = (await run("SELECT id, user_id, name, url, logo_url, created_at FROM user_computer_apps WHERE id = ? AND user_id = ?", [id, uid]))[0];
+    if (!existing) throw new HttpError(404, "App not found");
+
+    const name = String(req.body?.name ?? existing.name).trim().slice(0, 40);
+    const rawUrl = String(req.body?.url ?? existing.url).trim();
+    const rawLogo = req.body?.logoUrl !== undefined ? String(req.body.logoUrl || "").trim() : (existing.logo_url || "");
+    if (!name) throw new HttpError(400, "Enter an app name.");
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(/^https?:\/\//i.test(rawUrl) ? rawUrl : "https://" + rawUrl);
+    } catch {
+      throw new HttpError(400, "Enter a valid website URL (e.g. https://example.com).");
+    }
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) throw new HttpError(400, "Only http/https URLs are supported.");
+
+    let logoUrl = rawLogo ? rawLogo.slice(0, 500) : "";
+    if (logoUrl && !/^https?:\/\//i.test(logoUrl)) throw new HttpError(400, "Logo URL must start with http:// or https://");
+    if (!logoUrl) {
+      logoUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(parsedUrl.hostname)}&sz=128`;
+    }
+
+    await db.execute({
+      sql: "UPDATE user_computer_apps SET name = ?, url = ?, logo_url = ? WHERE id = ? AND user_id = ?",
+      args: [name, parsedUrl.href, logoUrl, id, uid]
+    });
+    return { data: { id, name, url: parsedUrl.href, logo_url: logoUrl, created_at: existing.created_at }, error: null };
+  }));
+
   app.delete("/api/computer/apps/:id", wrap(async req => {
     const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
     await ensureTables();
