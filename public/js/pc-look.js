@@ -1,10 +1,26 @@
-/* PC Look Mode (Windows 11 & Nocturnal Shell Hyprland + Quickshell) on /computer with in-desktop iframe windows */
+/* PC Look Mode (Windows 11 & Nocturnal Shell Hyprland + Quickshell) on /computer with Web Tok iframe app & Wallpaper Settings */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
-  let cfg;
-  try { cfg = { enabled: false, style: "nocturnal", light: false, glass: true, ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}") }; }
-  catch { cfg = { enabled: false, style: "nocturnal", light: false, glass: true }; }
+  function loadCfg() {
+    try {
+      return {
+        enabled: false,
+        style: "nocturnal",
+        light: false,
+        glass: true,
+        wpMode: "default", // "default" | "profile" | "custom"
+        customWp: "",
+        ...JSON.parse(localStorage.getItem("wt_pc_look") || "{}")
+      };
+    } catch {
+      return { enabled: false, style: "nocturnal", light: false, glass: true, wpMode: "default", customWp: "" };
+    }
+  }
+  function saveCfg(next) {
+    localStorage.setItem("wt_pc_look", JSON.stringify(next));
+  }
 
+  let cfg = loadCfg();
   if (page === "landing") {
     if (cfg.enabled) location.replace("/computer");
     return;
@@ -12,14 +28,9 @@
   if (page !== "computer") return;
 
   const APPS = [
-    { id: "feed", name: "Web Tok Feed", sub: "For You & Following", icon: "smart_display", href: "/scroll#fyp", color: "#60a5fa" },
-    { id: "games", name: "Mini Games", sub: "3D Blockland & Arcade", icon: "sports_esports", href: "/games", color: "#c084fc" },
-    { id: "dev", name: "Dev Studio", sub: "Python, Scratch & AI", icon: "code", href: "/developer", color: "#34d399" },
-    { id: "shop", name: "Tok Shop", sub: "Bundles & Frames", icon: "storefront", href: "/shop", color: "#fbbf24" },
-    { id: "dms", name: "Messages", sub: "DMs, Calls & Web Tok AI", icon: "forum", href: "/messages", color: "#f472b6" },
-    { id: "sounds", name: "Sounds", sub: "Audio & Tracks", icon: "music_note", href: "/sounds", color: "#38bdf8" },
-    { id: "profile", name: "My Profile", sub: "Themes & Wallpapers", icon: "account_circle", href: "/profile", color: "#a78bfa" },
-    { id: "secret", name: "Secret Settings", sub: "Switch OS or Exit", icon: "tune", action: () => window.openSecretSettings?.(), color: "#fb7185" }
+    { id: "webtok", name: "Web Tok", sub: "Open Web Tok in a window", logo: "/images/logo.png", href: "/scroll#fyp", color: "#60a5fa" },
+    { id: "wp_settings", name: "Wallpaper & OS", sub: "Change wallpaper or OS look", icon: "wallpaper", action: () => openDesktopSettings(), color: "#c084fc" },
+    { id: "secret", name: "Secret Settings", sub: "Capri, Gravity & Exit PC Mode", icon: "tune", action: () => window.openSecretSettings?.(), color: "#fb7185" }
   ];
 
   const QUOTES = [
@@ -32,26 +43,32 @@
   let quoteIdx = 0;
   let activeWs = 1;
   let curAppHref = "";
+  let profileWallpaper = "";
+
+  try {
+    const t = JSON.parse(localStorage.getItem("wt_theme") || "{}");
+    if (t.wallpaper) profileWallpaper = t.wallpaper;
+  } catch {}
 
   const st = document.createElement("style");
   st.textContent = `
     body[data-page="computer"]{overflow:hidden!important;height:100dvh!important;margin:0;padding:0}
-    #wt-pc{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;font-family:"Segoe UI Variable","Segoe UI","Google Sans",system-ui,sans-serif;user-select:none;overflow:hidden}
+    #wt-pc{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;font-family:"Segoe UI Variable","Segoe UI","Google Sans",system-ui,sans-serif;user-select:none;overflow:hidden;background-size:cover;background-position:center;background-repeat:no-repeat}
     #wt-pc.nocturnal{
       font-family:"JetBrains Mono","Fira Code","Google Sans",monospace;
-      background:url("/images/wall0.png") center/cover no-repeat, radial-gradient(circle at 22% 18%,#2a214a 0%,#12131a 55%,#090a10 100%);
+      background-image:url("/images/wall0.png"), radial-gradient(circle at 22% 18%,#2a214a 0%,#12131a 55%,#090a10 100%);
       color:#e6e1ff;
     }
     #wt-pc.nocturnal.daylight{
-      background:url("/images/wall0.png") center/cover no-repeat, radial-gradient(circle at 22% 18%,#e3dbff 0%,#f3f1fa 55%,#e8e4f6 100%);
+      background-image:url("/images/wall0.png"), radial-gradient(circle at 22% 18%,#e3dbff 0%,#f3f1fa 55%,#e8e4f6 100%);
       color:#181924;
     }
     #wt-pc.win11{
-      background:url("/images/win11.jpg") center/cover no-repeat, url("/images/win11.png") center/cover no-repeat, radial-gradient(circle at 50% 42%,#1d4ed8 0%,#0f172a 42%,#060913 100%);
+      background-image:url("/images/win11.jpg"), url("/images/win11.png"), radial-gradient(circle at 50% 42%,#1d4ed8 0%,#0f172a 42%,#060913 100%);
       color:#f8fafc;
     }
     #wt-pc.win11.daylight{
-      background:url("/images/win11.jpg") center/cover no-repeat, url("/images/win11.png") center/cover no-repeat, radial-gradient(circle at 50% 42%,#93c5fd 0%,#dbeafe 52%,#eff6ff 100%);
+      background-image:url("/images/win11.jpg"), url("/images/win11.png"), radial-gradient(circle at 50% 42%,#93c5fd 0%,#dbeafe 52%,#eff6ff 100%);
       color:#0f172a;
     }
 
@@ -59,7 +76,8 @@
     .pc-icons{display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;gap:10px;width:96px;flex:none;z-index:2}
     .pc-ico{width:84px;padding:8px 4px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:5px;text-align:center;color:inherit;text-decoration:none;cursor:pointer;border:1px solid transparent;background:transparent;font:inherit;transition:background .15s,border-color .15s}
     .pc-ico:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.24)}
-    .pc-ico-box{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:rgba(16,18,28,.55);backdrop-filter:blur(10px);box-shadow:0 4px 12px #0004}
+    .pc-ico-box{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:rgba(16,18,28,.55);backdrop-filter:blur(10px);box-shadow:0 4px 12px #0004;overflow:hidden}
+    .pc-ico-box img{width:32px;height:32px;object-fit:contain;border-radius:7px}
     .pc-ico span.lbl{font-size:11px;line-height:1.2;font-weight:600;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.85)}
 
     /* Windows */
@@ -81,7 +99,7 @@
     .pc-wbtn:hover{background:rgba(255,255,255,.14)}
     .pc-wbtn.close:hover{background:#e11d48;color:#fff}
 
-    .pc-win-body{flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:18px}
+    .pc-win-body{flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px}
     .pc-iframe-wrap{flex:1;min-height:0;background:#0e0d14;display:flex}
     .pc-iframe{width:100%;height:100%;border:0;flex:1}
 
@@ -98,8 +116,8 @@
     .pc-stat{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:999px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.12);font-size:12px;font-weight:700}
     .pc-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
 
-    .pc-app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(175px,1fr));gap:12px}
-    .pc-app-card{display:flex;align-items:center;gap:12px;padding:13px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:inherit;text-decoration:none;cursor:pointer;text-align:left;font:inherit;transition:transform .15s,background .15s}
+    .pc-app-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+    .pc-app-card{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:inherit;text-decoration:none;cursor:pointer;text-align:left;font:inherit;transition:transform .15s,background .15s}
     .pc-app-card:hover{transform:translateY(-2px);background:rgba(255,255,255,.16)}
     .daylight .pc-app-card{background:rgba(0,0,0,.05);border-color:rgba(0,0,0,.09)}
 
@@ -123,21 +141,32 @@
     .noc-dock-wrap{display:flex;justify-content:center;padding:0 14px 12px;flex:none;z-index:30}
     .noc-dock{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:18px;background:rgba(18,19,26,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15)}
     #wt-pc.nocturnal.daylight .noc-dock{background:rgba(243,241,250,.86);border-color:rgba(0,0,0,.12)}
-    .noc-dock a,.noc-dock button{width:42px;height:42px;border-radius:12px;border:0;background:rgba(255,255,255,.08);color:inherit;display:grid;place-items:center;text-decoration:none;cursor:pointer;transition:transform .15s,background .15s;position:relative}
-    .noc-dock a:hover,.noc-dock button:hover{transform:translateY(-3px) scale(1.06);background:rgba(201,184,255,.28)}
+    .noc-dock button{width:42px;height:42px;border-radius:12px;border:0;background:rgba(255,255,255,.08);color:inherit;display:grid;place-items:center;cursor:pointer;transition:transform .15s,background .15s}
+    .noc-dock button:hover{transform:translateY(-3px) scale(1.06);background:rgba(201,184,255,.28)}
+    .noc-dock button img{width:26px;height:26px;object-fit:contain;border-radius:6px}
 
     /* Windows 11 Taskbar & Start Menu */
     .w11-bar{height:48px;padding:0 14px;background:rgba(20,24,34,.82);backdrop-filter:blur(26px);border-top:1px solid rgba(255,255,255,.12);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;flex:none;z-index:30}
     #wt-pc.win11.daylight .w11-bar{background:rgba(243,246,252,.85);border-top-color:rgba(15,23,42,.1)}
     .w11-center{display:flex;align-items:center;gap:6px}
-    .w11-tbtn{width:38px;height:38px;border-radius:8px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;text-decoration:none;position:relative}
+    .w11-tbtn{width:38px;height:38px;border-radius:8px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;position:relative}
     .w11-tbtn:hover,.w11-tbtn.active{background:rgba(255,255,255,.12)}
     .w11-tbtn.active::after{content:"";position:absolute;bottom:2px;width:14px;height:3px;border-radius:99px;background:#60a5fa}
     .w11-tray{justify-self:end;display:flex;align-items:center;gap:10px;font-size:11.5px;font-weight:600}
-    .w11-start{position:fixed;bottom:58px;left:50%;transform:translateX(-50%);width:min(92vw,520px);background:rgba(26,30,42,.9);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.55);z-index:40;display:none;flex-direction:column;gap:14px}
+    .w11-start{position:fixed;bottom:58px;left:50%;transform:translateX(-50%);width:min(92vw,420px);background:rgba(26,30,42,.92);backdrop-filter:blur(30px);border:1px solid rgba(255,255,255,.16);border-radius:14px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.55);z-index:40;display:none;flex-direction:column;gap:14px}
     .w11-start.open{display:flex}
-    #wt-pc.win11.daylight .w11-start{background:rgba(248,250,252,.94);border-color:rgba(15,23,42,.12)}
-    .w11-sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+    #wt-pc.win11.daylight .w11-start{background:rgba(248,250,252,.95);border-color:rgba(15,23,42,.12)}
+    .w11-sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+
+    /* Desktop Wallpaper & OS Settings Modal */
+    #pcSetDlg{border:0;border-radius:20px;padding:22px;width:min(92vw,460px);background:#181a24;color:#f1f5f9;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.6);font-family:inherit;z-index:9999}
+    #pcSetDlg::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
+    .pcs-sec{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+    .pcs-lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#c9b8ff}
+    .pcs-seg{display:flex;gap:6px;background:rgba(255,255,255,.07);padding:4px;border-radius:12px}
+    .pcs-seg button{flex:1;border:0;background:transparent;color:#cbd5e1;font:inherit;font-size:12px;font-weight:700;padding:8px;border-radius:9px;cursor:pointer}
+    .pcs-seg button.on{background:#c9b8ff;color:#12131a}
+    .pcs-in{width:100%;padding:10px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:#fff;font:inherit;font-size:12.5px;outline:0}
 
     @media(max-width:900px){
       .noc-widgets,.pc-icons{display:none}
@@ -151,12 +180,30 @@
   const isNoc = (cfg.style || "nocturnal") === "nocturnal";
   root.className = (isNoc ? "nocturnal" : "win11") + (cfg.light ? " daylight" : "") + (cfg.glass !== false ? " glass" : "");
 
+  function applyWallpaper() {
+    root.style.backgroundImage = "";
+    if (cfg.wpMode === "profile" && profileWallpaper) {
+      const wp = profileWallpaper.trim();
+      root.style.backgroundImage = (wp.startsWith("url(") || wp.includes("gradient")) ? wp : `url("${wp}")`;
+    } else if (cfg.wpMode === "custom" && cfg.customWp) {
+      const wp = cfg.customWp.trim();
+      root.style.backgroundImage = (wp.startsWith("url(") || wp.includes("gradient")) ? wp : `url("${wp}")`;
+    }
+  }
+  applyWallpaper();
+
+  function iconMedia(a) {
+    return a.logo
+      ? `<img src="${a.logo}" alt="${a.name}">`
+      : `<span class="ms fill">${a.icon}</span>`;
+  }
+
   const iconsHtml = APPS.map(a =>
-    `<button type="button" class="pc-ico" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></button>`
+    `<button type="button" class="pc-ico" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}">${iconMedia(a)}</div><span class="lbl">${a.name}</span></button>`
   ).join("");
 
   const appCardsHtml = APPS.map(a =>
-    `<button type="button" class="pc-app-card" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><div><b style="display:block;font-size:13.5px">${a.name}</b><small style="opacity:.75;font-size:11.5px">${a.sub}</small></div></button>`
+    `<button type="button" class="pc-app-card" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}">${iconMedia(a)}</div><div><b style="display:block;font-size:13.5px">${a.name}</b><small style="opacity:.75;font-size:11.5px">${a.sub}</small></div></button>`
   ).join("");
 
   const mainWinHtml = `
@@ -174,12 +221,12 @@
       <div class="pc-win-body">
         <div class="pc-hero">
           <div>
-            <h1>Short videos. Big vibes.</h1>
-            <p>Web Tok is running in ${isNoc ? "Nocturnal Shell (Hyprland + Quickshell)" : "Windows 11"} on /computer. Click any app to open it right here inside a desktop window.</p>
+            <h1>Web Tok Desktop</h1>
+            <p>Running in ${isNoc ? "Nocturnal Shell (Hyprland + Quickshell)" : "Windows 11"} on /computer. Launch Web Tok inside a desktop window or customize your wallpaper.</p>
           </div>
           <div class="pc-actions">
-            <button type="button" class="pc-btn p" data-app="feed"><span class="ms">play_arrow</span>Open FYP in Window</button>
-            <button type="button" class="pc-btn" id="pcSigninBtn"><span class="ms" style="font-size:17px">login</span>Sign in</button>
+            <button type="button" class="pc-btn p" data-app="webtok"><img src="/images/logo.png" alt="" width="18" height="18" style="border-radius:4px">Open Web Tok</button>
+            <button type="button" class="pc-btn" data-app="wp_settings"><span class="ms" style="font-size:17px">wallpaper</span>Wallpaper</button>
           </div>
         </div>
         <div class="pc-stats">
@@ -192,7 +239,7 @@
     <div class="pc-win hidden-win" id="pcAppWin">
       <div class="pc-titlebar">
         <div class="pc-wtitle">
-          <span class="ms fill" id="pcAppIcon" style="font-size:18px;color:#c9b8ff">smart_display</span>
+          <img src="/images/logo.png" alt="" width="18" height="18" style="border-radius:4px">
           <span id="pcAppTitle">Web Tok</span>
         </div>
         <div class="pc-wbtns">
@@ -223,7 +270,7 @@
         <div class="noc-pill" id="pcClock">--:--</div>
         <div class="noc-grp">
           <span class="noc-pill"><span class="ms" style="font-size:15px">wifi</span>Online</span>
-          <button type="button" class="noc-pill" id="pcBarAuth">Sign in</button>
+          <button type="button" class="noc-pill" data-app="wp_settings" title="Wallpaper & OS Settings"><span class="ms" style="font-size:16px">wallpaper</span>Wallpaper</button>
           <button type="button" class="noc-pill" id="pcOpenSec" title="Secret Settings"><span class="ms" style="font-size:16px">settings</span></button>
         </div>
       </header>
@@ -248,16 +295,17 @@
             <div class="noc-qgrid">
               <button type="button" class="noc-qbtn ${cfg.light ? "on" : ""}" id="nocDayBtn"><span class="ms" style="font-size:18px">${cfg.light ? "light_mode" : "dark_mode"}</span>${cfg.light ? "Daylight" : "Nocturnal"}</button>
               <button type="button" class="noc-qbtn ${cfg.glass !== false ? "on" : ""}" id="nocGlassBtn"><span class="ms" style="font-size:18px">blur_on</span>Liquid Glass</button>
+              <button type="button" class="noc-qbtn" data-app="wp_settings"><span class="ms" style="font-size:18px">wallpaper</span>Wallpaper</button>
               <button type="button" class="noc-qbtn" id="nocSwitchWin"><span class="ms" style="font-size:18px">window</span>Windows 11</button>
-              <button type="button" class="noc-qbtn" id="nocSecBtn"><span class="ms" style="font-size:18px">tune</span>Secret Settings</button>
             </div>
           </div>
         </aside>
       </div>
       <div class="noc-dock-wrap">
         <nav class="noc-dock">
-          ${APPS.slice(0, 7).map(a => `<button type="button" data-app="${a.id}" title="${a.name}" style="color:${a.color}"><span class="ms fill">${a.icon}</span></button>`).join("")}
+          <button type="button" data-app="webtok" title="Web Tok"><img src="/images/logo.png" alt="Web Tok"></button>
           <button type="button" id="nocDockWin" title="Desktop Hub"><span class="ms">home</span></button>
+          <button type="button" data-app="wp_settings" title="Wallpaper & OS Settings" style="color:#c084fc"><span class="ms fill">wallpaper</span></button>
           <button type="button" id="nocDockSec" title="Secret Settings" style="color:#fb7185"><span class="ms fill">tune</span></button>
         </nav>
       </div>`;
@@ -269,11 +317,11 @@
       </div>
       <div class="w11-start" id="w11Start">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <b style="font-size:14px">Pinned Web Tok Apps</b>
-          <button type="button" class="pc-btn" id="w11SwitchNoc" style="padding:5px 10px;font-size:11px">Switch to Nocturnal Shell</button>
+          <b style="font-size:14px">Web Tok</b>
+          <button type="button" class="pc-btn" id="w11SwitchNoc" style="padding:5px 10px;font-size:11px">Nocturnal Shell</button>
         </div>
         <div class="w11-sgrid">
-          ${APPS.map(a => `<button type="button" class="pc-ico" style="width:100%" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}"><span class="ms fill">${a.icon}</span></div><span class="lbl">${a.name}</span></button>`).join("")}
+          ${APPS.map(a => `<button type="button" class="pc-ico" style="width:100%" data-app="${a.id}"><div class="pc-ico-box" style="color:${a.color}">${iconMedia(a)}</div><span class="lbl">${a.name}</span></button>`).join("")}
         </div>
       </div>
       <footer class="w11-bar">
@@ -284,8 +332,9 @@
           <button type="button" class="w11-tbtn" id="w11StartBtn" title="Start">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="#3b82f6"><rect x="2" y="2" width="9" height="9" rx="1.5"/><rect x="13" y="2" width="9" height="9" rx="1.5"/><rect x="2" y="13" width="9" height="9" rx="1.5"/><rect x="13" y="13" width="9" height="9" rx="1.5"/></svg>
           </button>
-          <button type="button" class="w11-tbtn active" id="w11WinToggle" title="Web Tok Hub"><img src="/images/logo.png" alt="" width="22" height="22" style="border-radius:5px"></button>
-          ${APPS.slice(0, 5).map(a => `<button type="button" class="w11-tbtn" data-app="${a.id}" title="${a.name}" style="color:${a.color}"><span class="ms fill" style="font-size:20px">${a.icon}</span></button>`).join("")}
+          <button type="button" class="w11-tbtn active" id="w11WinToggle" title="Desktop Hub"><span class="ms fill" style="font-size:20px">home</span></button>
+          <button type="button" class="w11-tbtn" data-app="webtok" title="Web Tok"><img src="/images/logo.png" alt="Web Tok" width="24" height="24" style="border-radius:6px"></button>
+          <button type="button" class="w11-tbtn" data-app="wp_settings" title="Wallpaper & OS Settings" style="color:#c084fc"><span class="ms fill" style="font-size:20px">wallpaper</span></button>
           <button type="button" class="w11-tbtn" id="pcOpenSec" title="Secret Settings" style="color:#fb7185"><span class="ms fill" style="font-size:20px">tune</span></button>
         </div>
         <div class="w11-tray">
@@ -298,6 +347,79 @@
 
   document.body.appendChild(root);
 
+  function openDesktopSettings() {
+    let dlg = document.getElementById("pcSetDlg");
+    if (!dlg) {
+      dlg = document.createElement("dialog");
+      dlg.id = "pcSetDlg";
+      dlg.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <b style="font-size:17px;display:flex;align-items:center;gap:8px"><span class="ms fill" style="color:#c9b8ff">wallpaper</span>Desktop &amp; Wallpaper Settings</b>
+          <button type="button" class="pc-wbtn" id="pcsClose"><span class="ms">close</span></button>
+        </div>
+        <div class="pcs-sec">
+          <div class="pcs-lbl">Wallpaper Source</div>
+          <div class="pcs-seg" id="pcsWpSeg">
+            <button type="button" data-wp="default">OS Default</button>
+            <button type="button" data-wp="profile">Use Profile Wallpaper</button>
+            <button type="button" data-wp="custom">Custom URL</button>
+          </div>
+          <div id="pcsProfNote" style="font-size:11.5px;opacity:.75"></div>
+          <div id="pcsCustRow" style="display:none;gap:8px;align-items:center">
+            <input type="text" class="pcs-in" id="pcsCustIn" placeholder="Paste image URL (https://…)">
+            <button type="button" class="pc-btn p" id="pcsCustSave" style="padding:9px 14px">Apply</button>
+          </div>
+        </div>
+        <div class="pcs-sec">
+          <div class="pcs-lbl">Desktop Style</div>
+          <div class="pcs-seg" id="pcsStyleSeg">
+            <button type="button" data-st="win11">Windows 11</button>
+            <button type="button" data-st="nocturnal">Nocturnal Shell</button>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:8px;margin-top:18px;flex-wrap:wrap">
+          <button type="button" class="pc-btn" id="pcsSecBtn">Secret Settings</button>
+          <button type="button" class="pc-btn" id="pcsExitBtn" style="color:#fb7185">Exit Computer Mode</button>
+        </div>`;
+      document.body.appendChild(dlg);
+
+      dlg.querySelector("#pcsClose").onclick = () => dlg.close();
+      dlg.querySelector("#pcsWpSeg").onclick = e => {
+        const b = e.target.closest("button"); if (!b) return;
+        cfg.wpMode = b.dataset.wp;
+        saveCfg(cfg);
+        applyWallpaper();
+        paintDlg();
+      };
+      dlg.querySelector("#pcsCustSave").onclick = () => {
+        cfg.wpMode = "custom";
+        cfg.customWp = dlg.querySelector("#pcsCustIn").value.trim();
+        saveCfg(cfg);
+        applyWallpaper();
+        paintDlg();
+      };
+      dlg.querySelector("#pcsStyleSeg").onclick = e => {
+        const b = e.target.closest("button"); if (!b) return;
+        cfg.style = b.dataset.st;
+        saveCfg(cfg);
+        location.reload();
+      };
+      dlg.querySelector("#pcsSecBtn").onclick = () => { dlg.close(); window.openSecretSettings?.(); };
+      dlg.querySelector("#pcsExitBtn").onclick = () => { cfg.enabled = false; saveCfg(cfg); location.href = "/"; };
+    }
+    function paintDlg() {
+      dlg.querySelectorAll("#pcsWpSeg button").forEach(b => b.classList.toggle("on", b.dataset.wp === (cfg.wpMode || "default")));
+      dlg.querySelectorAll("#pcsStyleSeg button").forEach(b => b.classList.toggle("on", b.dataset.st === (cfg.style || "nocturnal")));
+      dlg.querySelector("#pcsCustRow").style.display = cfg.wpMode === "custom" ? "flex" : "none";
+      dlg.querySelector("#pcsCustIn").value = cfg.customWp || "";
+      dlg.querySelector("#pcsProfNote").textContent = profileWallpaper
+        ? "Profile wallpaper detected and ready."
+        : "No profile wallpaper set yet (set one in My Profile → Theme & settings).";
+    }
+    paintDlg();
+    dlg.showModal();
+  }
+
   const mainWin = root.querySelector("#pcMainWin");
   const appWin = root.querySelector("#pcAppWin");
   const appFrame = root.querySelector("#pcAppFrame");
@@ -309,8 +431,6 @@
     w11Start?.classList.remove("open");
     curAppHref = app.href;
     root.querySelector("#pcAppTitle").textContent = app.name;
-    const ic = root.querySelector("#pcAppIcon");
-    if (ic) { ic.textContent = app.icon; ic.style.color = app.color; }
     const pop = root.querySelector("#pcAppPop");
     if (pop) pop.href = app.href;
     if (appFrame && appFrame.getAttribute("src") !== app.href) appFrame.src = app.href;
@@ -331,7 +451,7 @@
     });
   });
 
-  root.querySelectorAll("#pcOpenSec, #nocSecBtn, #nocDockSec").forEach(el => {
+  root.querySelectorAll("#pcOpenSec, #nocDockSec").forEach(el => {
     el.onclick = () => window.openSecretSettings?.();
   });
 
@@ -340,9 +460,8 @@
   root.querySelector("#nocDockWin")?.addEventListener("click", showHub);
   root.querySelector("#w11WinToggle")?.addEventListener("click", () => {
     if (appWin && !appWin.classList.contains("hidden-win")) showHub();
-    else if (mainWin?.classList.contains("hidden-win") && curAppHref) {
-      appWin?.classList.remove("hidden-win");
-    } else mainWin?.classList.toggle("hidden-win");
+    else if (mainWin?.classList.contains("hidden-win") && curAppHref) appWin?.classList.remove("hidden-win");
+    else mainWin?.classList.toggle("hidden-win");
   });
 
   root.querySelector("#pcAppReload")?.addEventListener("click", () => { if (appFrame && curAppHref) appFrame.src = curAppHref; });
@@ -354,13 +473,10 @@
     showHub();
   });
 
-  root.querySelector("#pcSigninBtn")?.addEventListener("click", () => openInWindow({ name: "Sign in", icon: "login", color: "#60a5fa", href: "/login" }));
-  root.querySelector("#pcBarAuth")?.addEventListener("click", () => openInWindow({ name: "Sign in", icon: "login", color: "#60a5fa", href: "/login" }));
-
   root.querySelector("#w11StartBtn")?.addEventListener("click", e => { e.stopPropagation(); w11Start?.classList.toggle("open"); });
   document.addEventListener("click", e => { if (w11Start && !w11Start.contains(e.target) && e.target.id !== "w11StartBtn") w11Start.classList.remove("open"); });
   root.querySelector("#w11SwitchNoc")?.addEventListener("click", () => {
-    cfg.style = "nocturnal"; localStorage.setItem("wt_pc_look", JSON.stringify(cfg)); location.reload();
+    cfg.style = "nocturnal"; saveCfg(cfg); location.reload();
   });
 
   root.querySelector("#nocWs")?.addEventListener("click", e => {
@@ -371,15 +487,15 @@
     if (wt) wt.textContent = `Web Tok Desktop · Hyprland Workspace ${activeWs}`;
   });
   root.querySelector("#nocDayBtn")?.addEventListener("click", () => {
-    cfg.light = !cfg.light; localStorage.setItem("wt_pc_look", JSON.stringify(cfg)); location.reload();
+    cfg.light = !cfg.light; saveCfg(cfg); location.reload();
   });
   root.querySelector("#nocGlassBtn")?.addEventListener("click", () => {
-    cfg.glass = !(cfg.glass !== false); localStorage.setItem("wt_pc_look", JSON.stringify(cfg));
+    cfg.glass = !(cfg.glass !== false); saveCfg(cfg);
     root.classList.toggle("glass", cfg.glass);
     root.querySelector("#nocGlassBtn")?.classList.toggle("on", cfg.glass);
   });
   root.querySelector("#nocSwitchWin")?.addEventListener("click", () => {
-    cfg.style = "win11"; localStorage.setItem("wt_pc_look", JSON.stringify(cfg)); location.reload();
+    cfg.style = "win11"; saveCfg(cfg); location.reload();
   });
 
   const renderQuote = () => {
@@ -418,11 +534,14 @@
     try {
       if (window.sb?.auth?.getSession) {
         const { data } = await sb.auth.getSession();
-        if (data?.session) {
-          const sbBtn = root.querySelector("#pcSigninBtn");
-          if (sbBtn) { sbBtn.innerHTML = `<span class="ms">play_arrow</span>Go to Web Tok`; sbBtn.onclick = () => openInWindow(APPS[0]); }
-          const ba = root.querySelector("#pcBarAuth");
-          if (ba) { ba.textContent = "Feed"; ba.onclick = () => openInWindow(APPS[0]); }
+        if (data?.session?.user?.id) {
+          const { data: prof } = await sb.from("profiles").select("theme").eq("id", data.session.user.id).maybeSingle();
+          let rt = prof?.theme;
+          if (typeof rt === "string") { try { rt = JSON.parse(rt); } catch { rt = null; } }
+          if (rt?.wallpaper) {
+            profileWallpaper = rt.wallpaper;
+            applyWallpaper();
+          }
         }
       }
     } catch {}
