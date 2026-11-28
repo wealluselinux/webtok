@@ -19,6 +19,14 @@
   function saveCfg(next) {
     localStorage.setItem("wt_pc_look", JSON.stringify(next));
   }
+  function getSb() {
+    if (typeof sb !== "undefined" && sb) return sb;
+    if (window.sb) return window.sb;
+    if (window.supabase && window.WT_CONFIG?.SUPABASE_URL) {
+      try { return window.supabase.createClient(window.WT_CONFIG.SUPABASE_URL, window.WT_CONFIG.SUPABASE_ANON_KEY); } catch {}
+    }
+    return null;
+  }
 
   let cfg = loadCfg();
   if (page === "landing") {
@@ -489,7 +497,8 @@
         hint.textContent = "Enter your email and password.";
         return;
       }
-      if (!window.sb?.auth?.signInWithPassword) {
+      const client = getSb();
+      if (!client?.auth?.signInWithPassword) {
         hint.style.color = "#fb7185";
         hint.textContent = "Auth client is not ready yet. Try again in a moment.";
         return;
@@ -498,7 +507,7 @@
       hint.style.color = "#60cdff";
       hint.textContent = "Signing in…";
       try {
-        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        const { data, error } = await client.auth.signInWithPassword({ email, password });
         if (error) throw error;
         if (!data?.session) throw new Error("Could not start session.");
         dlg.querySelector("#pcAuthPass").value = "";
@@ -773,8 +782,9 @@
 
   async function syncUserSession() {
     try {
-      if (!window.sb?.auth?.getSession) return false;
-      const { data } = await sb.auth.getSession();
+      const client = getSb();
+      if (!client?.auth?.getSession) return false;
+      const { data } = await client.auth.getSession();
       authToken = data?.session?.access_token || null;
       if (!authToken) {
         const ul = root.querySelector("#w11UserLbl");
@@ -790,7 +800,7 @@
         renderAppLists();
       }
       if (data?.session?.user?.id) {
-        const { data: prof } = await sb.from("profiles").select("username,display_name,theme").eq("id", data.session.user.id).maybeSingle();
+        const { data: prof } = await client.from("profiles").select("username,display_name,theme").eq("id", data.session.user.id).maybeSingle();
         const name = prof?.display_name || (prof?.username ? `@${prof.username}` : "Signed in");
         const ul = root.querySelector("#w11UserLbl");
         if (ul) ul.textContent = name;
