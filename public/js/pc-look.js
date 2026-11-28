@@ -24,8 +24,8 @@
   function getSb() {
     if (typeof sb !== "undefined" && sb) return sb;
     if (window.sb) return window.sb;
-    if (window.supabase && window.WT_CONFIG?.SUPABASE_URL) {
-      try { return window.supabase.createClient(window.WT_CONFIG.SUPABASE_URL, window.WT_CONFIG.SUPABASE_ANON_KEY); } catch {}
+    if (window.supabase?.createClient && window.WEBTOK_CONFIG?.SUPABASE_URL) {
+      return window.supabase.createClient(window.WEBTOK_CONFIG.SUPABASE_URL, window.WEBTOK_CONFIG.SUPABASE_ANON_KEY);
     }
     return null;
   }
@@ -46,16 +46,22 @@
   }
   if (page !== "computer") return;
 
+  const BROWSER_LOGOS = {
+    firefox: "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffbd4f"/><stop offset="55%" stop-color="#ff7139"/><stop offset="100%" stop-color="#e31587"/></linearGradient></defs><circle cx="32" cy="32" r="28" fill="url(#fg)"/><circle cx="33" cy="33" r="14" fill="#20123a"/><path d="M46 21c-3-5-9-8-15-8-9 0-16 6-18 14 4-4 10-5 15-3 4 2 7 6 6 11-1 5-6 9-12 8 6 4 14 4 20-1 7-6 8-14 4-21z" fill="#ffbd4f" opacity=".9"/></svg>`),
+    edge: "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="eg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3ccbf4"/><stop offset="100%" stop-color="#0078d4"/></linearGradient><linearGradient id="eg2" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#0c59a4"/><stop offset="100%" stop-color="#30d27d"/></linearGradient></defs><circle cx="32" cy="32" r="28" fill="url(#eg2)"/><path d="M56 36c0-14-11-26-25-26-13 0-23 9-25 21 4-8 13-12 22-10 8 2 13 8 12 15-1 5-6 8-12 8-9 0-16-7-16-16 0-2 0-4 1-6-5 5-7 12-5 20 3 11 13 18 25 18 13 0 23-10 23-24z" fill="url(#eg1)"/></svg>`),
+    chrome: "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="#ea4335"/><path d="M32 32 L58 20 A28 28 0 0 1 32 60 Z" fill="#fbbc04"/><path d="M32 32 L32 60 A28 28 0 0 1 8 18 Z" fill="#34a853"/><circle cx="32" cy="32" r="13" fill="#fff"/><circle cx="32" cy="32" r="9.5" fill="#4285f4"/></svg>`)
+  };
+
   const BUILTIN_APPS = [
     { id: "webtok", name: "Web Tok", sub: "For You & Feed", logo: "/images/logo.png", href: "/scroll#fyp", color: "#60cdff" },
     { id: "wp_settings", name: "Settings", sub: "Home, Wallpaper & Apps", icon: "settings", action: () => openDesktopSettings("home"), color: "#60cdff" }
   ];
 
   const QUOTES = [
-    { q: "The night is more alive and more richly colored than the day.", a: "Vincent van Gogh" },
-    { q: "Simplicity is the ultimate sophistication.", a: "Leonardo da Vinci" },
-    { q: "Talk is cheap. Show me the code.", a: "Linus Torvalds" },
-    { q: "Make it work, make it right, make it fast.", a: "Kent Beck" }
+    "Stay focused. Keep building.",
+    "Hyprland + Quickshell · Nebula Desktop",
+    "Less noise, more signal.",
+    "Everything runs right inside Web Tok."
   ];
 
   let quoteIdx = 0;
@@ -233,8 +239,8 @@
     .noc-pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:10px;background:rgba(255,255,255,.08);font-size:12px;font-weight:700;cursor:pointer;border:0;color:inherit;font-family:inherit;text-decoration:none}
     .noc-pill:hover{background:rgba(201,184,255,.22)}
     .noc-ws{display:flex;gap:4px}
-    .noc-ws button{width:26px;height:26px;border-radius:8px;border:0;background:rgba(255,255,255,.08);color:inherit;font:inherit;font-size:11px;font-weight:700;cursor:pointer}
-    .noc-ws button.on{background:#c9b8ff;color:#12131a;width:36px}
+    .noc-ws button{width:26px;height:26px;border-radius:8px;border:0;background:transparent;color:inherit;font:inherit;font-size:11px;font-weight:800;cursor:pointer;opacity:.6}
+    .noc-ws button.on{background:#c9b8ff;color:#12131a;opacity:1}
 
     .noc-widgets{width:268px;flex:none;display:flex;flex-direction:column;gap:12px}
     .noc-wcard{background:rgba(18,19,26,.72);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px}
@@ -309,7 +315,31 @@
   }
   applyWallpaper();
 
-  function allApps() {
+  function getBrowserApp() {
+    const brType = isNoc ? "firefox" : (cfg.winBrowser === "chrome" ? "chrome" : "edge");
+    const brName = brType === "firefox" ? "Firefox" : (brType === "chrome" ? "Google Chrome" : "Microsoft Edge");
+    return {
+      id: "fake_browser",
+      name: brName,
+      sub: "Web Browser",
+      logo: BROWSER_LOGOS[brType],
+      color: "#60cdff",
+      action: () => {
+        if (curAppHref && appWin) {
+          w11Start?.classList.remove("open");
+          w11Fly?.classList.remove("open");
+          settingsWin?.classList.add("hidden-win");
+          appWin.classList.remove("hidden-win");
+          applyBrowserChrome();
+          renderAppLists();
+        } else {
+          openInWindow(BUILTIN_APPS[0]);
+        }
+      }
+    };
+  }
+
+  function browserApps() {
     const customMapped = customApps.map(a => ({
       id: "c_" + a.id,
       dbId: a.id,
@@ -324,8 +354,14 @@
     if (isAdminUser) {
       list.push({ id: "admin_panel", name: "Admin Panel", sub: "Moderation & Users", icon: "admin_panel_settings", href: "/admin", color: "#fbbf24" });
     }
-    list.push(BUILTIN_APPS[1]);
     return list;
+  }
+
+  function allApps() {
+    if (cfg.fakeBrowser) {
+      return [getBrowserApp(), BUILTIN_APPS[1]];
+    }
+    return [...browserApps(), BUILTIN_APPS[1]];
   }
 
   function iconMedia(a, sz = 32) {
@@ -402,9 +438,9 @@
   const fakeBrowserCardHtml = `
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="pcs-lbl">Fake Browser</div>
-      <div style="font-size:12px;opacity:.78">Run apps inside a realistic browser frame (${isNoc ? "Firefox on Nocturnal Shell" : "Microsoft Edge or Google Chrome on Windows 11"}) with all your apps pinned as bookmarks.</div>
+      <div style="font-size:12px;opacity:.78">Replaces Web Tok, your saved apps, and Admin Panel on the desktop with ${isNoc ? "Firefox" : "Microsoft Edge or Google Chrome"}, with all your apps pinned inside the browser bookmarks bar.</div>
       <div class="pcs-seg" id="pcsFbSeg">
-        <button type="button" data-fb="off">Off (Window)</button>
+        <button type="button" data-fb="off">Off (Desktop Icons)</button>
         <button type="button" data-fb="on">On (${isNoc ? "Firefox" : "Browser"})</button>
       </div>
       ${isNoc ? "" : `
@@ -471,7 +507,7 @@
             <div class="nocs-tgrid">
               <button type="button" class="nocs-tile ${cfg.light ? "" : "on"}" id="nocSetDayTog"><span class="ms">dark_mode</span><span>${cfg.light ? "Daylight" : "Nocturnal"}</span></button>
               <button type="button" class="nocs-tile ${cfg.glass !== false ? "on" : ""}" id="nocSetGlassTog"><span class="ms">water_drop</span><span>Liquid Glass</span></button>
-              <button type="button" class="nocs-tile ${cfg.fakeBrowser ? "on" : ""}" id="nocSetFbTog"><span class="ms">public</span><span>Firefox Mode</span></button>
+              <button type="button" class="nocs-tile ${cfg.fakeBrowser ? "on" : ""}" id="nocSetFbTog"><span class="ms">public</span><span>Firefox Browser</span></button>
               <button type="button" class="nocs-tile" data-jump="apps"><span class="ms">apps</span><span>Apps</span></button>
               <button type="button" class="nocs-tile" id="nocSetWinBtn"><span class="ms">window</span><span>Windows 11</span></button>
               <button type="button" class="nocs-tile" id="pcsExitBtn" style="border-color:rgba(244,114,182,.6);color:#f472b6"><span class="ms">power_settings_new</span><span>Exit PC</span></button>
@@ -599,7 +635,10 @@
             <span>Nebula</span>
           </button>
           <div class="noc-ws" id="nocWs">
-            ${[1, 2, 3, 4, 5].map(n => `<button type="button" data-ws="${n}" class="${n === 1 ? "on" : ""}">${n}</button>`).join("")}
+            <button type="button" class="on" data-ws="1">1</button>
+            <button type="button" data-ws="2">2</button>
+            <button type="button" data-ws="3">3</button>
+            <button type="button" data-ws="4">4</button>
           </div>
         </div>
         <div class="noc-pill" id="pcClock">--:--</div>
@@ -619,15 +658,14 @@
             <div style="font-size:12px;opacity:.75" id="nocBigDate">Loading date…</div>
           </div>
           <div class="noc-wcard">
-            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;color:#c9b8ff">
-              <span>DAILY QUOTE</span>
-              <button type="button" id="nocNextQ" style="border:0;background:none;color:inherit;cursor:pointer"><span class="ms" style="font-size:15px">refresh</span></button>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:#c9b8ff">Daily Quote</strong>
+              <button type="button" class="noc-pill" id="nocNextQ" style="padding:3px 8px;font-size:11px">Next</button>
             </div>
-            <div id="nocQuoteTxt" style="font-size:12px;line-height:1.4"></div>
-            <div id="nocQuoteAuth" style="font-size:11px;opacity:.7;text-align:right"></div>
+            <p id="nocQuote" style="margin:0;font-size:12px;line-height:1.45;opacity:.85"></p>
           </div>
           <div class="noc-wcard">
-            <div style="font-size:11px;font-weight:700;color:#c9b8ff">QUICK TOGGLES</div>
+            <strong style="font-size:12px;text-transform:uppercase;letter-spacing:.7px;color:#c9b8ff">Quick Controls</strong>
             <div class="noc-qgrid">
               <button type="button" class="noc-qbtn ${cfg.light ? "on" : ""}" id="nocDayBtn"><span class="ms" style="font-size:18px">${cfg.light ? "light_mode" : "dark_mode"}</span>${cfg.light ? "Daylight" : "Nocturnal"}</button>
               <button type="button" class="noc-qbtn ${cfg.glass !== false ? "on" : ""}" id="nocGlassBtn"><span class="ms" style="font-size:18px">blur_on</span>Liquid Glass</button>
@@ -666,9 +704,8 @@
           </div>
         </div>
         <div class="w11-start-foot">
-          <button type="button" id="w11UserBtn" style="display:flex;align-items:center;gap:8px;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:4px 8px;border-radius:6px">
-            <span class="ms fill" style="font-size:22px;color:#60cdff">account_circle</span>
-            <span id="w11UserLbl">Sign in</span>
+          <button type="button" class="w11-tray-btn" id="w11UserBtn" style="padding:4px 8px">
+            <span class="ms fill" style="font-size:22px;color:#60cdff">account_circle</span><span id="w11UserLbl">Sign in</span>
           </button>
           <button type="button" class="pc-wbtn" id="w11PowerBtn" title="Exit Computer Mode" style="width:32px;height:32px;border-radius:6px"><span class="ms" style="font-size:18px">power_settings_new</span></button>
         </div>
@@ -723,7 +760,7 @@
     }
     const bms = root.querySelector("#pcBrBookmarks");
     if (bms) {
-      const bmApps = allApps().filter(a => a.href);
+      const bmApps = browserApps().filter(a => a.href);
       bms.innerHTML = bmApps.map(a => {
         const ico = a.logo
           ? `<img src="${a.logo}" alt="" onerror="this.src='/images/logo.png'">`
@@ -789,7 +826,9 @@
         </button>
         <button type="button" class="w11-tbtn" id="w11SearchBtn" title="Search"><span class="ms" style="font-size:20px">search</span></button>
         ${apps.map(a => {
-          const isAct = a.id === "wp_settings" ? setOpen : (appOpen && curAppHref && curAppHref === a.href);
+          const isAct = a.id === "wp_settings"
+            ? setOpen
+            : (a.id === "fake_browser" ? appOpen : (appOpen && curAppHref && curAppHref === a.href));
           return `<button type="button" class="w11-tbtn ${isAct ? "active" : ""}" data-app="${a.id}" title="${a.name.replace(/"/g, "&quot;")}">${iconMedia(a, 22)}</button>`;
         }).join("")}`;
       w11Center.querySelector("#w11StartBtn")?.addEventListener("click", e => {
@@ -808,11 +847,12 @@
   }
   renderAppLists();
 
-  // Delegated click for all [data-app] buttons (including bookmarks!)
+  // Delegated click for all [data-app] buttons (desktop, dock, start menu, and browser bookmarks)
   root.addEventListener("click", e => {
     const btn = e.target.closest("[data-app]");
     if (!btn) return;
-    const app = allApps().find(a => a.id === btn.dataset.app);
+    const id = btn.dataset.app;
+    const app = allApps().find(a => a.id === id) || browserApps().find(a => a.id === id);
     if (app) openInWindow(app);
   });
 
@@ -999,20 +1039,20 @@
     const b = e.target.closest("button"); if (!b) return;
     cfg.fakeBrowser = b.dataset.fb === "on";
     saveCfg(cfg);
-    applyBrowserChrome();
+    renderAppLists();
     paintSettingsWindow();
   });
   root.querySelector("#pcsWbSeg")?.addEventListener("click", e => {
     const b = e.target.closest("button"); if (!b) return;
     cfg.winBrowser = b.dataset.wb;
     saveCfg(cfg);
-    applyBrowserChrome();
+    renderAppLists();
     paintSettingsWindow();
   });
   root.querySelector("#nocSetFbTog")?.addEventListener("click", () => {
     cfg.fakeBrowser = !cfg.fakeBrowser;
     saveCfg(cfg);
-    applyBrowserChrome();
+    renderAppLists();
     paintSettingsWindow();
   });
   root.querySelector("#pcsCustSave")?.addEventListener("click", () => {
@@ -1163,10 +1203,8 @@
   });
 
   const renderQuote = () => {
-    const q = QUOTES[quoteIdx];
-    const qt = root.querySelector("#nocQuoteTxt"), qa = root.querySelector("#nocQuoteAuth");
-    if (qt) qt.textContent = `"${q.q}"`;
-    if (qa) qa.textContent = `— ${q.a}`;
+    const q = root.querySelector("#nocQuote");
+    if (q) q.textContent = QUOTES[quoteIdx % QUOTES.length];
   };
   renderQuote();
   root.querySelector("#nocNextQ")?.addEventListener("click", () => { quoteIdx = (quoteIdx + 1) % QUOTES.length; renderQuote(); });
