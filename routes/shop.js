@@ -167,10 +167,11 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
   /* ---------- /computer Custom Apps API ---------- */
   app.get("/api/computer/apps", wrap(async req => {
     const uid = uidFrom(req);
-    if (!uid) return { data: [], error: null };
+    if (!uid) return { data: [], isAdmin: false, error: null };
     await ensureTables();
     const rows = await run("SELECT id, name, url, logo_url, created_at FROM user_computer_apps WHERE user_id = ? ORDER BY created_at ASC", [uid]);
-    return { data: rows, error: null };
+    const isAdmin = ["admin", "owner"].includes(req.wt?.role);
+    return { data: rows, isAdmin, error: null };
   }));
 
   app.post("/api/computer/apps", wrap(async req => {

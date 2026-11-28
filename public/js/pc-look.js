@@ -1,4 +1,4 @@
-/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with Settings window (Wallpaper, OS & Add/Edit/Delete Apps) */
+/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with OS-native Settings & Admin Panel auto-app */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   function loadCfg() {
@@ -46,8 +46,7 @@
 
   const BUILTIN_APPS = [
     { id: "webtok", name: "Web Tok", sub: "For You & Feed", logo: "/images/logo.png", href: "/scroll#fyp", color: "#60cdff" },
-    { id: "wp_settings", name: "Settings", sub: "Wallpaper, OS & Apps", icon: "settings", action: () => openDesktopSettings("wp"), color: "#60cdff" },
-    { id: "secret", name: "Secret Settings", sub: "Capri & Exit PC", icon: "tune", action: () => window.openSecretSettings?.(), color: "#f472b6" }
+    { id: "wp_settings", name: "Settings", sub: "Home, Wallpaper & Apps", icon: "settings", action: () => openDesktopSettings("home"), color: "#60cdff" }
   ];
 
   const QUOTES = [
@@ -63,7 +62,10 @@
   let profileWallpaper = "";
   let customApps = [];
   let authToken = null;
-  let activeSettingsTab = "wp";
+  let isAdminUser = false;
+  let userDisplayName = "Web Tok User";
+  let userHandle = "user";
+  let activeSettingsTab = "home";
   let editingAppId = null;
 
   try {
@@ -105,13 +107,12 @@
     .pc-win.hidden-win{display:none!important}
     .pc-win.max-win{position:fixed;inset:0 0 48px 0;z-index:28;border-radius:0!important}
     #wt-pc.nocturnal .pc-win.max-win{inset:62px 12px 68px 12px;border-radius:14px!important}
-    #wt-pc.win11 .pc-win{background:rgba(32,32,32,.9);border:1px solid rgba(255,255,255,.09);border-radius:8px}
-    #wt-pc.nocturnal .pc-win{background:rgba(18,19,26,.85);border:2px solid #c9b8ff;border-radius:14px}
-    #wt-pc.nocturnal.glass .pc-win{background:rgba(24,26,38,.58);backdrop-filter:blur(28px)}
-    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.9);border:2px solid #7c5dfa}
+    #wt-pc.win11 .pc-win{background:rgba(32,32,32,.92);border:1px solid rgba(255,255,255,.09);border-radius:8px}
+    #wt-pc.nocturnal .pc-win{background:rgba(16,18,28,.56);border:1.5px solid rgba(165,243,252,.35);border-radius:16px}
+    #wt-pc.nocturnal.daylight .pc-win{background:rgba(243,241,250,.84);border:1.5px solid #7c5dfa}
 
     .pc-titlebar{height:34px;padding:0 0 0 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.07);flex:none;background:rgba(24,24,24,.65)}
-    #wt-pc.nocturnal .pc-titlebar{height:40px;padding:0 14px;background:transparent}
+    #wt-pc.nocturnal .pc-titlebar{height:40px;padding:0 14px;background:transparent;border-bottom-color:rgba(255,255,255,.08)}
     .pc-wtitle{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .pc-wbtns{display:flex;align-items:stretch;flex:none;height:100%}
     .pc-wbtn{width:44px;height:100%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;font-size:15px;text-decoration:none;transition:background .12s}
@@ -126,30 +127,58 @@
     .pc-btn:hover{background:rgba(255,255,255,.13)}
     .pc-btn.p{background:#60cdff;color:#000;border-color:transparent}
     .pc-btn:disabled{opacity:.5;cursor:default}
-    #wt-pc.nocturnal .pc-btn.p{background:#c9b8ff;color:#12131a;border-radius:10px}
+    #wt-pc.nocturnal .pc-btn.p{background:#7dd3fc;color:#0f172a;border-radius:10px}
 
     .pc-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px #22c55e33}
 
-    /* Settings Window */
-    .pcs-win-body{flex:1;min-height:0;display:flex;overflow:hidden}
-    .pcs-nav{width:190px;flex:none;padding:12px 10px;border-right:1px solid rgba(255,255,255,.08);display:flex;flex-direction:column;gap:4px;background:rgba(20,20,24,.35)}
-    .pcs-nav-btn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:6px;border:0;background:transparent;color:inherit;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left;position:relative}
-    .pcs-nav-btn:hover{background:rgba(255,255,255,.07)}
-    .pcs-nav-btn.on{background:rgba(255,255,255,.1)}
-    .pcs-nav-btn.on::before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:99px;background:#60cdff}
-    #wt-pc.nocturnal .pcs-nav-btn.on::before{background:#c9b8ff}
-    .pcs-pane{flex:1;min-width:0;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:18px}
-    .pcs-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+    /* Shared Settings Inputs & Lists */
     .pcs-lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#60cdff}
-    #wt-pc.nocturnal .pcs-lbl{color:#c9b8ff}
+    #wt-pc.nocturnal .pcs-lbl{color:#7dd3fc}
     .pcs-seg{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:4px;border-radius:8px}
     .pcs-seg button{flex:1;border:0;background:transparent;color:inherit;opacity:.75;font:inherit;font-size:12px;font-weight:600;padding:8px;border-radius:6px;cursor:pointer}
     .pcs-seg button.on{background:#60cdff;color:#000;opacity:1}
-    #wt-pc.nocturnal .pcs-seg button.on{background:#c9b8ff;color:#12131a}
+    #wt-pc.nocturnal .pcs-seg button.on{background:#7dd3fc;color:#0f172a}
     .pcs-in{width:100%;padding:9px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.22);color:inherit;font:inherit;font-size:12.5px;outline:0}
     .pca-list{display:flex;flex-direction:column;gap:8px}
-    .pca-row{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.07);font-size:12.5px}
+    .pca-row{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);font-size:12.5px}
     .pca-row-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+
+    /* Windows 11 Dark Mode Settings Layout (modeled after Win11 Settings) */
+    .w11s-wrap{flex:1;min-height:0;display:flex;overflow:hidden}
+    .w11s-side{width:236px;flex:none;padding:14px 12px;display:flex;flex-direction:column;gap:10px;border-right:1px solid rgba(255,255,255,.06);background:rgba(24,24,24,.45)}
+    .w11s-user{display:flex;align-items:center;gap:10px;padding:6px 8px}
+    .w11s-av{width:38px;height:38px;border-radius:50%;background:#60cdff22;color:#60cdff;display:grid;place-items:center;flex:none}
+    .w11s-nav{display:flex;flex-direction:column;gap:3px}
+    .w11s-nb{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:6px;border:0;background:transparent;color:inherit;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;text-align:left;position:relative}
+    .w11s-nb:hover{background:rgba(255,255,255,.06)}
+    .w11s-nb.on{background:rgba(255,255,255,.09);font-weight:600}
+    .w11s-nb.on::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:99px;background:#60cdff}
+    .w11s-main{flex:1;min-width:0;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:18px}
+    .w11s-dev{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-bottom:6px}
+    .w11s-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+    .w11s-card{background:rgba(44,44,44,.72);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px}
+    .w11s-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:6px;border:0;background:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+    .w11s-row:hover{background:rgba(255,255,255,.09)}
+    .w11s-wpthumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .w11s-wpth{height:56px;border-radius:6px;border:2px solid rgba(255,255,255,.12);background-size:cover;background-position:center;cursor:pointer;display:flex;align-items:flex-end;padding:4px 6px;font-size:10.5px;font-weight:600;color:#fff;text-shadow:0 1px 3px #000}
+    .w11s-wpth.on{border-color:#60cdff}
+
+    /* Nocturnal Shell Settings Layout (translucent glass + icon rail + cyan/lavender outlines) */
+    .nocs-wrap{flex:1;min-height:0;display:flex;overflow:hidden}
+    .nocs-rail{width:64px;flex:none;padding:14px 10px;display:flex;flex-direction:column;align-items:center;gap:10px;border-right:1px solid rgba(255,255,255,.1);background:rgba(14,16,24,.38)}
+    .nocs-rb{width:42px;height:42px;border-radius:12px;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;transition:background .15s,color .15s}
+    .nocs-rb:hover{background:rgba(255,255,255,.1)}
+    .nocs-rb.on{background:#a5f3fc;color:#0f172a}
+    .nocs-main{flex:1;min-width:0;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px}
+    .nocs-hero{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:18px}
+    .nocs-moon{width:76px;height:76px;border-radius:50%;border:2px solid #67e8f9;display:grid;place-items:center;color:#67e8f9;box-shadow:0 0 24px rgba(103,232,249,.22);flex:none}
+    .nocs-bento{display:grid;grid-template-columns:1fr 1.2fr;gap:14px}
+    .nocs-col{display:flex;flex-direction:column;gap:12px}
+    .nocs-box{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);border-radius:14px;padding:16px}
+    .nocs-tgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .nocs-tile{padding:16px 10px;border-radius:14px;border:1.5px solid rgba(103,232,249,.55);background:rgba(255,255,255,.04);color:inherit;font:inherit;font-size:12px;font-weight:600;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:background .15s}
+    .nocs-tile:hover{background:rgba(103,232,249,.14)}
+    .nocs-tile.on{background:rgba(103,232,249,.18);border-color:#67e8f9}
 
     /* Nocturnal Top Bar & Widgets */
     .noc-bar{height:44px;margin:10px 14px 0;padding:0 12px;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(18,19,26,.78);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.14);flex:none;z-index:30}
@@ -208,10 +237,10 @@
     @media(max-width:900px){
       .noc-widgets,.pc-icons{display:none}
       .w11-sgrid{grid-template-columns:repeat(3,1fr)}
-      .w11-rec{grid-template-columns:1fr}
-      .pcs-win-body{flex-direction:column}
-      .pcs-nav{width:100%;flex-direction:row;border-right:0;border-bottom:1px solid rgba(255,255,255,.08);overflow-x:auto}
-      .pcs-nav-btn.on::before{left:8px;right:8px;top:auto;bottom:0;width:auto;height:3px}
+      .w11-rec,.w11s-grid,.nocs-bento{grid-template-columns:1fr}
+      .w11s-wrap,.nocs-wrap{flex-direction:column}
+      .w11s-side,.nocs-rail{width:100%;flex-direction:row;border-right:0;border-bottom:1px solid rgba(255,255,255,.08);overflow-x:auto}
+      .w11s-nav{flex-direction:row}
     }
   `;
   document.head.appendChild(st);
@@ -245,7 +274,12 @@
       color: "#60cdff",
       isCustom: true
     }));
-    return [BUILTIN_APPS[0], ...customMapped, ...BUILTIN_APPS.slice(1)];
+    const list = [BUILTIN_APPS[0], ...customMapped];
+    if (isAdminUser) {
+      list.push({ id: "admin_panel", name: "Admin Panel", sub: "Moderation & Users", icon: "admin_panel_settings", href: "/admin", color: "#fbbf24" });
+    }
+    list.push(BUILTIN_APPS[1]);
+    return list;
   }
 
   function iconMedia(a, sz = 32) {
@@ -274,63 +308,175 @@
       </div>
     </div>`;
 
-  const settingsWinHtml = `
+  const wpFormHtml = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="pcs-lbl">Wallpaper Source</div>
+      <div class="pcs-seg" id="pcsWpSeg">
+        <button type="button" data-wp="default">OS Default</button>
+        <button type="button" data-wp="profile">Use Profile Wallpaper</button>
+        <button type="button" data-wp="custom">Custom URL</button>
+      </div>
+      <div id="pcsProfNote" style="font-size:12px;opacity:.75"></div>
+      <div id="pcsCustRow" style="display:none;gap:8px;align-items:center">
+        <input type="text" class="pcs-in" id="pcsCustIn" placeholder="Paste image URL (https://…)">
+        <button type="button" class="pc-btn p" id="pcsCustSave">Apply</button>
+      </div>
+    </div>`;
+
+  const appsFormHtml = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="pcs-lbl">Add New App</div>
+      <input type="text" class="pcs-in" id="pcaName" maxlength="40" placeholder="App name (e.g. Wikipedia)">
+      <input type="text" class="pcs-in" id="pcaUrl" placeholder="Website URL (https://example.com)">
+      <input type="text" class="pcs-in" id="pcaLogo" placeholder="Logo URL (optional — auto-fetched if blank)">
+      <div id="pcaHint" style="font-size:12px;min-height:18px;color:#cbd5e1"></div>
+      <button type="button" class="pc-btn p" id="pcaAddBtn" style="align-self:flex-start"><span class="ms" style="font-size:17px">add</span>Add App</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:6px">
+      <div class="pcs-lbl">Saved Apps</div>
+      <div class="pca-list" id="pcaList"></div>
+    </div>`;
+
+  const settingsWinHtml = isNoc ? `
     <div class="pc-win hidden-win" id="pcSettingsWin">
       <div class="pc-titlebar">
-        <div class="pc-wtitle">
-          <span class="ms fill" style="font-size:16px;color:#60cdff">settings</span>
-          <span>Settings</span>
-        </div>
+        <div class="pc-wtitle"><span class="ms fill" style="font-size:17px;color:#67e8f9">settings</span><span id="nocSetTitle">Home</span></div>
         <div class="pc-wbtns">
           <button type="button" class="pc-wbtn" id="pcSetMin" title="Minimize"><span class="ms" style="font-size:15px">remove</span></button>
           <button type="button" class="pc-wbtn" id="pcSetMax" title="Maximize"><span class="ms" style="font-size:15px">crop_square</span></button>
           <button type="button" class="pc-wbtn close" id="pcSetClose" title="Close"><span class="ms" style="font-size:15px">close</span></button>
         </div>
       </div>
-      <div class="pcs-win-body">
-        <nav class="pcs-nav">
-          <button type="button" class="pcs-nav-btn on" data-stab="wp"><span class="ms fill" style="font-size:18px;color:#60cdff">wallpaper</span>Wallpaper &amp; OS</button>
-          <button type="button" class="pcs-nav-btn" data-stab="apps"><span class="ms fill" style="font-size:18px;color:#34d399">apps</span>Apps</button>
+      <div class="nocs-wrap">
+        <nav class="nocs-rail">
+          <button type="button" class="nocs-rb on" data-stab="home" title="Home"><span class="ms fill">home</span></button>
+          <button type="button" class="nocs-rb" data-stab="wp" title="Wallpaper &amp; Theme"><span class="ms fill">palette</span></button>
+          <button type="button" class="nocs-rb" data-stab="apps" title="Apps"><span class="ms fill">apps</span></button>
+          <button type="button" class="nocs-rb" data-stab="system" title="System"><span class="ms fill">tune</span></button>
         </nav>
-        <div class="pcs-pane" id="pcsPaneWp">
-          <h2 style="margin:0;font-size:20px;font-weight:700">Wallpaper &amp; OS</h2>
-          <div class="pcs-card">
-            <div class="pcs-lbl">Wallpaper Source</div>
-            <div class="pcs-seg" id="pcsWpSeg">
-              <button type="button" data-wp="default">OS Default</button>
-              <button type="button" data-wp="profile">Use Profile Wallpaper</button>
-              <button type="button" data-wp="custom">Custom URL</button>
-            </div>
-            <div id="pcsProfNote" style="font-size:12px;opacity:.75"></div>
-            <div id="pcsCustRow" style="display:none;gap:8px;align-items:center">
-              <input type="text" class="pcs-in" id="pcsCustIn" placeholder="Paste image URL (https://…)">
-              <button type="button" class="pc-btn p" id="pcsCustSave">Apply</button>
+        <div class="nocs-main" id="pcsPaneHome">
+          <div class="nocs-hero">
+            <div class="nocs-moon"><span class="ms fill" style="font-size:38px">dark_mode</span></div>
+            <div>
+              <div style="font-size:20px;font-weight:700;letter-spacing:.4px" id="nocSetUser">@USER</div>
+              <div style="font-size:12.5px;color:#67e8f9;margin-top:2px">Nocturnal Shell v1.2.9 (Nebula)</div>
+              <div style="font-size:12px;opacity:.7;margin-top:4px">Web Tok Computer Mode · Online</div>
             </div>
           </div>
-          <div class="pcs-card">
+          <div class="nocs-bento">
+            <div class="nocs-col">
+              <div class="nocs-box" style="display:flex;align-items:center;gap:12px">
+                <img src="/images/logo.png" alt="" width="40" height="40" style="border-radius:10px">
+                <div><b style="display:block;font-size:13.5px">Web Tok Desktop</b><small style="opacity:.7" id="nocSetAppCount">0 custom apps pinned</small></div>
+              </div>
+              <div class="nocs-box" style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+                <div style="font-size:34px;font-weight:700" id="nocSetClock">--:--</div>
+                <div style="text-align:right;font-size:12px"><div style="color:#67e8f9;font-weight:700" id="nocSetDay">Day</div><div style="opacity:.75" id="nocSetDate">Date</div></div>
+              </div>
+            </div>
+            <div class="nocs-tgrid">
+              <button type="button" class="nocs-tile ${cfg.light ? "" : "on"}" id="nocSetDayTog"><span class="ms">dark_mode</span><span>${cfg.light ? "Daylight" : "Nocturnal"}</span></button>
+              <button type="button" class="nocs-tile ${cfg.glass !== false ? "on" : ""}" id="nocSetGlassTog"><span class="ms">water_drop</span><span>Liquid Glass</span></button>
+              <button type="button" class="nocs-tile" data-jump="wp"><span class="ms">wallpaper</span><span>Wallpaper</span></button>
+              <button type="button" class="nocs-tile" data-jump="apps"><span class="ms">apps</span><span>Apps</span></button>
+              <button type="button" class="nocs-tile" id="nocSetWinBtn"><span class="ms">window</span><span>Windows 11</span></button>
+              <button type="button" class="nocs-tile" id="pcsExitBtn" style="border-color:rgba(244,114,182,.6);color:#f472b6"><span class="ms">power_settings_new</span><span>Exit PC</span></button>
+            </div>
+          </div>
+        </div>
+        <div class="nocs-main" id="pcsPaneWp" style="display:none">
+          <h2 style="margin:0;font-size:19px">Wallpaper &amp; Theme</h2>
+          <div class="nocs-box">${wpFormHtml}</div>
+        </div>
+        <div class="nocs-main" id="pcsPaneApps" style="display:none">
+          <h2 style="margin:0;font-size:19px">App Settings</h2>
+          <div class="nocs-box">${appsFormHtml}</div>
+        </div>
+        <div class="nocs-main" id="pcsPaneSys" style="display:none">
+          <h2 style="margin:0;font-size:19px">Desktop Style &amp; System</h2>
+          <div class="nocs-box" style="display:flex;flex-direction:column;gap:14px">
             <div class="pcs-lbl">Desktop Style</div>
             <div class="pcs-seg" id="pcsStyleSeg">
               <button type="button" data-st="win11">Windows 11</button>
               <button type="button" data-st="nocturnal">Nocturnal Shell</button>
             </div>
-          </div>
-          <div>
-            <button type="button" class="pc-btn" id="pcsExitBtn" style="color:#f472b6"><span class="ms" style="font-size:17px">power_settings_new</span>Exit Computer Mode</button>
+            <div><button type="button" class="pc-btn" id="pcsExitBtn2" style="color:#f472b6"><span class="ms" style="font-size:17px">power_settings_new</span>Exit Computer Mode</button></div>
           </div>
         </div>
-        <div class="pcs-pane" id="pcsPaneApps" style="display:none">
-          <h2 style="margin:0;font-size:20px;font-weight:700">App Settings</h2>
-          <div class="pcs-card">
-            <div class="pcs-lbl">Add New App</div>
-            <input type="text" class="pcs-in" id="pcaName" maxlength="40" placeholder="App name (e.g. Wikipedia)">
-            <input type="text" class="pcs-in" id="pcaUrl" placeholder="Website URL (https://example.com)">
-            <input type="text" class="pcs-in" id="pcaLogo" placeholder="Logo URL (optional — auto-fetched if blank)">
-            <div id="pcaHint" style="font-size:12px;min-height:18px;color:#cbd5e1"></div>
-            <button type="button" class="pc-btn p" id="pcaAddBtn" style="align-self:flex-start"><span class="ms" style="font-size:17px">add</span>Add App</button>
+      </div>
+    </div>` : `
+    <div class="pc-win hidden-win" id="pcSettingsWin">
+      <div class="pc-titlebar">
+        <div class="pc-wtitle"><span class="ms fill" style="font-size:16px;color:#60cdff">settings</span><span>Settings</span></div>
+        <div class="pc-wbtns">
+          <button type="button" class="pc-wbtn" id="pcSetMin" title="Minimize"><span class="ms" style="font-size:15px">remove</span></button>
+          <button type="button" class="pc-wbtn" id="pcSetMax" title="Maximize"><span class="ms" style="font-size:15px">crop_square</span></button>
+          <button type="button" class="pc-wbtn close" id="pcSetClose" title="Close"><span class="ms" style="font-size:15px">close</span></button>
+        </div>
+      </div>
+      <div class="w11s-wrap">
+        <aside class="w11s-side">
+          <div class="w11s-user">
+            <div class="w11s-av"><span class="ms fill" style="font-size:22px">account_circle</span></div>
+            <div style="min-width:0"><b style="display:block;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="w11SetUser">Web Tok User</b><small style="opacity:.65;font-size:11px" id="w11SetHandle">Signed in</small></div>
           </div>
-          <div class="pcs-card">
-            <div class="pcs-lbl">Saved Apps</div>
-            <div class="pca-list" id="pcaList"></div>
+          <nav class="w11s-nav">
+            <button type="button" class="w11s-nb on" data-stab="home"><span class="ms fill" style="font-size:18px;color:#60cdff">home</span>Home</button>
+            <button type="button" class="w11s-nb" data-stab="wp"><span class="ms fill" style="font-size:18px;color:#c084fc">brush</span>Personalization</button>
+            <button type="button" class="w11s-nb" data-stab="apps"><span class="ms fill" style="font-size:18px;color:#34d399">apps</span>Apps</button>
+            <button type="button" class="w11s-nb" data-stab="system"><span class="ms fill" style="font-size:18px;color:#60cdff">laptop_windows</span>System</button>
+          </nav>
+        </aside>
+        <div class="w11s-main" id="pcsPaneHome">
+          <h2 style="margin:0;font-size:22px;font-weight:600">Home</h2>
+          <div class="w11s-dev">
+            <div style="display:flex;align-items:center;gap:14px">
+              <div id="w11SetPrev" style="width:78px;height:48px;border-radius:6px;border:2px solid rgba(255,255,255,.18);background-size:cover;background-position:center;background-image:url('/images/win11.jpg')"></div>
+              <div><b style="font-size:14px;display:block">WebTok-PC</b><small style="opacity:.7;font-size:12px">Windows 11 Dark Mode</small></div>
+            </div>
+            <div style="display:flex;gap:18px;font-size:12px;opacity:.85">
+              <span style="display:flex;align-items:center;gap:6px"><span class="ms" style="font-size:16px;color:#60cdff">wifi</span>Connected</span>
+              <span style="display:flex;align-items:center;gap:6px"><span class="ms" style="font-size:16px;color:#34d399">verified</span>Web Tok</span>
+            </div>
+          </div>
+          <div class="w11s-grid">
+            <div class="w11s-card">
+              <b style="font-size:13.5px">Recommended settings</b>
+              <button type="button" class="w11s-row" data-jump="wp"><span>Wallpaper &amp; Background</span><span class="ms" style="font-size:16px">chevron_right</span></button>
+              <button type="button" class="w11s-row" data-jump="apps"><span>Installed Apps &amp; Add App</span><span class="ms" style="font-size:16px">chevron_right</span></button>
+              <button type="button" class="w11s-row" data-jump="system"><span>Desktop Style &amp; Exit</span><span class="ms" style="font-size:16px">chevron_right</span></button>
+            </div>
+            <div class="w11s-card">
+              <b style="font-size:13.5px">Personalize your device</b>
+              <div class="w11s-wpthumbs" id="w11WpThumbs">
+                <button type="button" class="w11s-wpth" data-qwp="default" style="background-image:url('/images/win11.jpg')">Default</button>
+                <button type="button" class="w11s-wpth" data-qwp="profile" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6)">Profile</button>
+                <button type="button" class="w11s-wpth" data-qwp="custom" style="background:linear-gradient(135deg,#1f2937,#0f172a)">Custom</button>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;opacity:.8">
+                <span>Desktop style</span>
+                <button type="button" class="pc-btn" data-jump="system" style="padding:4px 10px;font-size:11.5px">Windows 11</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="w11s-main" id="pcsPaneWp" style="display:none">
+          <h2 style="margin:0;font-size:22px;font-weight:600">Personalization</h2>
+          <div class="w11s-card">${wpFormHtml}</div>
+        </div>
+        <div class="w11s-main" id="pcsPaneApps" style="display:none">
+          <h2 style="margin:0;font-size:22px;font-weight:600">Apps</h2>
+          <div class="w11s-card">${appsFormHtml}</div>
+        </div>
+        <div class="w11s-main" id="pcsPaneSys" style="display:none">
+          <h2 style="margin:0;font-size:22px;font-weight:600">System</h2>
+          <div class="w11s-card">
+            <div class="pcs-lbl">Desktop Style</div>
+            <div class="pcs-seg" id="pcsStyleSeg">
+              <button type="button" data-st="win11">Windows 11</button>
+              <button type="button" data-st="nocturnal">Nocturnal Shell</button>
+            </div>
+            <div style="margin-top:6px"><button type="button" class="pc-btn" id="pcsExitBtn" style="color:#f472b6"><span class="ms" style="font-size:17px">power_settings_new</span>Exit Computer Mode</button></div>
           </div>
         </div>
       </div>
@@ -365,7 +511,6 @@
           <span class="noc-pill"><span class="ms" style="font-size:15px">wifi</span>Online</span>
           <button type="button" class="noc-pill" id="pcAuthPill" title="Web Tok Account">Sign in</button>
           <button type="button" class="noc-pill" data-app="wp_settings" title="Settings"><span class="ms" style="font-size:16px">settings</span>Settings</button>
-          <button type="button" class="noc-pill" id="pcOpenSec" title="Secret Settings"><span class="ms" style="font-size:16px">tune</span></button>
         </div>
       </header>
       <div class="pc-stage">
@@ -547,16 +692,42 @@
   });
 
   function paintSettingsWindow() {
-    root.querySelectorAll(".pcs-nav-btn").forEach(b => b.classList.toggle("on", b.dataset.stab === activeSettingsTab));
-    root.querySelector("#pcsPaneWp").style.display = activeSettingsTab === "wp" ? "flex" : "none";
-    root.querySelector("#pcsPaneApps").style.display = activeSettingsTab === "apps" ? "flex" : "none";
+    root.querySelectorAll("[data-stab]").forEach(b => b.classList.toggle("on", b.dataset.stab === activeSettingsTab));
+    const titles = { home: "Home", wp: "Wallpaper & Theme", apps: "Apps", system: "System" };
+    const nt = root.querySelector("#nocSetTitle");
+    if (nt) nt.textContent = titles[activeSettingsTab] || "Settings";
+
+    const pHome = root.querySelector("#pcsPaneHome");
+    const pWp = root.querySelector("#pcsPaneWp");
+    const pApps = root.querySelector("#pcsPaneApps");
+    const pSys = root.querySelector("#pcsPaneSys");
+    if (pHome) pHome.style.display = activeSettingsTab === "home" ? "flex" : "none";
+    if (pWp) pWp.style.display = activeSettingsTab === "wp" ? "flex" : "none";
+    if (pApps) pApps.style.display = activeSettingsTab === "apps" ? "flex" : "none";
+    if (pSys) pSys.style.display = activeSettingsTab === "system" ? "flex" : "none";
+
     root.querySelectorAll("#pcsWpSeg button").forEach(b => b.classList.toggle("on", b.dataset.wp === (cfg.wpMode || "default")));
     root.querySelectorAll("#pcsStyleSeg button").forEach(b => b.classList.toggle("on", b.dataset.st === (cfg.style || "nocturnal")));
-    root.querySelector("#pcsCustRow").style.display = cfg.wpMode === "custom" ? "flex" : "none";
-    root.querySelector("#pcsCustIn").value = cfg.customWp || "";
-    root.querySelector("#pcsProfNote").textContent = profileWallpaper
-      ? "Profile wallpaper detected and ready."
-      : "No profile wallpaper set yet (set one in My Profile → Theme & settings).";
+    root.querySelectorAll("#w11WpThumbs [data-qwp]").forEach(b => b.classList.toggle("on", b.dataset.qwp === (cfg.wpMode || "default")));
+
+    const custRow = root.querySelector("#pcsCustRow");
+    if (custRow) custRow.style.display = cfg.wpMode === "custom" ? "flex" : "none";
+    const custIn = root.querySelector("#pcsCustIn");
+    if (custIn) custIn.value = cfg.customWp || "";
+    const profNote = root.querySelector("#pcsProfNote");
+    if (profNote) {
+      profNote.textContent = profileWallpaper
+        ? "Profile wallpaper detected and ready."
+        : "No profile wallpaper set yet (set one in My Profile → Theme & settings).";
+    }
+
+    const wu = root.querySelector("#w11SetUser"), wh = root.querySelector("#w11SetHandle");
+    if (wu) wu.textContent = userDisplayName;
+    if (wh) wh.textContent = "@" + userHandle;
+    const nu = root.querySelector("#nocSetUser"), nac = root.querySelector("#nocSetAppCount");
+    if (nu) nu.textContent = `${userHandle.toUpperCase()}@WEBTOK`;
+    if (nac) nac.textContent = `${customApps.length} custom app${customApps.length === 1 ? "" : "s"} pinned`;
+
     paintSavedAppsList();
   }
 
@@ -653,7 +824,7 @@
     });
   }
 
-  function openDesktopSettings(tab = "wp") {
+  function openDesktopSettings(tab = "home") {
     w11Start?.classList.remove("open");
     w11Fly?.classList.remove("open");
     appWin?.classList.add("hidden-win");
@@ -664,11 +835,19 @@
   }
 
   // Wire Settings window controls
-  root.querySelectorAll(".pcs-nav-btn").forEach(b => {
-    b.onclick = () => {
-      activeSettingsTab = b.dataset.stab;
-      paintSettingsWindow();
-    };
+  root.querySelectorAll("[data-stab]").forEach(b => {
+    b.onclick = () => { activeSettingsTab = b.dataset.stab; paintSettingsWindow(); };
+  });
+  root.querySelectorAll("[data-jump]").forEach(b => {
+    b.onclick = () => { activeSettingsTab = b.dataset.jump; paintSettingsWindow(); };
+  });
+  root.querySelector("#w11WpThumbs")?.addEventListener("click", e => {
+    const b = e.target.closest("[data-qwp]"); if (!b) return;
+    cfg.wpMode = b.dataset.qwp;
+    saveCfg(cfg);
+    applyWallpaper();
+    if (cfg.wpMode === "custom") activeSettingsTab = "wp";
+    paintSettingsWindow();
   });
   root.querySelector("#pcSetMin")?.addEventListener("click", () => { settingsWin?.classList.add("hidden-win"); renderAppLists(); });
   root.querySelector("#pcSetMax")?.addEventListener("click", () => settingsWin?.classList.toggle("max-win"));
@@ -697,10 +876,20 @@
     saveCfg(cfg);
     location.reload();
   });
-  root.querySelector("#pcsExitBtn")?.addEventListener("click", () => {
-    cfg.enabled = false;
-    saveCfg(cfg);
-    location.href = "/";
+  root.querySelectorAll("#pcsExitBtn, #pcsExitBtn2").forEach(b => {
+    b.addEventListener("click", () => { cfg.enabled = false; saveCfg(cfg); location.href = "/"; });
+  });
+  root.querySelector("#nocSetDayTog")?.addEventListener("click", () => {
+    cfg.light = !cfg.light; saveCfg(cfg); location.reload();
+  });
+  root.querySelector("#nocSetGlassTog")?.addEventListener("click", () => {
+    cfg.glass = !(cfg.glass !== false); saveCfg(cfg);
+    root.classList.toggle("glass", cfg.glass);
+    root.querySelector("#nocGlassBtn")?.classList.toggle("on", cfg.glass);
+    root.querySelector("#nocSetGlassTog")?.classList.toggle("on", cfg.glass);
+  });
+  root.querySelector("#nocSetWinBtn")?.addEventListener("click", () => {
+    cfg.style = "win11"; saveCfg(cfg); location.reload();
   });
   root.querySelector("#w11OpenAppsTab")?.addEventListener("click", () => openDesktopSettings("apps"));
 
@@ -744,10 +933,6 @@
     } finally {
       btn.disabled = false;
     }
-  });
-
-  root.querySelectorAll("#pcOpenSec").forEach(el => {
-    el.onclick = () => window.openSecretSettings?.();
   });
 
   root.querySelector("#pcAuthPill")?.addEventListener("click", () => {
@@ -813,6 +998,7 @@
   function tickClock() {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const time24 = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
     const dateStr = now.toLocaleDateString([], { month: "numeric", day: "numeric", year: "numeric" });
     const shortDate = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
     const clk = root.querySelector("#pcClock");
@@ -820,6 +1006,10 @@
     const bt = root.querySelector("#nocBigTime"), bd = root.querySelector("#nocBigDate");
     if (bt) bt.textContent = timeStr;
     if (bd) bd.textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
+    const sc = root.querySelector("#nocSetClock"), sd = root.querySelector("#nocSetDay"), sdt = root.querySelector("#nocSetDate");
+    if (sc) sc.textContent = time24;
+    if (sd) sd.textContent = now.toLocaleDateString([], { weekday: "long" });
+    if (sdt) sdt.textContent = now.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
   }
   tickClock();
   setInterval(tickClock, 15000);
@@ -835,18 +1025,18 @@
 
       const ar = await fetch("/api/computer/apps", { headers: { Authorization: "Bearer " + authToken } });
       const aj = await ar.json().catch(() => ({}));
-      if (ar.ok && Array.isArray(aj?.data)) {
-        customApps = aj.data;
-        renderAppLists();
-        paintSavedAppsList();
+      if (ar.ok) {
+        if (Array.isArray(aj?.data)) customApps = aj.data;
+        isAdminUser = !!aj?.isAdmin;
       }
       if (data?.session?.user?.id) {
         const { data: prof } = await client.from("profiles").select("username,display_name,theme").eq("id", data.session.user.id).maybeSingle();
-        const name = prof?.display_name || (prof?.username ? `@${prof.username}` : "Signed in");
+        userHandle = prof?.username || (data.session.user.email || "user").split("@")[0];
+        userDisplayName = prof?.display_name || `@${userHandle}`;
         const ul = root.querySelector("#w11UserLbl");
-        if (ul) ul.textContent = name;
+        if (ul) ul.textContent = userDisplayName;
         const ap = root.querySelector("#pcAuthPill");
-        if (ap) ap.textContent = name;
+        if (ap) ap.textContent = userDisplayName;
         let rt = prof?.theme;
         if (typeof rt === "string") { try { rt = JSON.parse(rt); } catch { rt = null; } }
         if (rt?.wallpaper) {
@@ -854,6 +1044,8 @@
           applyWallpaper();
         }
       }
+      renderAppLists();
+      paintSettingsWindow();
       return true;
     } catch {
       return false;
