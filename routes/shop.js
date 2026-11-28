@@ -75,21 +75,6 @@ const BUNDLES = [
   }
 ];
 
-function checkIframeHeaders(headers) {
-  const xfo = String(headers.get("x-frame-options") || "").trim().toLowerCase();
-  if (xfo === "deny" || xfo === "sameorigin" || xfo.startsWith("allow-from")) return false;
-  const csp = String(headers.get("content-security-policy") || "");
-  if (csp) {
-    const dir = csp.split(";").map(s => s.trim()).find(s => /^frame-ancestors\b/i.test(s));
-    if (dir) {
-      const vals = dir.replace(/^frame-ancestors\b/i, "").trim().toLowerCase().split(/\s+/).filter(Boolean);
-      const allowsAny = vals.some(v => v === "*" || v === "https:" || v === "http:");
-      if (!allowsAny) return false;
-    }
-  }
-  return true;
-}
-
 function extractIconFromHtml(html, baseUrl) {
   const m = html.match(/<link[^>]+rel=["'](?:shortcut\s+icon|icon|apple-touch-icon)["'][^>]*>/i);
   if (m) {
@@ -214,32 +199,20 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     const isSameHost = parsedUrl.hostname.toLowerCase() === reqHost;
 
     let detectedIcon = null;
-    if (!isSameHost) {
-      let resp;
+    if (!logoUrl && !isSameHost) {
       try {
-        resp = await fetch(parsedUrl.href, {
+        const resp = await fetch(parsedUrl.href, {
           method: "GET",
           redirect: "follow",
           headers: { "User-Agent": "Mozilla/5.0 (compatible; WebTok/1.0)" },
-          signal: AbortSignal.timeout(7500)
+          signal: AbortSignal.timeout(3500)
         });
-      } catch {
-        throw new HttpError(400, "Could not reach that site to check iframe support. Check the URL and try again.");
-      }
-
-      if (!checkIframeHeaders(resp.headers)) {
-        throw new HttpError(400, "This site can't run in an iframe. Choose a different one.");
-      }
-
-      if (!logoUrl) {
-        try {
-          const ct = String(resp.headers.get("content-type") || "");
-          if (ct.includes("text/html")) {
-            const html = (await resp.text()).slice(0, 45000);
-            detectedIcon = extractIconFromHtml(html, resp.url || parsedUrl.href);
-          }
-        } catch {}
-      }
+        const ct = String(resp.headers.get("content-type") || "");
+        if (ct.includes("text/html")) {
+          const html = (await resp.text()).slice(0, 45000);
+          detectedIcon = extractIconFromHtml(html, resp.url || parsedUrl.href);
+        }
+      } catch {}
     }
 
     if (!logoUrl) {
@@ -283,22 +256,21 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
   }
 
   app.post("/api/admin/tok-coins", wrap(async req => {
-    const uid = uidFrom(req); if (!uid) throw new HttpError(401, "Sign in required");
-    if (!req.wt || !["admin", "owner"].includes(req.wt.role)) {
-      throw new HttpError(403, "Admin or owner access required.");
-    }
-    const amount = Math.floor(Number(req.body?.amount));
+    if (!req.wt) throw new HttpError(401, "Sign in required");
+    if (!["admin", "owner"].includes(req.wt.role)) throw new HttpError(403, "Admins only");
+    await ensureTables();
+    const rawAmt = Number(req.body?.amount);
+    const amount = Math.floor(rawAmt);
     if (!Number.isFinite(amount) || amount < 1 || amount > 1000000000) {
       throw new HttpError(400, "Enter a valid amount of Tok Coins (1 to 1,000,000,000).");
     }
-    const targetId = String(req.body?.targetUserId || uid).trim() || uid;
-    await ensureTables();
+    const targetUid = req.body?.userId ? String(req.body.userId) : req.wt.uid;
     await db.execute({
       sql: "INSERT INTO user_coin_grants (id, user_id, amount, granted_by, created_at) VALUES (?,?,?,?,?)",
-      args: [crypto.randomUUID(), targetId, amount, uid, nowIso()]
+      args: [crypto.randomUUID(), targetUid, amount, req.wt.uid, nowIso()]
     });
-    const wallet = await getWallet(targetId);
-    return { data: { amount, targetUserId: targetId, balance: wallet.balance }, error: null };
+    const wallet = await getWallet(targetUid);
+    return { data: { amount, balance: wallet.balance, userId: targetUid }, error: null };
   }));
 
   app.get("/api/shop/me", wrap(async req => {
@@ -571,9 +543,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
     rows.forEach(r => {
       const cat = CATALOG.find(x => x.id === r.item_id);
       const ow = owned.find(x => x.user_id === r.user_id && x.item_id === r.item_id);
-      out[r.video_id] = ow
-        ? { ...cat, ...ow, image_url: ow.image_url || cat?.image_url || null, sprite: cat?.sprite || null }
-        : (cat || null);
+      out[r.video_id] = ow ? { ...cat, ...ow } : (cat || null);
     });
     return { data: out, error: null };
   }));
@@ -589,7 +559,7 @@ module.exports = function mountShop({ app, db, run, wrap, uidFrom, HttpError, no
       if (!id) return null;
       const cat = CATALOG.find(x => x.id === id);
       const ow = owned.find(x => x.item_id === id);
-      return ow ? { ...cat, ...ow, image_url: ow.image_url || cat?.image_url || null, sprite: cat?.sprite || null } : (cat || null);
+      return ow ? { ...cat, ...ow } : (cat || null);
     };
     return { data: { avatar: find(eq.avatar_deco), profile: find(eq.profile_deco) }, error: null };
   }));
