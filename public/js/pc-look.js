@@ -1,4 +1,4 @@
-/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with Fake Browser (Firefox / Edge / Chrome), OS-native Settings & Admin Panel */
+/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with Multi-Tab Fake Browser (Firefox / Edge / Chrome), OS-native Settings & Admin Panel */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   function loadCfg() {
@@ -47,9 +47,9 @@
   if (page !== "computer") return;
 
   const BROWSER_LOGOS = {
-    firefox: "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ffbd4f"/><stop offset="55%" stop-color="#ff7139"/><stop offset="100%" stop-color="#e31587"/></linearGradient></defs><circle cx="32" cy="32" r="28" fill="url(#fg)"/><circle cx="33" cy="33" r="14" fill="#20123a"/><path d="M46 21c-3-5-9-8-15-8-9 0-16 6-18 14 4-4 10-5 15-3 4 2 7 6 6 11-1 5-6 9-12 8 6 4 14 4 20-1 7-6 8-14 4-21z" fill="#ffbd4f" opacity=".9"/></svg>`),
-    edge: "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="eg1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3ccbf4"/><stop offset="100%" stop-color="#0078d4"/></linearGradient><linearGradient id="eg2" x1="0" y1="1" x2="1" y2="0"><stop offset="0%" stop-color="#0c59a4"/><stop offset="100%" stop-color="#30d27d"/></linearGradient></defs><circle cx="32" cy="32" r="28" fill="url(#eg2)"/><path d="M56 36c0-14-11-26-25-26-13 0-23 9-25 21 4-8 13-12 22-10 8 2 13 8 12 15-1 5-6 8-12 8-9 0-16-7-16-16 0-2 0-4 1-6-5 5-7 12-5 20 3 11 13 18 25 18 13 0 23-10 23-24z" fill="url(#eg1)"/></svg>`),
-    chrome: "data:image/svg+xml;utf8," + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="28" fill="#ea4335"/><path d="M32 32 L58 20 A28 28 0 0 1 32 60 Z" fill="#fbbc04"/><path d="M32 32 L32 60 A28 28 0 0 1 8 18 Z" fill="#34a853"/><circle cx="32" cy="32" r="13" fill="#fff"/><circle cx="32" cy="32" r="9.5" fill="#4285f4"/></svg>`)
+    firefox: "/images/firefox.svg",
+    edge: "/images/edge.svg",
+    chrome: "/images/chrome.svg"
   };
 
   const BUILTIN_APPS = [
@@ -75,6 +75,11 @@
   let userHandle = "user";
   let activeSettingsTab = "home";
   let editingAppId = null;
+
+  // Multi-tab browser state
+  let brTabs = [];
+  let activeTabId = null;
+  let tabSeq = 1;
 
   try {
     const t = JSON.parse(localStorage.getItem("wt_theme") || "{}");
@@ -128,52 +133,78 @@
     .pc-wbtn:hover{background:rgba(255,255,255,.1)}
     .pc-wbtn.close:hover{background:#c42b1c;color:#fff}
 
-    /* Fake Browser Chrome (Firefox / Edge / Chrome) */
+    /* Fake Browser Chrome (Chrome / Edge / Firefox) */
     .pc-br-head{display:none;flex-direction:column;flex:none;color:#f3f4f6}
     .pc-win.is-browser .pc-titlebar{display:none}
     .pc-win.is-browser .pc-br-head{display:flex}
 
-    .pc-br-tabs{height:38px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 0 0 8px;gap:8px}
-    .pc-br-tabrow{display:flex;align-items:flex-end;gap:4px;min-width:0;flex:1;height:100%;padding-top:6px}
-    .pc-br-tab{height:32px;max-width:240px;min-width:120px;padding:0 10px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;cursor:pointer;position:relative}
-    .pc-br-tab span.t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .pc-br-plus{width:28px;height:28px;margin-bottom:2px;border-radius:50%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;opacity:.8}
-    .pc-br-plus:hover{background:rgba(255,255,255,.12);opacity:1}
+    .pc-br-tabs{height:40px;display:flex;align-items:flex-end;justify-content:space-between;padding:0 0 0 8px;gap:6px}
+    .pc-br-tabrow{display:flex;align-items:flex-end;gap:4px;min-width:0;flex:1;height:100%;padding-top:6px;overflow-x:auto;scrollbar-width:none}
+    .pc-br-tab{height:33px;max-width:210px;min-width:110px;padding:0 10px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;cursor:pointer;position:relative;opacity:.75;transition:background .12s,opacity .12s;flex:0 1 190px;border:0;color:inherit;font-family:inherit;background:transparent}
+    .pc-br-tab:hover{background:rgba(255,255,255,.07);opacity:.95}
+    .pc-br-tab.active{opacity:1}
+    .pc-br-tab span.t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+    .pc-br-tclose{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:13px;opacity:.7;flex:none}
+    .pc-br-tclose:hover{background:rgba(255,255,255,.18);opacity:1}
+    .pc-br-plus{width:28px;height:28px;margin-bottom:3px;border-radius:50%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;opacity:.85;flex:none}
+    .pc-br-plus:hover{background:rgba(255,255,255,.14);opacity:1}
 
     .pc-br-nav{height:40px;padding:0 10px;display:flex;align-items:center;gap:6px}
-    .pc-br-nbtn{width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;opacity:.85;text-decoration:none}
+    .pc-br-nbtn{width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:inherit;display:grid;place-items:center;cursor:pointer;opacity:.85;text-decoration:none;flex:none}
     .pc-br-nbtn:hover{background:rgba(255,255,255,.11);opacity:1}
-    .pc-br-omnibox{flex:1;min-width:0;height:28px;border-radius:999px;display:flex;align-items:center;gap:8px;padding:0 12px}
+    .pc-br-omnibox{flex:1;min-width:0;height:30px;border-radius:999px;display:flex;align-items:center;gap:8px;padding:0 12px}
     .pc-br-omnibox input{flex:1;min-width:0;border:0;background:transparent;color:inherit;font:inherit;font-size:12.5px;outline:0}
+    .pc-br-rtools{display:flex;align-items:center;gap:4px;flex:none}
 
     .pc-br-bms{height:30px;padding:0 10px;display:flex;align-items:center;gap:4px;overflow-x:auto;border-bottom:1px solid rgba(255,255,255,.08)}
     .pc-br-bm{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;border:0;background:transparent;color:inherit;font:inherit;font-size:11.5px;cursor:pointer;white-space:nowrap;flex:none;opacity:.88}
-    .pc-br-bm:hover,.pc-br-bm.active{background:rgba(255,255,255,.12);opacity:1}
+    .pc-br-bm:hover,.pc-br-bm.active{background:rgba(255,255,255,.14);opacity:1}
     .pc-br-bm img{width:14px;height:14px;object-fit:contain;border-radius:3px}
 
-    /* Firefox (Nocturnal Shell) */
-    .pc-win.br-firefox .pc-br-head{background:#1c1b22}
-    .pc-win.br-firefox .pc-br-tab{background:#42414d;border-radius:6px 6px 0 0;border-top:2px solid #7dd3fc}
-    .pc-win.br-firefox .pc-br-nav{background:#2b2a33}
-    .pc-win.br-firefox .pc-br-omnibox{background:#1c1b22;border-radius:6px;border:1px solid rgba(255,255,255,.1)}
-    .pc-win.br-firefox .pc-br-bms{background:#2b2a33}
-
-    /* Microsoft Edge (Windows 11 Dark) */
-    .pc-win.br-edge .pc-br-head{background:#1f1f1f}
-    .pc-win.br-edge .pc-br-tab{background:#333333;border-radius:8px 8px 0 0;border-top:2px solid #60cdff}
-    .pc-win.br-edge .pc-br-nav{background:#333333}
-    .pc-win.br-edge .pc-br-omnibox{background:#242424;border:1px solid rgba(255,255,255,.12)}
-    .pc-win.br-edge .pc-br-bms{background:#2c2c2c}
-
-    /* Google Chrome (Windows 11 Dark) */
+    /* Google Chrome */
     .pc-win.br-chrome .pc-br-head{background:#202124}
-    .pc-win.br-chrome .pc-br-tab{background:#35363a;border-radius:10px 10px 0 0}
+    .pc-win.br-chrome .pc-br-tab{border-radius:10px 10px 0 0}
+    .pc-win.br-chrome .pc-br-tab.active{background:#35363a}
     .pc-win.br-chrome .pc-br-nav{background:#35363a}
     .pc-win.br-chrome .pc-br-omnibox{background:#202124;border:1px solid rgba(255,255,255,.08)}
     .pc-win.br-chrome .pc-br-bms{background:#35363a}
 
-    .pc-iframe-wrap{flex:1;min-height:0;background:#0e0d14;display:flex}
+    /* Microsoft Edge */
+    .pc-win.br-edge .pc-br-head{background:#1b1c1e}
+    .pc-win.br-edge .pc-br-tab{border-radius:6px 6px 0 0;height:34px}
+    .pc-win.br-edge .pc-br-tab.active{background:#2d2f33;border-top:2px solid #0078d4}
+    .pc-win.br-edge .pc-br-nav{background:#2d2f33}
+    .pc-win.br-edge .pc-br-omnibox{background:#1f2124;border-radius:6px;border:1px solid rgba(255,255,255,.14)}
+    .pc-win.br-edge .pc-br-bms{background:#26282c}
+
+    /* Mozilla Firefox */
+    .pc-win.br-firefox .pc-br-head{background:#1c1b22}
+    .pc-win.br-firefox .pc-br-tabs{padding-bottom:3px;align-items:center}
+    .pc-win.br-firefox .pc-br-tab{border-radius:8px;height:30px;padding-top:0}
+    .pc-win.br-firefox .pc-br-tab.active{background:#42414d;box-shadow:inset 0 0 0 1px rgba(167,139,250,.45)}
+    .pc-win.br-firefox .pc-br-nav{background:#2b2a33}
+    .pc-win.br-firefox .pc-br-omnibox{background:#1c1b22;border-radius:8px;border:1px solid rgba(255,255,255,.14)}
+    .pc-win.br-firefox .pc-br-bms{background:#2b2a33}
+
+    /* Browser Content & New Tab Pages */
+    .pc-iframe-wrap{flex:1;min-height:0;background:#0e0d14;display:flex;position:relative}
     .pc-iframe{width:100%;height:100%;border:0;flex:1}
+    .pc-iframe.hidden-frame{display:none!important}
+    .pc-br-ntp{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:24px;overflow-y:auto;text-align:center}
+    .pc-br-ntp.show{display:flex}
+
+    .pc-br-ntp.ntp-chrome{background:#202124;color:#e8eaed}
+    .pc-br-ntp.ntp-edge{background:linear-gradient(180deg,#0f2942 0%,#124e66 55%,#0b1e2e 100%);color:#fff}
+    .pc-br-ntp.ntp-firefox{background:radial-gradient(circle at 20% 20%,#4c1d95 0%,#2e1065 45%,#0f0720 100%);color:#f5f3ff}
+
+    .ntp-search{width:min(92%,540px);height:44px;border-radius:999px;background:#fff;color:#111827;display:flex;align-items:center;gap:10px;padding:0 16px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+    .ntp-chrome .ntp-search{background:#303134;color:#e8eaed;border:1px solid rgba(255,255,255,.12)}
+    .ntp-search input{flex:1;border:0;background:transparent;color:inherit;font:inherit;font-size:14px;outline:0}
+    .ntp-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;max-width:620px}
+    .ntp-tile{width:92px;padding:12px 8px;border-radius:12px;border:0;background:rgba(255,255,255,.12);backdrop-filter:blur(10px);color:inherit;font:inherit;font-size:12px;font-weight:500;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;transition:transform .14s,background .14s}
+    .ntp-tile:hover{transform:translateY(-2px);background:rgba(255,255,255,.2)}
+    .ntp-tile-ico{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.16);display:grid;place-items:center;overflow:hidden}
+    .ntp-tile-ico img{width:26px;height:26px;object-fit:contain;border-radius:5px}
 
     .pc-btn{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:6px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.07);color:inherit;text-decoration:none;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .12s}
     .pc-btn:hover{background:rgba(255,255,255,.13)}
@@ -315,8 +346,12 @@
   }
   applyWallpaper();
 
+  function activeBrowserType() {
+    return isNoc ? "firefox" : (cfg.winBrowser === "chrome" ? "chrome" : "edge");
+  }
+
   function getBrowserApp() {
-    const brType = isNoc ? "firefox" : (cfg.winBrowser === "chrome" ? "chrome" : "edge");
+    const brType = activeBrowserType();
     const brName = brType === "firefox" ? "Firefox" : (brType === "chrome" ? "Google Chrome" : "Microsoft Edge");
     return {
       id: "fake_browser",
@@ -325,15 +360,16 @@
       logo: BROWSER_LOGOS[brType],
       color: "#60cdff",
       action: () => {
-        if (curAppHref && appWin) {
-          w11Start?.classList.remove("open");
-          w11Fly?.classList.remove("open");
-          settingsWin?.classList.add("hidden-win");
-          appWin.classList.remove("hidden-win");
+        w11Start?.classList.remove("open");
+        w11Fly?.classList.remove("open");
+        settingsWin?.classList.add("hidden-win");
+        if (!brTabs.length) {
+          openNewTab(BUILTIN_APPS[0]);
+        } else {
+          appWin?.classList.remove("hidden-win");
+          renderBrowserTabs();
           applyBrowserChrome();
           renderAppLists();
-        } else {
-          openInWindow(BUILTIN_APPS[0]);
         }
       }
     };
@@ -388,14 +424,7 @@
 
       <div class="pc-br-head">
         <div class="pc-br-tabs">
-          <div class="pc-br-tabrow">
-            <div class="pc-br-tab">
-              <img id="pcBrTabLogo" src="/images/logo.png" alt="" width="15" height="15" style="border-radius:3px">
-              <span class="t" id="pcBrTabTitle">Web Tok</span>
-              <span class="ms" id="pcBrTabClose" style="font-size:14px;opacity:.7">close</span>
-            </div>
-            <button type="button" class="pc-br-plus" id="pcBrNewTab" title="Web Tok Home"><span class="ms" style="font-size:16px">add</span></button>
-          </div>
+          <div class="pc-br-tabrow" id="pcBrTabRow"></div>
           <div class="pc-wbtns">
             <button type="button" class="pc-wbtn" id="pcBrMin" title="Minimize"><span class="ms" style="font-size:15px">remove</span></button>
             <button type="button" class="pc-wbtn" id="pcBrMax" title="Maximize"><span class="ms" style="font-size:15px">crop_square</span></button>
@@ -407,16 +436,21 @@
           <button type="button" class="pc-br-nbtn" id="pcBrFwd" title="Forward"><span class="ms" style="font-size:17px">arrow_forward</span></button>
           <button type="button" class="pc-br-nbtn" id="pcBrReload" title="Reload"><span class="ms" style="font-size:17px">refresh</span></button>
           <div class="pc-br-omnibox">
-            <span class="ms" id="pcBrLock" style="font-size:15px;opacity:.75">lock</span>
-            <input type="text" id="pcBrUrl" spellcheck="false" aria-label="Address bar">
+            <img id="pcBrOmniIcon" src="/images/edge.svg" alt="" width="15" height="15" style="border-radius:3px">
+            <input type="text" id="pcBrUrl" spellcheck="false" placeholder="Search or enter web address" aria-label="Address bar">
           </div>
-          <a class="pc-br-nbtn" id="pcBrPop" href="/scroll#fyp" target="_blank" title="Open in real tab"><span class="ms" style="font-size:17px">open_in_new</span></a>
+          <div class="pc-br-rtools">
+            <a class="pc-br-nbtn" id="pcBrPop" href="/scroll#fyp" target="_blank" title="Open in real tab"><span class="ms" style="font-size:17px">open_in_new</span></a>
+            <button type="button" class="pc-br-nbtn" id="pcBrNtpBtn" title="New Tab"><span class="ms" style="font-size:17px">add_box</span></button>
+            <button type="button" class="pc-br-nbtn" data-app="wp_settings" title="Browser Settings"><span class="ms" style="font-size:17px">more_vert</span></button>
+          </div>
         </div>
         <div class="pc-br-bms" id="pcBrBookmarks"></div>
       </div>
 
-      <div class="pc-iframe-wrap">
+      <div class="pc-iframe-wrap" id="pcFrameHost">
         <iframe class="pc-iframe" id="pcAppFrame" allow="autoplay; microphone; camera; fullscreen; clipboard-write"></iframe>
+        <div class="pc-br-ntp" id="pcBrNtp"></div>
       </div>
     </div>`;
 
@@ -438,7 +472,7 @@
   const fakeBrowserCardHtml = `
     <div style="display:flex;flex-direction:column;gap:10px">
       <div class="pcs-lbl">Fake Browser</div>
-      <div style="font-size:12px;opacity:.78">Replaces Web Tok, your saved apps, and Admin Panel on the desktop with ${isNoc ? "Firefox" : "Microsoft Edge or Google Chrome"}, with all your apps pinned inside the browser bookmarks bar.</div>
+      <div style="font-size:12px;opacity:.78">Replaces Web Tok, your saved apps, and Admin Panel on the desktop with ${isNoc ? "Firefox" : "Microsoft Edge or Google Chrome"}, with multi-tab browsing and your apps pinned as bookmarks.</div>
       <div class="pcs-seg" id="pcsFbSeg">
         <button type="button" data-fb="off">Off (Desktop Icons)</button>
         <button type="button" data-fb="on">On (${isNoc ? "Firefox" : "Browser"})</button>
@@ -748,16 +782,183 @@
   const appWin = root.querySelector("#pcAppWin");
   const settingsWin = root.querySelector("#pcSettingsWin");
   const appFrame = root.querySelector("#pcAppFrame");
+  const frameHost = root.querySelector("#pcFrameHost");
+  const brNtp = root.querySelector("#pcBrNtp");
   const w11Start = root.querySelector("#w11Start");
   const w11Fly = root.querySelector("#w11Fly");
+
+  function getTabFrame(tabId) {
+    return frameHost?.querySelector(`iframe[data-tab-id="${tabId}"]`);
+  }
+
+  function ensureTabFrame(tab) {
+    if (!frameHost || tab.isNewTab) return null;
+    let fr = getTabFrame(tab.id);
+    if (!fr) {
+      fr = document.createElement("iframe");
+      fr.className = "pc-iframe";
+      fr.dataset.tabId = tab.id;
+      fr.setAttribute("allow", "autoplay; microphone; camera; fullscreen; clipboard-write");
+      fr.src = tab.href;
+      frameHost.insertBefore(fr, brNtp);
+    } else if (fr.getAttribute("src") !== tab.href) {
+      fr.src = tab.href;
+    }
+    return fr;
+  }
+
+  function renderNtp() {
+    if (!brNtp) return;
+    const brType = activeBrowserType();
+    brNtp.className = "pc-br-ntp show ntp-" + brType;
+    const brLogo = BROWSER_LOGOS[brType];
+    const placeholder = brType === "firefox"
+      ? "Search with Google or enter address"
+      : (brType === "edge" ? "Search the web or enter URL" : "Search Google or type a URL");
+    const apps = browserApps();
+    brNtp.innerHTML = `
+      <img src="${brLogo}" alt="" width="64" height="64" style="filter:drop-shadow(0 8px 20px rgba(0,0,0,.35))">
+      <div class="ntp-search">
+        <span class="ms" style="font-size:20px;opacity:.65">search</span>
+        <input type="text" id="pcNtpInput" placeholder="${placeholder}" spellcheck="false">
+      </div>
+      <div class="ntp-grid">
+        ${apps.map(a => `
+          <button type="button" class="ntp-tile" data-app="${a.id}">
+            <div class="ntp-tile-ico">${iconMedia(a, 24)}</div>
+            <span style="max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name.replace(/</g, "&lt;")}</span>
+          </button>`).join("")}
+      </div>`;
+    brNtp.querySelector("#pcNtpInput")?.addEventListener("keydown", e => {
+      if (e.key !== "Enter") return;
+      navigateActiveTab(e.target.value);
+    });
+  }
+
+  function renderBrowserTabs() {
+    const tabRow = root.querySelector("#pcBrTabRow");
+    if (!tabRow) return;
+    tabRow.innerHTML = brTabs.map(t => `
+      <button type="button" class="pc-br-tab ${t.id === activeTabId ? "active" : ""}" data-tab-sel="${t.id}" title="${t.title.replace(/"/g, "&quot;")}">
+        <img src="${t.logo || BROWSER_LOGOS[activeBrowserType()]}" alt="" width="15" height="15" style="border-radius:3px;object-fit:contain;flex:none" onerror="this.src='/images/logo.png'">
+        <span class="t">${t.title.replace(/</g, "&lt;")}</span>
+        <span class="ms pc-br-tclose" data-tab-close="${t.id}" title="Close tab">close</span>
+      </button>`).join("") +
+      `<button type="button" class="pc-br-plus" id="pcBrNewTab" title="New Tab"><span class="ms" style="font-size:17px">add</span></button>`;
+
+    tabRow.querySelector("#pcBrNewTab")?.addEventListener("click", () => openNewTab());
+    tabRow.querySelectorAll("[data-tab-close]").forEach(btn => {
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        closeTab(btn.dataset.tabClose);
+      });
+    });
+    tabRow.querySelectorAll("[data-tab-sel]").forEach(btn => {
+      btn.addEventListener("click", () => switchTab(btn.dataset.tabSel));
+    });
+  }
+
+  function syncActiveTabView() {
+    if (!cfg.fakeBrowser) {
+      brNtp?.classList.remove("show");
+      frameHost?.querySelectorAll("iframe[data-tab-id]").forEach(f => f.classList.add("hidden-frame"));
+      if (appFrame) appFrame.classList.remove("hidden-frame");
+      return;
+    }
+    if (appFrame) appFrame.classList.add("hidden-frame");
+    const tab = brTabs.find(t => t.id === activeTabId);
+    frameHost?.querySelectorAll("iframe[data-tab-id]").forEach(f => f.classList.add("hidden-frame"));
+    if (!tab) {
+      brNtp?.classList.remove("show");
+      return;
+    }
+    curAppHref = tab.href || "";
+    const urlIn = root.querySelector("#pcBrUrl");
+    if (urlIn) {
+      urlIn.value = tab.isNewTab ? "" : (tab.href.startsWith("/") ? location.origin + tab.href : tab.href);
+    }
+    const bpop = root.querySelector("#pcBrPop");
+    if (bpop) bpop.href = tab.href || "/scroll#fyp";
+
+    if (tab.isNewTab) {
+      renderNtp();
+    } else {
+      brNtp?.classList.remove("show");
+      const fr = ensureTabFrame(tab);
+      if (fr) fr.classList.remove("hidden-frame");
+    }
+    renderBrowserTabs();
+    applyBrowserChrome();
+  }
+
+  function switchTab(id) {
+    activeTabId = id;
+    syncActiveTabView();
+  }
+
+  function openNewTab(app = null) {
+    const id = "t_" + (tabSeq++);
+    const brLogo = BROWSER_LOGOS[activeBrowserType()];
+    const tab = app
+      ? { id, title: app.name, href: app.href, logo: app.logo || "/images/logo.png", isNewTab: false }
+      : { id, title: "New Tab", href: "", logo: brLogo, isNewTab: true };
+    brTabs.push(tab);
+    activeTabId = id;
+    appWin?.classList.remove("hidden-win");
+    syncActiveTabView();
+    renderAppLists();
+  }
+
+  function closeTab(id) {
+    const idx = brTabs.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    getTabFrame(id)?.remove();
+    brTabs.splice(idx, 1);
+    if (!brTabs.length) {
+      activeTabId = null;
+      curAppHref = "";
+      appWin?.classList.add("hidden-win");
+      appWin?.classList.remove("max-win");
+      renderAppLists();
+      return;
+    }
+    if (activeTabId === id) {
+      activeTabId = brTabs[Math.min(idx, brTabs.length - 1)].id;
+    }
+    syncActiveTabView();
+  }
+
+  function navigateActiveTab(rawVal) {
+    let val = String(rawVal || "").trim();
+    if (!val) return;
+    if (!/^https?:\/\//i.test(val) && !val.startsWith("/")) {
+      val = val.includes(".") && !val.includes(" ") ? "https://" + val : "/scroll#fyp";
+    }
+    if (!cfg.fakeBrowser) {
+      curAppHref = val;
+      if (appFrame) appFrame.src = val;
+      return;
+    }
+    let tab = brTabs.find(t => t.id === activeTabId);
+    if (!tab) {
+      openNewTab({ name: val, href: val, logo: BROWSER_LOGOS[activeBrowserType()] });
+      return;
+    }
+    tab.href = val;
+    tab.isNewTab = false;
+    try { tab.title = val.startsWith("/") ? "Web Tok" : new URL(val).hostname; } catch { tab.title = val; }
+    syncActiveTabView();
+  }
 
   function applyBrowserChrome() {
     if (!appWin) return;
     appWin.classList.remove("is-browser", "br-firefox", "br-edge", "br-chrome");
+    const brType = activeBrowserType();
     if (cfg.fakeBrowser) {
-      const brClass = isNoc ? "br-firefox" : (cfg.winBrowser === "chrome" ? "br-chrome" : "br-edge");
-      appWin.classList.add("is-browser", brClass);
+      appWin.classList.add("is-browser", "br-" + brType);
     }
+    const omniIco = root.querySelector("#pcBrOmniIcon");
+    if (omniIco) omniIco.src = BROWSER_LOGOS[brType];
     const bms = root.querySelector("#pcBrBookmarks");
     if (bms) {
       const bmApps = browserApps().filter(a => a.href);
@@ -776,23 +977,39 @@
     w11Start?.classList.remove("open");
     w11Fly?.classList.remove("open");
     settingsWin?.classList.add("hidden-win");
+
+    if (cfg.fakeBrowser) {
+      const curTab = brTabs.find(t => t.id === activeTabId);
+      if (curTab && curTab.isNewTab) {
+        curTab.isNewTab = false;
+        curTab.title = app.name;
+        curTab.href = app.href;
+        curTab.logo = app.logo || "/images/logo.png";
+        appWin?.classList.remove("hidden-win");
+        syncActiveTabView();
+      } else {
+        const existing = brTabs.find(t => !t.isNewTab && t.href === app.href);
+        if (existing) {
+          activeTabId = existing.id;
+          appWin?.classList.remove("hidden-win");
+          syncActiveTabView();
+        } else {
+          openNewTab(app);
+        }
+      }
+      renderAppLists();
+      return;
+    }
+
     curAppHref = app.href;
     root.querySelector("#pcAppTitle").textContent = app.name;
-    root.querySelector("#pcBrTabTitle").textContent = app.name;
     const wl = root.querySelector("#pcAppWinLogo");
-    const bl = root.querySelector("#pcBrTabLogo");
     if (wl) wl.src = app.logo || "/images/logo.png";
-    if (bl) bl.src = app.logo || "/images/logo.png";
-    const fullUrl = app.href.startsWith("/") ? location.origin + app.href : app.href;
-    const urlIn = root.querySelector("#pcBrUrl");
-    if (urlIn) urlIn.value = fullUrl;
     const pop = root.querySelector("#pcAppPop");
     if (pop) pop.href = app.href;
-    const bpop = root.querySelector("#pcBrPop");
-    if (bpop) bpop.href = app.href;
     if (appFrame && appFrame.getAttribute("src") !== app.href) appFrame.src = app.href;
     appWin?.classList.remove("hidden-win");
-    applyBrowserChrome();
+    syncActiveTabView();
     renderAppLists();
   }
 
@@ -847,7 +1064,7 @@
   }
   renderAppLists();
 
-  // Delegated click for all [data-app] buttons (desktop, dock, start menu, and browser bookmarks)
+  // Delegated click for all [data-app] buttons (desktop, dock, start menu, bookmarks, and NTP shortcuts)
   root.addEventListener("click", e => {
     const btn = e.target.closest("[data-app]");
     if (!btn) return;
@@ -1040,6 +1257,7 @@
     cfg.fakeBrowser = b.dataset.fb === "on";
     saveCfg(cfg);
     renderAppLists();
+    syncActiveTabView();
     paintSettingsWindow();
   });
   root.querySelector("#pcsWbSeg")?.addEventListener("click", e => {
@@ -1047,12 +1265,14 @@
     cfg.winBrowser = b.dataset.wb;
     saveCfg(cfg);
     renderAppLists();
+    syncActiveTabView();
     paintSettingsWindow();
   });
   root.querySelector("#nocSetFbTog")?.addEventListener("click", () => {
     cfg.fakeBrowser = !cfg.fakeBrowser;
     saveCfg(cfg);
     renderAppLists();
+    syncActiveTabView();
     paintSettingsWindow();
   });
   root.querySelector("#pcsCustSave")?.addEventListener("click", () => {
@@ -1135,11 +1355,21 @@
   });
 
   // App Window & Fake Browser controls
-  const reloadApp = () => { if (appFrame && curAppHref) appFrame.src = curAppHref; };
+  const activeFrame = () => {
+    if (cfg.fakeBrowser && activeTabId) return getTabFrame(activeTabId);
+    return appFrame;
+  };
+  const reloadApp = () => {
+    const f = activeFrame();
+    if (f && curAppHref) f.src = curAppHref;
+  };
   const maxApp = () => appWin?.classList.toggle("max-win");
   const minApp = () => { appWin?.classList.add("hidden-win"); renderAppLists(); };
   const closeApp = () => {
     if (appFrame) appFrame.src = "about:blank";
+    frameHost?.querySelectorAll("iframe[data-tab-id]").forEach(f => f.remove());
+    brTabs = [];
+    activeTabId = null;
     curAppHref = "";
     appWin?.classList.add("hidden-win");
     appWin?.classList.remove("max-win");
@@ -1153,20 +1383,12 @@
   root.querySelector("#pcBrMin")?.addEventListener("click", minApp);
   root.querySelector("#pcAppClose")?.addEventListener("click", closeApp);
   root.querySelector("#pcBrClose")?.addEventListener("click", closeApp);
-  root.querySelector("#pcBrTabClose")?.addEventListener("click", closeApp);
-  root.querySelector("#pcBrNewTab")?.addEventListener("click", () => openInWindow(BUILTIN_APPS[0]));
-  root.querySelector("#pcBrBack")?.addEventListener("click", () => { try { appFrame?.contentWindow?.history.back(); } catch {} });
-  root.querySelector("#pcBrFwd")?.addEventListener("click", () => { try { appFrame?.contentWindow?.history.forward(); } catch {} });
+  root.querySelector("#pcBrNtpBtn")?.addEventListener("click", () => openNewTab());
+  root.querySelector("#pcBrBack")?.addEventListener("click", () => { try { activeFrame()?.contentWindow?.history.back(); } catch {} });
+  root.querySelector("#pcBrFwd")?.addEventListener("click", () => { try { activeFrame()?.contentWindow?.history.forward(); } catch {} });
   root.querySelector("#pcBrUrl")?.addEventListener("keydown", e => {
     if (e.key !== "Enter") return;
-    let val = e.target.value.trim();
-    if (!val) return;
-    if (!/^https?:\/\//i.test(val) && !val.startsWith("/")) val = "https://" + val;
-    curAppHref = val;
-    if (appFrame) appFrame.src = val;
-    const pop = root.querySelector("#pcAppPop"), bpop = root.querySelector("#pcBrPop");
-    if (pop) pop.href = val;
-    if (bpop) bpop.href = val;
+    navigateActiveTab(e.target.value);
   });
 
   root.querySelector("#w11TrayClock")?.addEventListener("click", e => {
