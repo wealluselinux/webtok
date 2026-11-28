@@ -103,6 +103,8 @@ if(!C.SUPABASE_URL||!C.SUPABASE_ANON_KEY){document.querySelector(".card").innerH
 const sb=supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
 const qs=new URLSearchParams(location.search);
 const isAddMode=qs.get("add")==="1";
+const rawNext=qs.get("next")||"";
+const nextUrl=(rawNext.startsWith("/")&&!rawNext.startsWith("//"))?rawNext:"";
 const FLOW=["email","username","profile","pass"], SUBS={in:isAddMode?"Add another account":"Welcome back",email:"What's your email?",username:"Pick a username",profile:"Set up your profile",pass:"Create a password"};
 let d={}, avatar=null, cur="in";
 
@@ -124,17 +126,18 @@ function showSuccessAndRedirect(targetUrl){
   $("ao-title").textContent="Sign in successful!";
   $("ao-track").className="ao-track ok";
   $("ao-fill").style.width="10%";
+  const destLabel=targetUrl==="/computer"?"back to Computer Mode":(nextUrl?"back":"to the homepage");
   let secs=3;
-  $("ao-sub").textContent=`Taking you to the homepage in ${secs}…`;
+  $("ao-sub").textContent=`Taking you ${destLabel} in ${secs}…`;
   setTimeout(()=>{ $("ao-fill").style.width="35%"; },30);
   const tmr=setInterval(()=>{
     secs--;
     if(secs>0){
-      $("ao-sub").textContent=`Taking you to the homepage in ${secs}…`;
+      $("ao-sub").textContent=`Taking you ${destLabel} in ${secs}…`;
       $("ao-fill").style.width=secs===2?"68%":"100%";
     }else{
       clearInterval(tmr);
-      $("ao-sub").textContent="Loading homepage…";
+      $("ao-sub").textContent="Redirecting…";
       location.replace(targetUrl);
     }
   },1000);
@@ -177,7 +180,7 @@ $("do-in").onclick=async()=>{
       const {data:prof}=await sb.from("profiles").select("username,display_name,avatar_url").eq("id",data.session.user.id).maybeSingle();
       saveSavedAccount(data.session,prof);
     }
-    return showSuccessAndRedirect(isAddMode?"/profile":"/");
+    return showSuccessAndRedirect(nextUrl||(isAddMode?"/profile":"/"));
   }
   hideAuthOverlay();
   say("h-in",error.message,"bad");
@@ -262,7 +265,7 @@ async function finish(user,sess){
   }catch(e){console.warn(e)}
   const activeSess=sess||(await sb.auth.getSession()).data?.session;
   if(activeSess) saveSavedAccount(activeSess,{username:d.username,display_name:d.display_name,avatar_url:avUrl});
-  showSuccessAndRedirect(isAddMode?"/profile":"/");
+  showSuccessAndRedirect(nextUrl||(isAddMode?"/profile":"/"));
 }
 sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur!=="in") setTimeout(()=>finish(sess.user,sess),0); });
 
@@ -270,7 +273,7 @@ sb.auth.onAuthStateChange((ev,sess)=>{ if(ev==="SIGNED_IN"&&sess&&sess.user&&cur
   if(!isAddMode){
     try{
       const {data}=await sb.auth.getSession();
-      if(data?.session){ location.replace("/scroll"); return; }
+      if(data?.session){ location.replace(nextUrl||"/scroll"); return; }
     }catch{}
   }
   go(location.hash==="#signup"?"email":"in");

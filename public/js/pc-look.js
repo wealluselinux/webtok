@@ -1,4 +1,4 @@
-/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with custom DB-saved iframe apps & sign-in prompt */
+/* PC Look Mode (Windows 11 Dark Mode & Nocturnal Shell Hyprland + Quickshell) on /computer with custom DB-saved iframe apps & /login redirect */
 (function initPcLook() {
   const page = document.body.dataset.page || "";
   function loadCfg() {
@@ -26,6 +26,9 @@
       try { return window.supabase.createClient(window.WT_CONFIG.SUPABASE_URL, window.WT_CONFIG.SUPABASE_ANON_KEY); } catch {}
     }
     return null;
+  }
+  function goToLogin() {
+    location.replace("/login?next=" + encodeURIComponent("/computer"));
   }
 
   let cfg = loadCfg();
@@ -175,8 +178,8 @@
     .w11-cal-d.today{background:#60cdff;color:#000;font-weight:700}
 
     /* Modals */
-    #pcSetDlg,#pcAddAppDlg,#pcAuthDlg{border:0;border-radius:12px;padding:22px;width:min(92vw,460px);background:#202020;color:#f3f3f3;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.1);font-family:inherit;z-index:9999}
-    #pcSetDlg::backdrop,#pcAddAppDlg::backdrop,#pcAuthDlg::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
+    #pcSetDlg,#pcAddAppDlg{border:0;border-radius:12px;padding:22px;width:min(92vw,460px);background:#202020;color:#f3f3f3;margin:auto;box-shadow:0 24px 64px rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.1);font-family:inherit;z-index:9999}
+    #pcSetDlg::backdrop,#pcAddAppDlg::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(5px)}
     .pcs-sec{margin-top:14px;display:flex;flex-direction:column;gap:8px}
     .pcs-lbl{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#60cdff}
     .pcs-seg{display:flex;gap:6px;background:rgba(255,255,255,.06);padding:4px;border-radius:8px}
@@ -455,78 +458,9 @@
     if (app) openInWindow(app);
   });
 
-  function openAuthModal(onSuccess) {
-    let dlg = document.getElementById("pcAuthDlg");
-    if (!dlg) {
-      dlg = document.createElement("dialog");
-      dlg.id = "pcAuthDlg";
-      dlg.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <b style="font-size:16px;display:flex;align-items:center;gap:8px"><img src="/images/logo.png" alt="" width="20" height="20" style="border-radius:4px">Sign in to Web Tok</b>
-          <button type="button" class="pc-wbtn" id="pcAuthClose" style="width:32px;height:32px;border-radius:6px"><span class="ms">close</span></button>
-        </div>
-        <p style="margin:0 0 12px;font-size:12.5px;opacity:.8;line-height:1.45">Sign in to your Web Tok account to save custom apps and sync your profile wallpaper on Computer Mode.</p>
-        <div class="pcs-sec">
-          <div class="pcs-lbl">Email</div>
-          <input type="email" class="pcs-in" id="pcAuthEmail" autocomplete="email" placeholder="you@example.com">
-          <div class="pcs-lbl">Password</div>
-          <input type="password" class="pcs-in" id="pcAuthPass" autocomplete="current-password" placeholder="••••••••">
-          <div id="pcAuthHint" style="font-size:12px;min-height:18px;color:#cbd5e1"></div>
-          <button type="button" class="pc-btn p" id="pcAuthSubmit" style="justify-content:center">Sign in &amp; Stay Here</button>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:12px">
-            <a href="/login#signup" style="color:#60cdff;text-decoration:none">Create an account</a>
-            <button type="button" class="pc-btn" id="pcAuthSkip" style="padding:5px 11px;font-size:11.5px">Continue as guest</button>
-          </div>
-        </div>`;
-      document.body.appendChild(dlg);
-      dlg.querySelector("#pcAuthClose").onclick = () => dlg.close();
-      dlg.querySelector("#pcAuthSkip").onclick = () => dlg.close();
-      dlg.querySelector("#pcAuthPass").addEventListener("keydown", e => {
-        if (e.key === "Enter") dlg.querySelector("#pcAuthSubmit").click();
-      });
-    }
-    dlg._onSuccess = onSuccess || null;
-    const hint = dlg.querySelector("#pcAuthHint");
-    hint.textContent = "";
-    const submitBtn = dlg.querySelector("#pcAuthSubmit");
-    submitBtn.onclick = async () => {
-      const email = dlg.querySelector("#pcAuthEmail").value.trim();
-      const password = dlg.querySelector("#pcAuthPass").value;
-      if (!email || !password) {
-        hint.style.color = "#fb7185";
-        hint.textContent = "Enter your email and password.";
-        return;
-      }
-      const client = getSb();
-      if (!client?.auth?.signInWithPassword) {
-        hint.style.color = "#fb7185";
-        hint.textContent = "Auth client is not ready yet. Try again in a moment.";
-        return;
-      }
-      submitBtn.disabled = true;
-      hint.style.color = "#60cdff";
-      hint.textContent = "Signing in…";
-      try {
-        const { data, error } = await client.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        if (!data?.session) throw new Error("Could not start session.");
-        dlg.querySelector("#pcAuthPass").value = "";
-        await syncUserSession();
-        dlg.close();
-        if (typeof dlg._onSuccess === "function") dlg._onSuccess();
-      } catch (err) {
-        hint.style.color = "#fb7185";
-        hint.textContent = err?.message || "Sign in failed.";
-      } finally {
-        submitBtn.disabled = false;
-      }
-    };
-    if (!dlg.open) dlg.showModal();
-  }
-
   function openAddAppModal() {
     if (!authToken) {
-      openAuthModal(() => openAddAppModal());
+      goToLogin();
       return;
     }
     let dlg = document.getElementById("pcAddAppDlg");
@@ -561,8 +495,7 @@
         const hint = dlg.querySelector("#pcaHint");
         const btn = dlg.querySelector("#pcaAddBtn");
         if (!authToken) {
-          dlg.close();
-          openAuthModal(() => openAddAppModal());
+          goToLogin();
           return;
         }
         if (!name || !url) {
@@ -707,10 +640,10 @@
   });
 
   root.querySelector("#pcAuthPill")?.addEventListener("click", () => {
-    if (!authToken) openAuthModal();
+    if (!authToken) goToLogin();
   });
   root.querySelector("#w11UserBtn")?.addEventListener("click", () => {
-    if (!authToken) openAuthModal();
+    if (!authToken) goToLogin();
   });
 
   root.querySelector("#pcAppReload")?.addEventListener("click", () => { if (appFrame && curAppHref) appFrame.src = curAppHref; });
@@ -786,13 +719,8 @@
       if (!client?.auth?.getSession) return false;
       const { data } = await client.auth.getSession();
       authToken = data?.session?.access_token || null;
-      if (!authToken) {
-        const ul = root.querySelector("#w11UserLbl");
-        if (ul) ul.textContent = "Sign in";
-        const ap = root.querySelector("#pcAuthPill");
-        if (ap) ap.textContent = "Sign in";
-        return false;
-      }
+      if (!authToken) return false;
+
       const ar = await fetch("/api/computer/apps", { headers: { Authorization: "Bearer " + authToken } });
       const aj = await ar.json().catch(() => ({}));
       if (ar.ok && Array.isArray(aj?.data)) {
@@ -820,6 +748,11 @@
   }
 
   (async () => {
+    const isSignedIn = await syncUserSession();
+    if (!isSignedIn) {
+      goToLogin();
+      return;
+    }
     try {
       const r = await fetch("/api/stats/users");
       const j = await r.json().catch(() => ({}));
@@ -834,10 +767,5 @@
         if (stTxt) stTxt.textContent = `${on} online`;
       }
     } catch {}
-
-    const isSignedIn = await syncUserSession();
-    if (!isSignedIn) {
-      openAuthModal();
-    }
   })();
 })();
